@@ -1,98 +1,57 @@
-﻿#include <glfw3.h>
+﻿#include "core/VulkanContext.hpp"
+#include "core/SwapchainManager.hpp"
+#include "renderer/Renderer.hpp"
+#include <glfw3.h>
 #include <iostream>
-#include "renderer/VulkanRenderer.hpp"
-#include "ecs/Registry.hpp"
-#include "ecs/components/Transform.hpp"
-#include "ecs/systems/MovementSystem.hpp"
-#include "ecs/systems/RenderSystem.hpp"
-#include "ecs/SystemManager.hpp"
-#include "ecs/components/primitives.hpp"
-#include "ecs/Components/Camera.hpp"
-#include "ecs/systems/CameraSystem.hpp"
-#include "ecs/components/Grid.hpp"
-#include "ecs/systems/InputSystem.hpp"
 
 int main() {
-    glfwInit();
+    if (!glfwInit()) {
+        std::cerr << "Failed to init GLFW\n";
+        return -1;
+    }
+
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    GLFWwindow* window = glfwCreateWindow(800, 600, "ECS Vulkan Engine", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(1280, 720, "DOD Renderer", nullptr, nullptr);
 
-    VulkanRenderer renderer(window);
-	Registry registry;
+    VulkanContext context;
+    context.init(window);
 
+    SwapchainManager swapchain;
+    VkExtent2D extent{ 1280, 720 };
+    swapchain.create(context.device, context.surface, extent);
 
-    // Create systems
-    auto movementSystem = std::make_shared<MovementSystem>(registry);
-    auto renderSystem = std::make_shared<RenderSystem>(registry, renderer);
-	auto cameraSystem = std::make_shared<CameraSystem>(registry);
-	auto inputSystem = std::make_shared<InputSystem>(registry, renderer);
+    Renderer renderer(context.device, context.physicalDevice, extent);
+    renderer.createCameraBuffer();
+    renderer.createInstanceBuffer(1000); // Reserve for up to 1000 entities
 
-    SystemManager sysManager;
-    sysManager.addSystem(inputSystem);
-    sysManager.addSystem(cameraSystem);
-    sysManager.addSystem(movementSystem);
-    sysManager.addSystem(renderSystem);
+    // Create a descriptor pool
+    VkDescriptorPoolSize poolSize{};
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = 1;
 
-    Entity grid = registry.create();
-    registry.emplace<Transform>(grid,glm::vec3(0.f)); // identity
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.maxSets = 1;
 
-    Transform gridTransform{};
+    VkDescriptorPool descriptorPool;
+    vkCreateDescriptorPool(context.device, &poolInfo, nullptr, &descriptorPool);
 
-    gridTransform.rotation = glm::vec3(-90.f, 0.f, 0.f); // rotation in degrees (pitch, yaw, roll)
-	registry.get<Transform>(grid)->rotation = gridTransform.rotation;
+    renderer.initDescriptorSets(descriptorPool);
 
-    registry.emplace<Material>(grid, Material{ glm::vec4(0.3f,0.3f,0.3f,1.f) });
-    registry.emplace<Mesh>(grid, Primitives::makeQuad()); // a simple quad, or just 6 vertices
-    registry.emplace<Grid>(grid, Grid{ 1.f, 100.f, glm::vec4(0.3f,0.3f,0.3f,1.f) });
-    registry.get<Material>(grid)->pipeline =
-        renderer.createPipelineForShaders("build/shaders/grid.vert.spv", "build/shaders/grid.frag.spv");
-
-
-
-    Entity camEntity = registry.create();
-    if (camEntity.getId() == Entity::INVALID_ENTITY) throw std::runtime_error("Ran out of entity IDs");
-    registry.emplace<Camera>(camEntity, Camera{});
-	registry.emplace<Transform>(camEntity, Transform{});
-	registry.emplace<InputComponent>(camEntity, InputComponent{});
-    Camera* cam = registry.get<Camera>(camEntity);
-    if (!cam) throw std::runtime_error("Camera component missing!");
-    if (!camEntity.hasComponent<Transform>()) throw std::runtime_error("Camera entity missing Transform!");
-	camEntity.getComponent<Transform>().position = glm::vec3(0.f, 0.f, 5.f);
-    cam->fov = 45;
-    // Triangle entity
-    Entity tri = registry.create();
-    registry.emplace<Transform>(tri, glm::vec3(-1.f, 0.f, 0.f));
-    registry.emplace<Mesh>(tri, Primitives::makeTriangle()); // centered at origin
-    registry.emplace<Material>(tri, Material{ {1.f,0.f,0.f,1.f} });
-    registry.get<Material>(tri)->pipeline =
-        renderer.createPipelineForShaders("build/shaders/unlit.vert.spv", "build/shaders/unlit.frag.spv");
-
-    // Cube entity
-    Entity cube = registry.create();
-    registry.emplace<Transform>(cube, glm::vec3(1.f, 0.f, 0.f));
-    registry.emplace<Mesh>(cube, Primitives::makeCube()); // centered at origin
-    registry.emplace<Material>(cube, Material{ {0.f,1.f,0.f,1.f} });
-    registry.get<Material>(cube)->pipeline =
-        renderer.createPipelineForShaders("build/shaders/unlit.vert.spv", "build/shaders/unlit.frag.spv");
-
-    // Upload both meshes
-    for (auto e : {grid, tri, cube }) {
-        Mesh* mesh = registry.get<Mesh>(e);
-        if (mesh) renderer.uploadMesh(*mesh);
-    }
-
-
-
-    while (!renderer.shouldClose()) {
+    // Main loop
+    while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
-        float dt = renderer.getDeltaTime();
-
-		sysManager.updateAll(dt);
+        // In real code: acquire swapchain image, record cmd buffer, submit + present
+        std::cout << "Frame tick\n";
     }
 
-    renderer.cleanup();
+    vkDestroyDescriptorPool(context.device, descriptorPool, nullptr);
+    swapchain.cleanup(context.device);
+    context.cleanup();
+    glfwDestroyWindow(window);
     glfwTerminate();
 
-
-    return EXIT_SUCCESS;
+    return 0;
 }

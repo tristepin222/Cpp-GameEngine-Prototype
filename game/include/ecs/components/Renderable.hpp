@@ -2,5 +2,6 @@
 #include <glm/glm.hpp>
 
 struct Renderable {
-    glm::vec3 color = { 1.0f, 1.0f, 1.0f };
+    uint32_t meshID;
+    uint32_t materialID;
 };
