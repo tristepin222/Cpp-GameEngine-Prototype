@@ -47,7 +47,7 @@ PipelineBuilder& PipelineBuilder::addInstanceMatrixBinding(uint32_t binding, uin
     return *this;
 }
 
-VkPipeline PipelineBuilder::build(VkDevice device) {
+std::pair<VkPipeline, VkPipelineLayout> PipelineBuilder::build(VkDevice device) {
     if (layout == VK_NULL_HANDLE || renderPass == VK_NULL_HANDLE || vertShader == VK_NULL_HANDLE || fragShader == VK_NULL_HANDLE) {
         throw std::runtime_error("PipelineBuilder: Missing required fields (layout, renderPass, shaders)");
     }
@@ -176,5 +176,25 @@ VkPipeline PipelineBuilder::build(VkDevice device) {
     }
 
     std::cout << "PipelineBuilder: Pipeline successfully created" << std::endl;
-    return pipeline;
+    return { pipeline, layout };
+}
+
+VkPipelineLayout PipelineBuilder::createPipelineLayout(
+    VkDevice device,
+    VkDescriptorSetLayout descriptorSet,
+    VkPushConstantRange* pushConstants,
+    uint32_t pushConstantCount
+) {
+    VkPipelineLayoutCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    info.setLayoutCount = 1;
+    info.pSetLayouts = &descriptorSet;
+    info.pushConstantRangeCount = pushConstantCount;
+    info.pPushConstantRanges = pushConstants;
+
+    VkPipelineLayout layout;
+    if (vkCreatePipelineLayout(device, &info, nullptr, &layout) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create pipeline layout");
+
+    return layout;
 }

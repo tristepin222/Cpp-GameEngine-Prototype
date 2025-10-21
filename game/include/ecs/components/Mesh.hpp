@@ -24,32 +24,16 @@ struct Vertex {
     // --- Vulkan attribute descriptions ---
     static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions() {
         std::vector<VkVertexInputAttributeDescription> attributes(3);
-
-        // position
-        attributes[0].binding = 0;
-        attributes[0].location = 0;
-        attributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributes[0].offset = offsetof(Vertex, position);
-
-        // normal
-        attributes[1].binding = 0;
-        attributes[1].location = 1;
-        attributes[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributes[1].offset = offsetof(Vertex, normal);
-
-        // uv
-        attributes[2].binding = 0;
-        attributes[2].location = 2;
-        attributes[2].format = VK_FORMAT_R32G32_SFLOAT;
-        attributes[2].offset = offsetof(Vertex, uv);
-
+        attributes[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position) };
+        attributes[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, normal) };
+        attributes[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, uv) };
         return attributes;
     }
 };
 
 struct Mesh {
-    uint32_t vertexCount;
-    uint32_t indexCount;
-    VkBuffer vertexBuffer;
-    VkBuffer indexBuffer;
+    uint32_t vertexCount = 0;   // Number of vertices
+    uint32_t indexCount = 0;    // Number of indices
+    uint32_t vertexOffset = 0;  // Offset in global vertex buffer
+    uint32_t indexOffset = 0;   // Offset in global index buffer
 };

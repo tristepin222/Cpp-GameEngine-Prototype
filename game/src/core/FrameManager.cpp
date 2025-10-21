@@ -6,14 +6,29 @@ FrameManager::FrameManager(VkDevice dev, VkQueue gQ, VkQueue pQ, VkSwapchainKHR 
 }
 
 FrameManager::~FrameManager() {
+    // Ensure device is still valid
+    if (!device) return;
+
+    vkDeviceWaitIdle(device); // make sure GPU is done with all operations
+
     for (size_t i = 0; i < maxFramesInFlight; i++) {
-        vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
-        vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
-        vkDestroyFence(device, inFlightFences[i], nullptr);
+        if (imageAvailableSemaphores[i] != VK_NULL_HANDLE)
+            vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
+
+        if (renderFinishedSemaphores[i] != VK_NULL_HANDLE)
+            vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
+
+        if (inFlightFences[i] != VK_NULL_HANDLE)
+            vkDestroyFence(device, inFlightFences[i], nullptr);
     }
 }
 
 void FrameManager::init(VkCommandPool commandPool) {
+
+    uint32_t swapImageCount = 0;
+    vkGetSwapchainImagesKHR(device, swapchain, &swapImageCount, nullptr);
+    maxFramesInFlight = std::min(maxFramesInFlight, swapImageCount);
+
     imageAvailableSemaphores.resize(maxFramesInFlight);
     renderFinishedSemaphores.resize(maxFramesInFlight);
     inFlightFences.resize(maxFramesInFlight);
@@ -46,13 +61,34 @@ void FrameManager::init(VkCommandPool commandPool) {
     }
 }
 
-void FrameManager::beginFrame(uint32_t& imageIndex) {
+VkResult FrameManager::beginFrame(uint32_t& imageIndex) {
+    // Wait for this frame's fence to ensure GPU is done
     vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+
+    // Acquire next image
+    VkResult result = vkAcquireNextImageKHR(
+        device,
+        swapchain,
+        UINT64_MAX, // consider using a finite timeout if needed
+        imageAvailableSemaphores[currentFrame],
+        VK_NULL_HANDLE,
+        &imageIndex
+    );
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        return result; // swapchain needs recreation
+    }
+    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        throw std::runtime_error("Failed to acquire swapchain image!");
+    }
+
+    // Reset fence for this frame before submitting commands
     vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
-    vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
-
+    // Reset command buffer for recording
     vkResetCommandBuffer(commandBuffers[currentFrame], 0);
+
+    return result;
 }
 
 void FrameManager::endFrame(uint32_t imageIndex) {
@@ -83,7 +119,10 @@ void FrameManager::endFrame(uint32_t imageIndex) {
     presentInfo.pSwapchains = &swapchain;
     presentInfo.pImageIndices = &imageIndex;
 
-    vkQueuePresentKHR(presentQueue, &presentInfo);
+    VkResult presentResult = vkQueuePresentKHR(presentQueue, &presentInfo);
+    if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) {
+        // caller should handle swapchain recreation
+    }
 
     currentFrame = (currentFrame + 1) % maxFramesInFlight;
 }

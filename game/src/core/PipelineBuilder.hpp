@@ -27,8 +27,15 @@ public:
     // `locationStart` is the first attribute location that will be used (uses locationStart..locationStart+3)
     PipelineBuilder& addInstanceMatrixBinding(uint32_t binding, uint32_t locationStart);
 
+    VkPipelineLayout createPipelineLayout(
+        VkDevice device,
+        VkDescriptorSetLayout descriptorSetLayout,
+        VkPushConstantRange* pushConstants = nullptr,
+        uint32_t pushConstantCount = 0
+    );
+
     // Build pipeline
-    VkPipeline build(VkDevice device);
+    std::pair<VkPipeline, VkPipelineLayout> build(VkDevice device);
 
 private:
     VkPipelineLayout layout = VK_NULL_HANDLE;

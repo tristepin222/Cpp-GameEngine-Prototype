@@ -3,7 +3,79 @@
 #include <stdexcept>
 #include <vector>
 
+
+
+bool VulkanContext::checkValidationLayerSupport() {
+    uint32_t layerCount;
+    vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+    std::vector<VkLayerProperties> availableLayers(layerCount);
+    vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+    for (const char* layerName : validationLayers) {
+        bool found = false;
+        for (const auto& layer : availableLayers) {
+            if (strcmp(layer.layerName, layerName) == 0) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            std::cerr << "Validation layer not found: " << layerName << std::endl;
+            return false;
+        }
+    }
+    return true;
+}
+
+static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+    VkDebugUtilsMessageTypeFlagsEXT messageType,
+    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+    void* pUserData) {
+
+    std::cerr << "[Vulkan Validation] " << pCallbackData->pMessage << std::endl;
+    return VK_FALSE;
+}
+
+void VulkanContext::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
+    createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    createInfo.messageSeverity =
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    createInfo.messageType =
+        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    createInfo.pfnUserCallback = debugCallback;
+}
+
+void VulkanContext::setupDebugMessenger() {
+    if (!enableValidationLayers) return;
+
+    VkDebugUtilsMessengerCreateInfoEXT createInfo;
+    populateDebugMessengerCreateInfo(createInfo);
+
+    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)
+        vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+        func(instance, &createInfo, nullptr, &debugMessenger);
+    }
+}
+
+void VulkanContext::destroyDebugMessenger() {
+    if (!enableValidationLayers) return;
+    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)
+        vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+        func(instance, debugMessenger, nullptr);
+    }
+}
+
 void VulkanContext::createInstance() {
+    if (enableValidationLayers && !checkValidationLayerSupport())
+        throw std::runtime_error("Validation layers requested, but not available!");
+
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName = "DOD Renderer";
@@ -12,15 +84,35 @@ void VulkanContext::createInstance() {
     uint32_t glfwExtensionCount = 0;
     const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
+    std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+    if (enableValidationLayers)
+        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+
     VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
-    createInfo.enabledExtensionCount = glfwExtensionCount;
-    createInfo.ppEnabledExtensionNames = glfwExtensions;
+    createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+    createInfo.ppEnabledExtensionNames = extensions.data();
+
+    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+    if (enableValidationLayers) {
+        createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+        createInfo.ppEnabledLayerNames = validationLayers.data();
+        populateDebugMessengerCreateInfo(debugCreateInfo);
+        createInfo.pNext = &debugCreateInfo;
+    }
+    else {
+        createInfo.enabledLayerCount = 0;
+        createInfo.pNext = nullptr;
+    }
 
     if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS)
         throw std::runtime_error("Failed to create Vulkan instance");
+
+    if (enableValidationLayers)
+        setupDebugMessenger();
 }
+
 
 void VulkanContext::pickPhysicalDevice() {
     uint32_t deviceCount = 0;
@@ -48,6 +140,8 @@ void VulkanContext::createLogicalDevice() {
     for (uint32_t i = 0; i < queueFamilyCount; i++) {
         if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
             graphicsIndex = i;
+
+        graphicsQueueFamilyIndex = graphicsIndex;
 
         VkBool32 presentSupport = false;
         vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentSupport);
@@ -90,6 +184,14 @@ void VulkanContext::createLogicalDevice() {
 
     vkGetDeviceQueue(device, graphicsIndex, 0, &graphicsQueue);
     vkGetDeviceQueue(device, presentIndex, 0, &presentQueue);
+
+    VkCommandPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    poolInfo.queueFamilyIndex = graphicsQueueFamilyIndex;
+
+    if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create command pool!");
 }
 
 void VulkanContext::init(GLFWwindow* window) {
@@ -105,7 +207,30 @@ void VulkanContext::init(GLFWwindow* window) {
 }
 
 void VulkanContext::cleanup() {
-    if (device) vkDestroyDevice(device, nullptr);
-    if (surface) vkDestroySurfaceKHR(instance, surface, nullptr);
-    if (instance) vkDestroyInstance(instance, nullptr);
+
+    destroyDebugMessenger();
+    // Destroy device objects first
+    if (commandPool != VK_NULL_HANDLE) {
+        vkDestroyCommandPool(device, commandPool, nullptr);
+        commandPool = VK_NULL_HANDLE;
+    }
+
+    // Destroy the device
+    if (device) {
+        vkDestroyDevice(device, nullptr);
+        device = VK_NULL_HANDLE;
+    }
+
+    // Destroy the surface
+    if (surface) {
+        vkDestroySurfaceKHR(instance, surface, nullptr);
+        surface = VK_NULL_HANDLE;
+    }
+
+    // Destroy the instance
+    if (instance) {
+        vkDestroyInstance(instance, nullptr);
+        instance = VK_NULL_HANDLE;
+    }
 }
+
