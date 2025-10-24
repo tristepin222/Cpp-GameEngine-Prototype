@@ -54,13 +54,3 @@ template<typename T>
 bool Entity::hasComponent() {
     return registry->has<T>(*this);
 }
-
-// ------------------- Hash support for unordered_map/set -------------------
-namespace std {
-    template<>
-    struct hash<Entity> {
-        std::size_t operator()(const Entity& e) const noexcept {
-            return std::hash<Entity::IdType>{}(e.getId());
-        }
-    };
-}

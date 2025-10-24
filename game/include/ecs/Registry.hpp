@@ -1,5 +1,4 @@
-﻿// include/ecs/Registry.hpp
-#pragma once
+﻿#pragma once
 #include "EntityManager.hpp"
 #include "ComponentStorage.hpp"
 #include "Component.hpp"
@@ -7,15 +6,11 @@
 #include <typeindex>
 #include <functional>
 #include <vector>
+#include <memory>
 
 class Registry {
 public:
-
-
-    Registry() {
-        entities.setRegistry(this);
-    }
-
+    Registry() { entities.setRegistry(this); }
 
     using ComponentAddedCallback = std::function<void(Entity)>;
     using ComponentRemovedCallback = std::function<void(Entity)>;
@@ -23,6 +18,7 @@ public:
     Entity create() { return entities.create(); }
     void destroy(Entity e) { entities.destroy(e); }
 
+    // Add or emplace component
     template<typename T>
     T& emplace(Entity e, T&& comp) {
         ensureStorage<T>();
@@ -31,22 +27,19 @@ public:
         auto id = registerComponentType(typeid(T));
         entities.getMask(e).set(id);
 
-        // set back-pointers
-        T* ptr = getStorage<T>()->get(e).value();
-        ptr->entity = e;
-        ptr->registry = this;
+        // optional back-pointers
+        T& ref = getStorage<T>()->get(e);
+        ref.entity = e;
+        ref.registry = this;
 
-        if (componentAddedCallbacks.find(id) != componentAddedCallbacks.end())
+        if (componentAddedCallbacks.find(id) != componentAddedCallbacks.end()) {
             for (auto& cb : componentAddedCallbacks[id]) cb(e);
+        }
 
-        // unwrap optional
-        auto opt = getStorage<T>()->get(e);   // std::optional<T*>
-        if (!opt.has_value()) throw std::runtime_error("Component missing after emplace!");
-        return **opt; // dereference optional, then pointer, T&
+        return ref;
     }
 
-
-
+    // Remove component
     template<typename T>
     void remove(Entity e) {
         auto* storage = getStorage<T>();
@@ -55,19 +48,18 @@ public:
             auto id = registerComponentType(typeid(T));
             entities.getMask(e).reset(id);
 
-            // notify systems
             if (componentRemovedCallbacks.find(id) != componentRemovedCallbacks.end()) {
                 for (auto& cb : componentRemovedCallbacks[id]) cb(e);
             }
         }
     }
 
+    // Access component
     template<typename T>
     T* get(Entity e) {
-        ensureStorage<T>();
-        auto opt = getStorage<T>()->get(e); // std::optional<T*>
-        if (!opt.has_value()) return nullptr;
-        return *opt; // unwrap optional → gives T*
+        auto* storage = getStorage<T>();
+        if (!storage || !storage->has(e)) return nullptr;
+        return &storage->get(e);
     }
 
     template<typename T>
@@ -77,14 +69,13 @@ public:
         return *ptr;
     }
 
-
     template<typename T>
     bool has(Entity e) {
-        ensureStorage<T>();
-        return getStorage<T>()->has(e);
+        auto* storage = getStorage<T>();
+        return storage && storage->has(e);
     }
 
-    // systems subscribe to component changes
+    // Subscribe to component events
     template<typename T>
     void subscribeToAdded(ComponentAddedCallback cb) {
         auto id = registerComponentType(typeid(T));
@@ -96,7 +87,8 @@ public:
         auto id = registerComponentType(typeid(T));
         componentRemovedCallbacks[id].push_back(cb);
     }
-    
+
+    // --- Views ---
     template<typename... Components>
     class View {
     public:
@@ -122,34 +114,28 @@ public:
         Registry& registry;
     };
 
-    // Generates a view over all entities that have all Components
     template<typename... Components>
     auto view() {
         ensureStorages<Components...>();
 
-        // Find the smallest storage to iterate efficiently
-        auto* smallest = getSmallestStorage<Components...>();
+        // pick the smallest storage to iterate
+        IStorage* smallest = getSmallestStorage<Components...>();
         std::vector<Entity> result;
-        if (!smallest) return View<Components...>(*this);
 
-        // Iterate over smallest storage directly
-        auto* typedSmallest = static_cast<ComponentStorage<std::tuple_element_t<0, std::tuple<Components...>>>*>(smallest);
-        for (auto& [entity, _] : *typedSmallest) {
-            if ((has<Components>(entity) && ...)) {
-                result.push_back(entity);
+        if (smallest) {
+            for (Entity e : smallest->getEntities()) {
+                if ((has<Components>(e) && ...)) result.push_back(e);
             }
         }
 
-
-        View<Components...> view(*this);
-        view.entities = std::move(result);
-        return view;
+        View<Components...> v(*this);
+        v.entities = std::move(result);
+        return v;
     }
 
 private:
     EntityManager entities;
     std::unordered_map<std::size_t, std::unique_ptr<IStorage>> storages;
-
     std::unordered_map<std::size_t, std::vector<ComponentAddedCallback>> componentAddedCallbacks;
     std::unordered_map<std::size_t, std::vector<ComponentRemovedCallback>> componentRemovedCallbacks;
 
@@ -164,10 +150,11 @@ private:
     template<typename T>
     ComponentStorage<T>* getStorage() {
         std::size_t id = registerComponentType(typeid(T));
-        return static_cast<ComponentStorage<T>*>(storages[id].get());
+        auto it = storages.find(id);
+        if (it == storages.end()) return nullptr;
+        return static_cast<ComponentStorage<T>*>(it->second.get());
     }
 
-    // Utility helpers
     template<typename... Components>
     void ensureStorages() { (ensureStorage<Components>(), ...); }
 

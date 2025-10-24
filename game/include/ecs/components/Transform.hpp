@@ -6,6 +6,9 @@
 #include "../ComponentBase.hpp"
 
 struct Transform : ComponentBase {
+
+    size_t soaIndex; // points into renderer.transformSoA
+
     glm::vec3 position{ 0.0f };
     glm::vec3 rotation{ 0.0f }; // pitch(x), yaw(y), roll(z) in radians
     glm::vec3 scale{ 1.0f };

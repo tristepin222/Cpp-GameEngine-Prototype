@@ -11,3 +11,10 @@ struct PushConstants {
     float scale;
     float fade;
 };
+
+struct InstanceDataGPU {
+    glm::mat4 model;
+    glm::vec4 color;
+    uint32_t meshID;
+    uint32_t materialID;
+};

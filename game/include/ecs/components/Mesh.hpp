@@ -49,6 +49,9 @@ struct Vertex {
 };
 
 struct Mesh : ComponentBase {
+
+    uint32_t id;
+
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
 

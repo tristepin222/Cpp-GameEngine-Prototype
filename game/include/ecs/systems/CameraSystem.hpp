@@ -10,7 +10,8 @@
 
 class CameraSystem : public System {
 public:
-    CameraSystem(Registry& reg) : registry(reg) {}
+    CameraSystem(Registry& reg, VulkanRenderer& renderer)
+        : registry(reg), renderer(renderer) {}
 
     void update(float dt) override {
         for (auto [entity, cam, transform, input] : registry.view<Camera, Transform, InputComponent>()) {
@@ -38,11 +39,16 @@ public:
 
             transform.position += move * cam.moveSpeed * dt;
 
-			std::cout << "Camera Pos: " << transform.position.x << ", " << transform.position.y << ", " << transform.position.z << "\n";
-			std::cout << "Camera Rot: " << transform.rotation.x << ", " << transform.rotation.y << ", " << transform.rotation.z << "\n";
+            // --- Update TransformSoA ---
+            auto& tSoA = renderer.transformSoA; // you need a reference to VulkanRenderer
+            size_t i = transform.soaIndex;      // each Transform should have soaIndex
+            tSoA.positions[i] = transform.position;
+            tSoA.rotations[i] = transform.rotation;
+            tSoA.scales[i] = transform.scale;   // if you use scale
         }
     }
 
 private:
     Registry& registry;
+    VulkanRenderer& renderer;
 };

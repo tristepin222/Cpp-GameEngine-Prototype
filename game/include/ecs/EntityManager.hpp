@@ -4,6 +4,7 @@
 #include <array>
 #include <algorithm>
 #include "Entity.hpp"
+#include "EntityHash.hpp"
 
 class Registry; // forward declaration
 
