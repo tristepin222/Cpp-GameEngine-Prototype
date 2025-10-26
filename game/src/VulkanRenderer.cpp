@@ -12,53 +12,80 @@ VulkanRenderer::~VulkanRenderer() {
     cleanup();
 }
 
+//
+// ─── Initialization ─────────────────────────────────────────────────────────────
+//
+// initVulkan() — orchestration (call this from ctor)
 void VulkanRenderer::initVulkan() {
+    createInstanceAndDebug();       // create instance & debug messenger
+    createWindowSurface();          // must create surface before picking physical device
+    createDeviceAndQueues();        // pick physical device using surface, create logical device
+    createSwapchain();              // create swapchain (depends on device + surface)
+    setupDescriptors();
+    createBuffersAndPipelines();
+    createCommandsAndSync();
+}
 
+// -----------------------------
+// Instance & Debug
+// -----------------------------
+void VulkanRenderer::createInstanceAndDebug() {
+    // This should create the VkInstance inside device.initialize()
+    device.initialize();           // creates VkInstance
+    setupDebugMessenger();         // debug messenger requires a valid instance
+}
 
-    // 1) Device
-    device.initialize();
+// -----------------------------
+// Surface, Device & Swapchain
+// -----------------------------
+void VulkanRenderer::createWindowSurface() {
+    if (surface != VK_NULL_HANDLE) return; // already created
 
+    if (glfwCreateWindowSurface(device.getInstance(), window, nullptr, &surface) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create window surface");
+}
 
-    setupDebugMessenger();
+void VulkanRenderer::createDeviceAndQueues() {
+    // surface must be valid here
+    if (surface == VK_NULL_HANDLE) {
+        throw std::runtime_error("createDeviceAndQueues called with null surface");
+    }
 
-    // 2) Create surface
-    createWindowSurface();
     device.pickPhysicalDevice(surface);      // pick GPU that supports presentation to surface
-    device.createLogicalDevice();
+    device.createLogicalDevice();            // create device + queues
+}
 
-
+void VulkanRenderer::createSwapchain() {
     swapchain.initialize(
         device.getDevice(),
         device.getPhysicalDevice(),
         surface,
         device.getGraphicsQueueFamily()
     );
+}
 
-
-    // 4) Descriptors
+// -----------------------------
+// Remaining setup
+// -----------------------------
+void VulkanRenderer::setupDescriptors() {
     descriptors.create(device.getDevice());
     descriptors.createCameraDescriptorSetLayout();
+}
 
-    // 5) Buffers
+void VulkanRenderer::createBuffersAndPipelines() {
     createCameraUBO();
-
-    // 6) Allocate descriptor sets for camera
     descriptors.allocateCameraDescriptorSets(cameraBuffer.get(), cameraBuffer.getSize());
     cameraDescriptorSet = descriptors.getCameraDescriptorSet();
 
-    // 7) Pipeline
+    createInstanceBuffer(10000);
     createPipeline();
+}
 
-    // 8) Command manager & sync
+void VulkanRenderer::createCommandsAndSync() {
     cmdManager.create(device.getDevice(), device.getGraphicsQueueFamily(), 2);
     frameSync.create(device.getDevice(), 2);
 }
 
-void VulkanRenderer::createWindowSurface() {
-    if (glfwCreateWindowSurface(device.getInstance(), window, nullptr, &surface) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create window surface");
-    }
-}
 
 void VulkanRenderer::createPipeline() {
     const std::string vert = "build/shaders/grid.vert.spv";
@@ -111,6 +138,12 @@ void VulkanRenderer::endFrame() {
     vkCmdEndRenderPass(cmd);
     cmdManager.endFrame();
 
+    submitAndPresent();
+}
+
+void VulkanRenderer::submitAndPresent() {
+    VkCommandBuffer cmdBuf = cmdManager.getCurrentCommandBuffer();
+
     VkSemaphore waitSemaphores[] = { frameSync.getImageAvailableSemaphore() };
     VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
     VkSemaphore signalSemaphores[] = { frameSync.getRenderFinishedSemaphore() };
@@ -121,7 +154,6 @@ void VulkanRenderer::endFrame() {
     submitInfo.pWaitSemaphores = waitSemaphores;
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = 1;
-    VkCommandBuffer cmdBuf = cmdManager.getCurrentCommandBuffer();
     submitInfo.pCommandBuffers = &cmdBuf;
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
@@ -148,14 +180,6 @@ void VulkanRenderer::endFrame() {
     }
 
     frameSync.nextFrame();
-}
-
-void VulkanRenderer::drawMesh(const Mesh&, const Material&, const Transform&) {
-    // TODO: Bind vertex/index buffers and issue vkCmdDrawIndexed
-}
-
-void VulkanRenderer::drawInstances() {
-    // TODO: Implement instanced rendering when ready
 }
 
 void VulkanRenderer::createInstanceBuffer(size_t maxInstances) {

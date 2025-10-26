@@ -156,9 +156,15 @@ private:
 private:
     void initVulkan();
     void createPipeline();
-    void recreateInternal();
     void createWindowSurface();
     VkDebugUtilsMessengerCreateInfoEXT populateDebugMessengerCreateInfo();
     void setupDebugMessenger();
     void destroyDebugMessenger();
+    void createInstanceAndDebug();
+    void createDeviceAndQueues();
+    void setupDescriptors();
+    void createSwapchain();
+    void createBuffersAndPipelines();
+    void createCommandsAndSync();
+    void submitAndPresent();
 };
