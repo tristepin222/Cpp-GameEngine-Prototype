@@ -2,7 +2,6 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <glm/glm.hpp>
-#include "../ComponentBase.hpp"
 
 struct Vertex {
     glm::vec3 position;
@@ -48,7 +47,7 @@ struct Vertex {
     }
 };
 
-struct Mesh : ComponentBase {
+struct Mesh {
 
     uint32_t id;
 

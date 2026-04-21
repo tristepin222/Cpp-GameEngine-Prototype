@@ -2,10 +2,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "../components/Transform.hpp"
-#include "../Entity.hpp"
-#include "../ComponentBase.hpp"
 
-struct Camera : ComponentBase {
+struct Camera {
     float fov = 45.f;
     float aspect = 1.0f;   // window width / height
     float nearPlane = 0.1f;

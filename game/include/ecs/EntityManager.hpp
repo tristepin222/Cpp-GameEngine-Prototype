@@ -6,26 +6,22 @@
 #include "Entity.hpp"
 #include "EntityHash.hpp"
 
-class Registry; // forward declaration
-
 class EntityManager {
 public:
     static constexpr std::size_t MAX_ENTITIES = 10000;
 
-    EntityManager() : registry(nullptr) {
+    EntityManager() {
         for (Entity::IdType i = 0; i < MAX_ENTITIES; ++i)
             freeIds.push(i);
     }
 
-    void setRegistry(Registry* reg) { registry = reg; }
-
     Entity create() {
-        if (freeIds.empty()) return Entity(registry, Entity::INVALID_ENTITY);
+        if (freeIds.empty()) return Entity(Entity::INVALID_ENTITY);
         Entity::IdType id = freeIds.top();
         freeIds.pop();
         alive.push_back(id);
         masks[id].reset();
-        return Entity(registry, id);
+        return Entity(id);
     }
 
     void destroy(Entity e) {
@@ -44,7 +40,6 @@ public:
     }
 
 private:
-    Registry* registry;
     std::vector<Entity::IdType> alive;
     std::stack<Entity::IdType> freeIds;
     std::array<ComponentMask, MAX_ENTITIES> masks;

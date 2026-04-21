@@ -15,6 +15,13 @@ public:
 
     void update(float dt) override {
         for (auto [entity, cam, transform, input] : registry.view<Camera, Transform, InputComponent>()) {
+            int width = 0;
+            int height = 0;
+            glfwGetWindowSize(renderer.getWindow(), &width, &height);
+            if (height > 0) {
+                cam.aspect = static_cast<float>(width) / static_cast<float>(height);
+            }
+
             // Update rotation
             transform.rotation.y += input.look.x * cam.mouseSensitivity;
             transform.rotation.x += input.look.y * cam.mouseSensitivity;
@@ -38,13 +45,7 @@ public:
                 up * input.movement.y;
 
             transform.position += move * cam.moveSpeed * dt;
-
-            // --- Update TransformSoA ---
-            auto& tSoA = renderer.transformSoA; // you need a reference to VulkanRenderer
-            size_t i = transform.soaIndex;      // each Transform should have soaIndex
-            tSoA.positions[i] = transform.position;
-            tSoA.rotations[i] = transform.rotation;
-            tSoA.scales[i] = transform.scale;   // if you use scale
+            renderer.setActiveCamera(cam.viewProjection(transform), transform.position);
         }
     }
 

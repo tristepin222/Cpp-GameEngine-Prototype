@@ -3,11 +3,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include "../ComponentBase.hpp"
-
-struct Transform : ComponentBase {
-
-    size_t soaIndex; // points into renderer.transformSoA
+struct Transform {
 
     glm::vec3 position{ 0.0f };
     glm::vec3 rotation{ 0.0f }; // pitch(x), yaw(y), roll(z) in radians

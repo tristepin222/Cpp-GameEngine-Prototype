@@ -4,6 +4,15 @@
 VulkanRenderer::VulkanRenderer(GLFWwindow* win, bool enableValidation)
     : window(win), enableValidationLayers(enableValidation)
 {
+    // Set up window resize callback
+    glfwSetFramebufferSizeCallback(window, [](GLFWwindow* window, int width, int height) {
+        auto renderer = reinterpret_cast<VulkanRenderer*>(glfwGetWindowUserPointer(window));
+        if (renderer) {
+            renderer->framebufferResized = true;
+        }
+    });
+    glfwSetWindowUserPointer(window, this);
+
     initVulkan();
     lastTime = glfwGetTime();
 }
@@ -129,6 +138,22 @@ void VulkanRenderer::beginFrame() {
     rpInfo.pClearValues = &clearColor;
 
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    // Set viewport and scissor
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = static_cast<float>(swapchain.getExtent().width);
+    viewport.height = static_cast<float>(swapchain.getExtent().height);
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = swapchain.getExtent();
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.get());
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.getLayout(), 0, 1, &cameraDescriptorSet, 0, nullptr);
 }
@@ -209,15 +234,8 @@ void VulkanRenderer::createCameraUBO() {
 }
 
 void VulkanRenderer::updateCameraUBO() {
-    cameraSoA.updateViewProjections(transformSoA);
-
-    if (cameraSoA.size() == 0) return;
-
-    // Upload entire array to GPU
-    cameraBuffer.uploadData(
-        cameraSoA.viewProjMatrices.data(),
-        cameraSoA.size() * sizeof(glm::mat4)
-    );
+    if (!hasActiveCameraData) return;
+    cameraBuffer.uploadData(&activeCameraViewProj, sizeof(activeCameraViewProj));
 }
 
 void VulkanRenderer::recreateSwapchain() {

@@ -10,7 +10,7 @@
 
 class Registry {
 public:
-    Registry() { entities.setRegistry(this); }
+    Registry() = default;
 
     using ComponentAddedCallback = std::function<void(Entity)>;
     using ComponentRemovedCallback = std::function<void(Entity)>;
@@ -27,16 +27,11 @@ public:
         auto id = registerComponentType(typeid(T));
         entities.getMask(e).set(id);
 
-        // optional back-pointers
-        T& ref = getStorage<T>()->get(e);
-        ref.entity = e;
-        ref.registry = this;
-
         if (componentAddedCallbacks.find(id) != componentAddedCallbacks.end()) {
             for (auto& cb : componentAddedCallbacks[id]) cb(e);
         }
 
-        return ref;
+        return getStorage<T>()->get(e);
     }
 
     // Remove component

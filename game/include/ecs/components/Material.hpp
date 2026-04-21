@@ -1,9 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
-#include "../ComponentBase.hpp"
-
-struct Material : ComponentBase {
+struct Material {
 
     uint32_t id;
 

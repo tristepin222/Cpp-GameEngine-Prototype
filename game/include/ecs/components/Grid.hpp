@@ -1,7 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 
-struct Grid : ComponentBase {
+struct Grid {
 
 
     uint32_t colorID;

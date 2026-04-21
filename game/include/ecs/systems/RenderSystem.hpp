@@ -49,6 +49,9 @@ public:
         renderer.instanceBuffer.uploadData(gpuData.data(), gpuData.size() * sizeof(InstanceDataGPU));
 
 
+        // --- Draw grids ---
+        drawGrids();
+
         // --- Draw instances ---
         drawBatches();
 
@@ -77,9 +80,12 @@ private:
         renderer.instanceDataCPU.clear();
         entityToInstanceIndex.clear();
 
-        // --- Mesh + Material instances ---
+        // --- Mesh + Material instances (excluding grids) ---
         for (auto [entity, mesh, transform, material] :
             registry.view<Mesh, Transform, Material>()) {
+
+            // Skip entities that have Grid component (they're drawn separately)
+            if (registry.get<Grid>(entity)) continue;
 
             InstanceData inst{};
             inst.model = transform.matrix();
@@ -90,34 +96,11 @@ private:
             size_t idx = renderer.instanceDataCPU.push(inst);
             entityToInstanceIndex[entity] = idx;
         }
-
-        // --- Grid instances ---
-        for (auto [entity, grid, transform] : registry.view<Grid, Transform>()) {
-            InstanceData inst{};
-            glm::vec3 camPos = getCameraPosition();
-
-            glm::vec3 gridPos;
-            gridPos.x = std::floor(camPos.x / grid.spacing) * grid.spacing;
-            gridPos.y = 0.0f;
-            gridPos.z = std::floor(camPos.z / grid.spacing) * grid.spacing;
-
-            glm::mat4 model = glm::translate(glm::mat4(1.0f), gridPos);
-            model = glm::rotate(model, glm::half_pi<float>(), glm::vec3(1.0f, 0, 0));
-
-            inst.model = model;
-            inst.meshID = grid.meshID;
-            inst.materialID = grid.colorID;
-            inst.color = grid.color;
-
-            size_t idx = renderer.instanceDataCPU.push(inst);
-            entityToInstanceIndex[entity] = idx;
-        }
     }
 
     glm::vec3 getCameraPosition() {
-        if (renderer.cameraSoA.size() > 0) {
-            // Take the first camera's transform
-            return renderer.transformSoA.positions[0];
+        if (renderer.hasActiveCamera()) {
+            return renderer.getActiveCameraPosition();
         }
         return glm::vec3(0.0f);
     }
@@ -200,7 +183,63 @@ private:
         }
     }
 
+    void drawGrids() {
+        VkCommandBuffer cmd = renderer.getCurrentCommandBuffer();
+        VkDescriptorSet cameraSet = renderer.getCameraDescriptorSet();
 
+        for (Entity e : entities) {
+            auto* grid = registry.get<Grid>(e);
+            auto* mat = registry.get<Material>(e);
+            if (!grid || !mat) continue;
+
+            // Bind grid pipeline
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mat->pipeline);
+
+            // Bind descriptor sets (camera)
+            vkCmdBindDescriptorSets(cmd,
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                mat->pipelineLayout,
+                0,
+                1,
+                &cameraSet,
+                0,
+                nullptr);
+
+            // Get camera position for grid positioning
+            glm::vec3 camPos = getCameraPosition();
+
+            // Push constants for grid shader
+            struct GridPushConstants {
+                glm::mat4 viewProj;
+                glm::vec4 color;
+                glm::vec3 camPos;
+                float scale;
+                float fade;
+            } pc;
+
+            // Use the camera's view-projection matrix
+            if (renderer.hasActiveCamera()) {
+                pc.viewProj = renderer.getActiveCameraViewProj();
+            } else {
+                pc.viewProj = glm::mat4(1.0f);
+            }
+
+            pc.color = grid->color;
+            pc.camPos = camPos;
+            pc.scale = grid->spacing;
+            pc.fade = grid->size;
+
+            vkCmdPushConstants(cmd,
+                mat->pipelineLayout,
+                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                0,
+                sizeof(GridPushConstants),
+                &pc);
+
+            // Draw 6 vertices so the shader can emit a full-screen quad as two triangles.
+            vkCmdDraw(cmd, 6, 1, 0, 0);
+        }
+    }
 
     struct pair_hash {
         std::size_t operator()(const std::pair<Mesh*, Material*>& p) const {

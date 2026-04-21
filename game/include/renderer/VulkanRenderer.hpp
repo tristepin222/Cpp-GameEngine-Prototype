@@ -6,20 +6,18 @@
 #include <stdexcept>
 #include <glm/glm.hpp>
 
-#include "core/VulkanDevice.hpp"
-#include "core/VulkanSwapchain.hpp"
-#include "core/VulkanPipeline.hpp"
-#include "core/VulkanBuffer.hpp"
-#include "core/VulkanDescriptors.hpp"
-#include "core/VulkanCommandManager.hpp"
-#include "core/VulkanFrameSync.hpp"
+#include "../../src/core/VulkanDevice.hpp"
+#include "../../src/core/VulkanSwapchain.hpp"
+#include "../../src/core/VulkanPipeline.hpp"
+#include "../../src/core/VulkanBuffer.hpp"
+#include "../../src/core/VulkanDescriptors.hpp"
+#include "../../src/core/VulkanCommandManager.hpp"
+#include "../../src/core/VulkanFrameSync.hpp"
 
 #include "../ecs/components/Mesh.hpp"
 #include "../ecs/components/Material.hpp"
 #include "../ecs/components/Transform.hpp"
 #include "../ecs/components/Camera.hpp"
-#include "../soa/TransformSoA.hpp"
-#include "../soa/CameraSoA.hpp"
 #include "../soa/MeshSoA.hpp"
 
 struct PipelineHandle {
@@ -116,12 +114,18 @@ public:
     VkDescriptorSet getCameraDescriptorSet() const {
         return cameraDescriptorSet;
     }
+    void setActiveCamera(const glm::mat4& viewProj, const glm::vec3& position) {
+        activeCameraViewProj = viewProj;
+        activeCameraPosition = position;
+        hasActiveCameraData = true;
+    }
+    bool hasActiveCamera() const { return hasActiveCameraData; }
+    const glm::mat4& getActiveCameraViewProj() const { return activeCameraViewProj; }
+    const glm::vec3& getActiveCameraPosition() const { return activeCameraPosition; }
     std::vector<std::unique_ptr<VulkanPipeline>> pipelines;
     // ECS instance buffer
     InstanceDataSoA instanceDataCPU;
 
-    CameraSoA cameraSoA;
-    TransformSoA transformSoA; // or pass it from your ECS
     MeshSoA meshSoA;
     VulkanBuffer instanceBuffer;
 
@@ -152,6 +156,9 @@ private:
     // State
     bool framebufferResized = false;
     double lastTime = 0.0;
+    glm::mat4 activeCameraViewProj{ 1.0f };
+    glm::vec3 activeCameraPosition{ 0.0f };
+    bool hasActiveCameraData = false;
 
 private:
     void initVulkan();
