@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <vector>
 
 #include "../ecs/Entity.hpp"
@@ -16,6 +17,8 @@ public:
     virtual ~Scene() = default;
 
     virtual void load() = 0;
+    virtual bool saveToFile(const std::string& path) { (void)path; return false; }
+    virtual bool loadFromFile(const std::string& path) { (void)path; return false; }
     virtual void unload() {
         for (Entity entity : ownedEntities) {
             registry.destroy(entity);

@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include <vulkan/vulkan.h>
-#include <glfw3.h>
+#include <GLFW/glfw3.h>
 #include <vector>
 #include <stdexcept>
 #include <glm/glm.hpp>
@@ -110,6 +110,12 @@ public:
 
     VkCommandBuffer getCurrentCommandBuffer() {
         return cmdManager.getCurrentCommandBuffer();
+    }
+    VkCommandBuffer beginSingleUseCommands() {
+        return cmdManager.beginOneTimeCommand();
+    }
+    void endSingleUseCommands(VkCommandBuffer commandBuffer) {
+        cmdManager.endOneTimeCommand(commandBuffer, device.getGraphicsQueue());
     }
     VkDescriptorSet getCameraDescriptorSet() const {
         return cameraDescriptorSet;

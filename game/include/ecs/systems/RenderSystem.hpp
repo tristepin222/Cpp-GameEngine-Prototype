@@ -10,6 +10,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "../components/Grid.hpp"
 #include "../components/pushconstants.hpp"
+#include <functional>
 
 class RenderSystem : public System {
 public:
@@ -32,7 +33,7 @@ public:
         renderer.updateInstanceBuffer();  // bulk upload to GPU
     }
 
-    void drawFrame() {
+    void drawFrame(const std::function<void(VkCommandBuffer)>& overlayPass = {}) {
         renderer.beginFrame();
 
         VkCommandBuffer cmd = renderer.getCurrentCommandBuffer();
@@ -54,6 +55,10 @@ public:
 
         // --- Draw instances ---
         drawBatches();
+
+        if (overlayPass) {
+            overlayPass(cmd);
+        }
 
         renderer.endFrame();
     }

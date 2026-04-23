@@ -1,4 +1,4 @@
-﻿#include <glfw3.h>
+﻿#include <GLFW/glfw3.h>
 #include <iostream>
 #include "renderer/VulkanRenderer.hpp"
 #include "ecs/Registry.hpp"
@@ -11,8 +11,10 @@
 #include "ecs/systems/CameraSystem.hpp"
 #include "ecs/components/Grid.hpp"
 #include "ecs/systems/InputSystem.hpp"
+#include "editor/EditorUI.hpp"
 #include "scenes/SceneManager.hpp"
 #include "scenes/TestScene.hpp"
+
 
 int main() {
     glfwInit();
@@ -27,7 +29,7 @@ int main() {
     auto movementSystem = std::make_shared<MovementSystem>(registry);
     auto renderSystem = std::make_shared<RenderSystem>(registry, renderer);
 	auto cameraSystem = std::make_shared<CameraSystem>(registry, renderer);
-	auto inputSystem = std::make_shared<InputSystem>(registry, renderer);
+    auto inputSystem = std::make_shared<InputSystem>(registry, renderer);
 
     SystemManager sysManager;
     sysManager.addSystem(inputSystem);
@@ -37,6 +39,8 @@ int main() {
 
     SceneManager sceneManager;
     sceneManager.changeScene(std::make_unique<TestScene>(registry, renderer));
+    EditorUI editorUI(registry, renderer, sceneManager);
+    editorUI.initialize(window);
 
     while (!renderer.shouldClose()) {
         glfwPollEvents();
@@ -44,9 +48,14 @@ int main() {
 
         sceneManager.update(dt);
 		sysManager.updateAll(dt);
-        renderSystem->drawFrame();
+        editorUI.beginFrame();
+        editorUI.drawPanels();
+        renderSystem->drawFrame([&editorUI](VkCommandBuffer cmd) {
+            editorUI.render(cmd);
+        });
     }
 
+    editorUI.shutdown();
     renderer.cleanup();
     glfwTerminate();
 

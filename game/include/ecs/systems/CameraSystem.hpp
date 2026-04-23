@@ -1,7 +1,7 @@
 #pragma once
 #include "../Registry.hpp"
 #include "../components/Camera.hpp"
-#include <glfw3.h>
+#include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include "../System.hpp"
 #include "../../renderer/VulkanRenderer.hpp"

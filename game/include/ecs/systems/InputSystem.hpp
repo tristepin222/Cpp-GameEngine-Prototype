@@ -1,6 +1,6 @@
 #pragma once
 #include <glm/glm.hpp>
-#include <glfw3.h>
+#include <GLFW/glfw3.h>
 #include "ecs/System.hpp"
 #include "ecs/Registry.hpp"
 #include "ecs/components/inputComponent.hpp"

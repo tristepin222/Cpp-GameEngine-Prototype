@@ -1,0 +1,35 @@
+{
+  "scene": "TestScene",
+  "entities": [
+    {
+      "name": "Grid",
+      "position": [0, 0, 0],
+      "rotation": [-90, 0, 0],
+      "scale": [1, 1, 1],
+      "color": [0.3, 0.3, 0.3, 1],
+      "gridSpacing": 1,
+      "gridSize": 100
+    },
+    {
+      "name": "Camera",
+      "position": [0, 5, 5],
+      "rotation": [20.7999, 10.8, 0],
+      "scale": [1, 1, 1],
+      "fov": 45
+    },
+    {
+      "name": "Triangle",
+      "position": [-1, 0, 0],
+      "rotation": [0, 0, 0],
+      "scale": [1, 1, 1],
+      "color": [1, 0, 0, 1]
+    },
+    {
+      "name": "Cube",
+      "position": [4.05, 2.55, 2.25],
+      "rotation": [0, 0, 0],
+      "scale": [4.15, 4.6, 2.6],
+      "color": [0.45098, 0, 0, 1]
+    }
+  ]
+}

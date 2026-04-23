@@ -8,6 +8,8 @@ public:
 
     void load() override;
     void update(float dt) override;
+    bool saveToFile(const std::string& path) override;
+    bool loadFromFile(const std::string& path) override;
 
 private:
     void createGrid();
@@ -15,4 +17,5 @@ private:
     void createTriangle();
     void createCube();
     void uploadMesh(Entity entity);
+    Entity findEntityByName(const std::string& name);
 };
