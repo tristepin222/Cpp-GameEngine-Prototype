@@ -28,16 +28,20 @@ struct Transform {
     }
 
     // Model matrix
-    glm::mat4 matrix() const {
-        glm::mat4 m{ 1.0f };
+    glm::mat4 matrix() const
+    {
+        glm::mat4 m(1.0f);
+
         m = glm::translate(m, position);
-        m = glm::rotate(m, rotation.x, glm::vec3(1, 0, 0));
-        m = glm::rotate(m, rotation.y, glm::vec3(0, 1, 0));
-        m = glm::rotate(m, rotation.z, glm::vec3(0, 0, 1));
+
+        m = glm::rotate(m, glm::radians(rotation.x), glm::vec3(1, 0, 0));
+        m = glm::rotate(m, glm::radians(rotation.y), glm::vec3(0, 1, 0));
+        m = glm::rotate(m, glm::radians(rotation.z), glm::vec3(0, 0, 1));
+
         m = glm::scale(m, scale);
+
         return m;
     }
-
     Transform() = default;
 
     Transform(glm::vec3 pos, glm::vec3 rot = glm::vec3(0.f), glm::vec3 s = glm::vec3(1.f))

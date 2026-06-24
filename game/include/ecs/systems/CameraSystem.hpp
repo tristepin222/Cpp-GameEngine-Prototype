@@ -45,7 +45,7 @@ public:
                 up * input.movement.y;
 
             transform.position += move * cam.moveSpeed * dt;
-            renderer.setActiveCamera(cam.viewProjection(transform), transform.position);
+            renderer.setActiveCamera(cam.projection(), transform.position, cam.view(transform));
         }
     }
 

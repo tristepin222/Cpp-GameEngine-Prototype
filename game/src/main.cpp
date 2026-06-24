@@ -11,6 +11,7 @@
 #include "ecs/systems/CameraSystem.hpp"
 #include "ecs/components/Grid.hpp"
 #include "ecs/systems/InputSystem.hpp"
+#include "editor/EditorModeState.hpp"
 #include "editor/EditorUI.hpp"
 #include "scenes/SceneManager.hpp"
 #include "scenes/TestScene.hpp"
@@ -23,13 +24,14 @@ int main() {
 
     VulkanRenderer renderer(window);
 	Registry registry;
+    EditorModeState editorMode;
 
     renderer.createInstanceBuffer(10000);
     // Create systems
     auto movementSystem = std::make_shared<MovementSystem>(registry);
     auto renderSystem = std::make_shared<RenderSystem>(registry, renderer);
 	auto cameraSystem = std::make_shared<CameraSystem>(registry, renderer);
-    auto inputSystem = std::make_shared<InputSystem>(registry, renderer);
+    auto inputSystem = std::make_shared<InputSystem>(registry, renderer, editorMode);
 
     SystemManager sysManager;
     sysManager.addSystem(inputSystem);
@@ -39,7 +41,7 @@ int main() {
 
     SceneManager sceneManager;
     sceneManager.changeScene(std::make_unique<TestScene>(registry, renderer));
-    EditorUI editorUI(registry, renderer, sceneManager);
+    EditorUI editorUI(registry, renderer, sceneManager, editorMode);
     editorUI.initialize(window);
 
     while (!renderer.shouldClose()) {

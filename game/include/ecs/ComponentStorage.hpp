@@ -8,6 +8,7 @@
 struct IStorage {
     virtual ~IStorage() = default;
     virtual size_t size() const = 0;
+    virtual void removeEntity(Entity e) = 0;
 
     // Return all entities in this storage
     virtual const std::vector<Entity>& getEntities() const = 0;
@@ -40,6 +41,10 @@ public:
         data.pop_back();
         entities.pop_back();
         entityToIndex.erase(e);
+    }
+
+    void removeEntity(Entity e) override {
+        remove(e);
     }
 
     T& get(Entity e) {

@@ -125,9 +125,20 @@ public:
         activeCameraPosition = position;
         hasActiveCameraData = true;
     }
+    void setActiveCamera(const glm::mat4& projection, const glm::vec3& position, const glm::mat4& view)
+    {
+        activeCameraView = view;
+        activeCameraProjection = projection;
+        activeCameraViewProj = projection * view;
+        activeCameraPosition = position;
+        hasActiveCameraData = true;
+    }
+
     bool hasActiveCamera() const { return hasActiveCameraData; }
     const glm::mat4& getActiveCameraViewProj() const { return activeCameraViewProj; }
     const glm::vec3& getActiveCameraPosition() const { return activeCameraPosition; }
+    const glm::mat4& getActiveCameraView() const { return activeCameraView; }
+    const glm::mat4& getActiveCameraProjection() const { return activeCameraProjection; }
     std::vector<std::unique_ptr<VulkanPipeline>> pipelines;
     // ECS instance buffer
     InstanceDataSoA instanceDataCPU;
@@ -144,8 +155,11 @@ private:
 
 
     VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
+#ifdef DEBUG
     bool enableValidationLayers = true; // turn off for release
-
+#else
+    bool enableValidationLayers = false;
+#endif
     // Core Vulkan modules
     VulkanPipeline pipeline;
     VulkanCommandManager cmdManager;
@@ -164,6 +178,8 @@ private:
     double lastTime = 0.0;
     glm::mat4 activeCameraViewProj{ 1.0f };
     glm::vec3 activeCameraPosition{ 0.0f };
+    glm::mat4 activeCameraView{};
+    glm::mat4 activeCameraProjection{};
     bool hasActiveCameraData = false;
 
 private:

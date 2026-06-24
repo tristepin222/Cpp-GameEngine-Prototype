@@ -16,7 +16,29 @@ public:
     using ComponentRemovedCallback = std::function<void(Entity)>;
 
     Entity create() { return entities.create(); }
-    void destroy(Entity e) { entities.destroy(e); }
+    void destroy(Entity e) {
+        if (e.getId() == Entity::INVALID_ENTITY) {
+            return;
+        }
+
+        ComponentMask mask = entities.getMask(e);
+        for (auto& [id, storage] : storages) {
+            if (!mask.test(id)) {
+                continue;
+            }
+
+            storage->removeEntity(e);
+
+            auto callbacksIt = componentRemovedCallbacks.find(id);
+            if (callbacksIt != componentRemovedCallbacks.end()) {
+                for (auto& cb : callbacksIt->second) {
+                    cb(e);
+                }
+            }
+        }
+
+        entities.destroy(e);
+    }
 
     // Add or emplace component
     template<typename T>
