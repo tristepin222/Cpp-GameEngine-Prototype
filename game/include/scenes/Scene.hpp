@@ -1,0 +1,69 @@
+#pragma once
+
+#include <string>
+#include <vector>
+
+#include "../ecs/Entity.hpp"
+#include "../ecs/Registry.hpp"
+
+class VulkanRenderer;
+
+class Scene {
+public:
+    Scene(Registry& registry, VulkanRenderer& renderer)
+        : registry(registry), renderer(renderer) {
+    }
+
+    virtual ~Scene() = default;
+
+    virtual void load() = 0;
+    virtual bool saveToFile(const std::string& path) { (void)path; return false; }
+    virtual bool loadFromFile(const std::string& path) { (void)path; return false; }
+    virtual Entity createPrimitiveEntity(const std::string& primitiveType) {
+        (void)primitiveType;
+        return Entity();
+    }
+    virtual Entity createEntityOfType(const std::string& entityType) {
+        (void)entityType;
+        return Entity();
+    }
+    virtual Entity duplicateEntity(Entity entity) {
+        (void)entity;
+        return Entity();
+    }
+    virtual bool deleteEntity(Entity entity) {
+        if (entity.getId() == Entity::INVALID_ENTITY) {
+            return false;
+        }
+
+        registry.destroy(entity);
+        untrackEntity(entity);
+        return true;
+    }
+    virtual void unload() {
+        for (Entity entity : ownedEntities) {
+            registry.destroy(entity);
+        }
+        ownedEntities.clear();
+    }
+    virtual void update(float dt) = 0;
+
+protected:
+    Entity trackEntity(Entity entity) {
+        ownedEntities.push_back(entity);
+        return entity;
+    }
+
+    void untrackEntity(Entity entity) {
+        ownedEntities.erase(
+            std::remove(ownedEntities.begin(), ownedEntities.end(), entity),
+            ownedEntities.end()
+        );
+    }
+
+    Registry& registry;
+    VulkanRenderer& renderer;
+
+private:
+    std::vector<Entity> ownedEntities;
+};

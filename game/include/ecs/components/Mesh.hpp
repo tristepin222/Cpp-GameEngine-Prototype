@@ -48,8 +48,25 @@ struct Vertex {
 };
 
 struct Mesh {
-    uint32_t vertexCount;
-    uint32_t indexCount;
-    VkBuffer vertexBuffer;
-    VkBuffer indexBuffer;
+
+    uint32_t id;
+
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
+
+    VkBuffer vertexBuffer{ VK_NULL_HANDLE };
+    VkDeviceMemory vertexBufferMemory{ VK_NULL_HANDLE };
+    VkBuffer indexBuffer{ VK_NULL_HANDLE };
+    VkDeviceMemory indexBufferMemory{ VK_NULL_HANDLE };
+
+    Mesh(
+        const std::vector<Vertex>& verts = {},
+        const std::vector<uint32_t>& inds = {},
+        VkBuffer vBuf = VK_NULL_HANDLE,
+        VkDeviceMemory vMem = VK_NULL_HANDLE,
+        VkBuffer iBuf = VK_NULL_HANDLE,
+        VkDeviceMemory iMem = VK_NULL_HANDLE
+    ) : vertices(verts), indices(inds), vertexBuffer(vBuf), vertexBufferMemory(vMem),
+        indexBuffer(iBuf), indexBufferMemory(iMem) {
+    }
 };
