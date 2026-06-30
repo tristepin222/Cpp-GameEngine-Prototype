@@ -12,47 +12,53 @@ skinparam class {
     AttributeIconSize 0
 }
 
-package "Application Layer" #EBF3F9 {
+package "sandbox_game (Executable Target)" #EBF3F9 {
     class Main << (O, #FFD700) Orchestrator >>
-    class SceneManager
     class TestScene
 }
 
-package "Editor Layer" #FFF9EB {
-    class EditorUI
-    struct EditorModeState
-}
+package "engine (Static Library Target)" #F5F5F5 {
+    package "Scene Management" #E8F8F5 {
+        abstract class Scene
+        class SceneManager
+        class SceneSerializer
+    }
 
-package "ECS Layer" #EBF9EB {
-    class Registry << (C, #87CEEB) Core ECS >>
-    class EntityManager
-    class ComponentStorage
-    class SystemManager
-    
-    abstract class System
-    class InputSystem
-    class CameraSystem
-    class RenderSystem
-}
+    package "Entity Utilities" #FEF9E7 {
+        class EntityFactory
+        class EntityCloner
+    }
 
-package "Renderer Layer" #F9EBEB {
-    class VulkanRenderer << (C, #FFA07A) Render Engine >>
-    class VulkanDevice
-    class VulkanSwapChain
-    class VulkanPipeline
-    class VulkanBuffer
-    class VulkanDescriptors
-    class VulkanCommandManager
-    class VulkanFrameSync
-    struct MeshSoA
-    struct InstanceDataSoA
-}
+    package "Editor Layer" #FFF9EB {
+        class EditorUI
+        struct EditorModeState
+    }
 
-' Hidden layout alignment links to structure the diagram tiers vertically
-"Application Layer" -[hidden]down-> "Editor Layer"
-"Editor Layer" -[hidden]right-> "ECS Layer"
-"Editor Layer" -[hidden]down-> "Renderer Layer"
-"ECS Layer" -[hidden]down-> "Renderer Layer"
+    package "ECS Layer" #EBF9EB {
+        class Registry << (C, #87CEEB) Core ECS >>
+        class EntityManager
+        class ComponentStorage
+        class SystemManager
+        
+        abstract class System
+        class InputSystem
+        class CameraSystem
+        class RenderSystem
+    }
+
+    package "Renderer Layer" #F9EBEB {
+        class VulkanRenderer << (C, #FFA07A) Render Engine >>
+        class VulkanDevice
+        class VulkanSwapChain
+        class VulkanPipeline
+        class VulkanBuffer
+        class VulkanDescriptors
+        class VulkanCommandManager
+        class VulkanFrameSync
+        struct MeshSoA
+        struct InstanceDataSoA
+    }
+}
 
 ' Control Flow
 Main -down-> SceneManager : updates scene
@@ -61,9 +67,16 @@ Main -down-> EditorUI : draws ImGui panels
 Main -down-> VulkanRenderer : manages lifecycle
 
 ' Internal Application Relationships
-SceneManager *-- TestScene : manages
+SceneManager *-- Scene : manages
+TestScene -up-|> Scene : inherits
 TestScene -down-> Registry : sets up entities
-TestScene -down-> VulkanRenderer : uploads static mesh
+TestScene -down-> EntityFactory : uses to spawn initial objects
+
+' Scene management helpers usage
+Scene -down-> SceneSerializer : delegates save/load
+Scene -down-> EntityFactory : delegates primitives spawning
+Scene -down-> EntityCloner : delegates duplicating
+Scene *-- Entity : tracks owned
 
 ' Internal ECS Relationships
 Registry *-- EntityManager : recycles IDs
@@ -84,7 +97,7 @@ VulkanRenderer *-- VulkanFrameSync
 VulkanRenderer *-- MeshSoA
 VulkanRenderer *-- InstanceDataSoA
 
-' Inter-Package Dependencies (Aligned for minimal crossings)
+' Inter-Package Dependencies
 InputSystem -left-> EditorModeState : updates edit/fly state
 InputSystem -up-> Registry : updates InputComponent
 

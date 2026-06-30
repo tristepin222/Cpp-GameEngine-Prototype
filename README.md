@@ -69,18 +69,8 @@ Dependencies are managed automatically through the CMake configuration:
     git clone https://github.com/tristepin222/Cpp-GameEngine-Prototype.git
     cd Cpp-GameEngine-Prototype
     ```
-2.  **Compile Shaders**:
-    Compile the shader source files under `game/assets/shaders/` into SPIR-V format using the Vulkan `glslc` compiler. You can run the following command block from the repository root:
-    ```powershell
-    # Compile Grid Shaders
-    glslc game/assets/shaders/grid.vert -o game/build/shaders/grid.vert.spv
-    glslc game/assets/shaders/grid.frag -o game/build/shaders/grid.frag.spv
-    # Compile Unlit Shaders
-    glslc game/assets/shaders/unlit.vert -o game/build/shaders/unlit.vert.spv
-    glslc game/assets/shaders/unlit.frag -o game/build/shaders/unlit.frag.spv
-    ```
-3.  **Configure and Build with CMake**:
-    Run the following commands from the repository root:
+2.  **Configure and Build with CMake**:
+    The CMake script dynamically locates the Vulkan SDK, fetches dependencies, and **automatically compiles all shaders** to SPIR-V format on build. Run the following commands from the repository root:
     ```bash
     # Configure the build (downloads dependencies and generates build files)
     cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -88,15 +78,15 @@ Dependencies are managed automatically through the CMake configuration:
     # Compile the project
     cmake --build build --config Release
     ```
-4.  **Run the Game**:
-    The compiled binary and its copied assets/shaders are located in the `build` configuration directory (e.g., `build/Release/` or `build/Debug/` under Visual Studio, or directly in `build/` under Ninja/Make). Run it using:
+3.  **Run the Game**:
+    The compiled binary, copied assets, and compiled shaders are located in the `build/sandbox_game/` output directory. Run it using:
     ```bash
     # For MSBuild / Visual Studio configurations:
-    cd build/Release
+    cd build/sandbox_game/Release
     ./game.exe
     ```
 
-> **Visual Studio / CLion Users**: You can open the repository root folder directly in your IDE (via **File -> Open -> Folder**), and the IDE will automatically detect the `CMakeLists.txt`, fetch dependencies, and configure the project.
+> **Visual Studio / CLion Users**: You can open the repository root folder directly in your IDE (via **File -> Open -> Folder**), and the IDE will automatically configure the workspace targets.
 
 ---
 

@@ -8,7 +8,7 @@ This document describes the design of the engine's interactive editor UI, built 
 
 ## ImGui & ImGuizmo Integration
 
-The editor frontend is managed by [EditorUI.cpp](../game/src/editor/EditorUI.cpp). It integrates Dear ImGui with Vulkan and GLFW backends.
+The editor frontend is managed by [EditorUI.cpp](../engine/src/editor/EditorUI.cpp). It integrates Dear ImGui with Vulkan and GLFW backends.
 
 *   **Initialization**: The system allocates a custom descriptor pool (`VkDescriptorPool`) for ImGui font textures, initializes window events hooks (`ImGui_ImplGlfw_InitForVulkan`), and registers the Vulkan rendering callbacks (`ImGui_ImplVulkan_Init`).
 *   **Fly Mode vs Edit Mode**: The user can toggle between modes by pressing the **F key**:
@@ -91,7 +91,7 @@ For each entity in the registry view:
 
 ## Scene Serialization
 
-The engine implements a lightweight custom JSON parser and generator inside [TestScene.cpp](../game/src/scenes/TestScene.cpp) to save and load scenes:
+The engine implements a lightweight custom JSON parser and generator inside [SceneSerializer.cpp](../engine/src/scenes/SceneSerializer.cpp) to save and load scenes:
 
 ### Saving Scene File
 *   Iterates through all entities matching the `<Name, Transform>` view.

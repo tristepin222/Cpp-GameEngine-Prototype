@@ -47,8 +47,12 @@ set(ENGINE_SOURCES
     src/core/VulkanFrameSync.cpp
     src/core/VulkanPipeline.cpp
     src/core/VulkanSwapChain.cpp
+    src/ecs/EntityFactory.cpp
+    src/ecs/EntityCloner.cpp
     src/editor/EditorUI.cpp
+    src/scenes/Scene.cpp
     src/scenes/SceneManager.cpp
+    src/scenes/SceneSerializer.cpp
 )
 
 add_library(engine STATIC ${ENGINE_SOURCES})
