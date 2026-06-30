@@ -4,8 +4,8 @@
 #include <string>
 #include <stdexcept>
 #include <fstream>
-#include "../ecs/components/pushconstants.hpp"
-#include "../ecs/components/Mesh.hpp"
+#include "ecs/components/pushconstants.hpp"
+#include "ecs/components/Mesh.hpp"
 
 class VulkanPipeline {
 public:

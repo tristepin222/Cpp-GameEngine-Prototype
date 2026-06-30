@@ -361,3 +361,14 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# --- Custom Game Engine Prototype Exclusions ---
+# CMake Build Directory
+build/
+
+# IDE Configuration folders
+.vscode/
+
+# Game executable build outputs
+game/game.exe
+game/game

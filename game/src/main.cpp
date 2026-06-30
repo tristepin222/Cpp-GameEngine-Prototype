@@ -1,9 +1,8 @@
-﻿#include <GLFW/glfw3.h>
+#include <GLFW/glfw3.h>
 #include <iostream>
 #include "renderer/VulkanRenderer.hpp"
 #include "ecs/Registry.hpp"
 #include "ecs/components/Transform.hpp"
-#include "ecs/systems/MovementSystem.hpp"
 #include "ecs/systems/RenderSystem.hpp"
 #include "ecs/SystemManager.hpp"
 #include "ecs/components/primitives.hpp"
@@ -28,7 +27,6 @@ int main() {
 
     renderer.createInstanceBuffer(10000);
     // Create systems
-    auto movementSystem = std::make_shared<MovementSystem>(registry);
     auto renderSystem = std::make_shared<RenderSystem>(registry, renderer);
 	auto cameraSystem = std::make_shared<CameraSystem>(registry, renderer);
     auto inputSystem = std::make_shared<InputSystem>(registry, renderer, editorMode);
@@ -36,7 +34,6 @@ int main() {
     SystemManager sysManager;
     sysManager.addSystem(inputSystem);
     sysManager.addSystem(cameraSystem);
-    sysManager.addSystem(movementSystem);
     sysManager.addSystem(renderSystem);
 
     SceneManager sceneManager;

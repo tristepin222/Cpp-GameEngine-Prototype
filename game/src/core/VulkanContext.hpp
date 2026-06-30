@@ -1,6 +1,6 @@
 #pragma once
 #include <vulkan/vulkan.h>
-#include <glfw3.h>
+#include <GLFW/glfw3.h>
 #include <vector>
 
 class VulkanContext {
