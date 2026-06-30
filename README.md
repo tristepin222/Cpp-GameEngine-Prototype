@@ -52,9 +52,23 @@ To understand the engineering behind this prototype, explore the detailed docume
 
 ### Hardware & System Requirements
 *   **Operating System**: Windows 10/11
-*   **Vulkan SDK**: Vulkan SDK 1.3+ installed with validation layers.
 *   **Compiler**: C++20 compliant MSVC compiler (Visual Studio 2022 recommended).
-*   **Dependencies**: GLFW 3.3 and GLM (included in `third_party/`).
+
+### Dependencies & Absolute Paths
+By default, the Visual Studio project configuration ([game.vcxproj](game/game.vcxproj)) is set up to look for external dependencies at the following absolute paths on your `C:\` drive:
+
+1.  **GLFW (v3.4)**: Precompiled 64-bit binaries.
+    *   Expected Path: `C:\glfw-3.4.bin.WIN64\glfw-3.4.bin.WIN64`
+    *   Include folder: `C:\glfw-3.4.bin.WIN64\glfw-3.4.bin.WIN64\include`
+    *   Library folder: `C:\glfw-3.4.bin.WIN64\glfw-3.4.bin.WIN64\lib-vc2022`
+2.  **GLM (v1.0.1)**: Header-only math library.
+    *   Expected Path: `C:\glm-1.0.1-light`
+3.  **Vulkan SDK (v1.3.296.0)**:
+    *   Expected Path: `C:\VulkanSDK\1.3.296.0`
+    *   Include folder: `C:\VulkanSDK\1.3.296.0\Include`
+    *   Library folder: `C:\VulkanSDK\1.3.296.0\Lib`
+
+> If you have these libraries installed in other locations, you must open the project properties in Visual Studio and update the **Additional Include Directories** (under C/C++ $\rightarrow$ General) and **Additional Library Directories** (under Linker $\rightarrow$ General) to point to your paths.
 
 ### Setup & Compilation
 

@@ -10,20 +10,20 @@ This document details the graphics architecture of the Vulkan Renderer. The rend
 
 Vulkan requires explicit declaration of resources, layouts, synchronization, and hardware access. The engine implements a set of object-oriented C++ classes under `game/src/core/` to safely encapsulate Vulkan handles:
 
-*   **[VulkanContext](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/src/core/VulkanContext.hpp)**: Stores instance-wide structures, validation layer callbacks, and physical device enumerations.
-*   **[VulkanDevice](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/src/core/VulkanDevice.hpp)**: Handles hardware physical devices selection (prioritizing discrete GPUs) and logical device creation. Configures queue families for graphics, presentation, and transfers.
-*   **[VulkanSwapchain](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/src/core/VulkanSwapChain.hpp)**: Manages screen resolution changes, double/triple buffering image chains, render pass configurations, swapchain image views, and framebuffers.
-*   **[VulkanPipeline](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/src/core/VulkanPipeline.hpp)**: Coordinates shader layout state bindings, viewport/scissor setup, depth/stencil tests, color blending, rasterization, and multi-sampling configurations.
-*   **[VulkanBuffer](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/src/core/VulkanBuffer.hpp)**: Encapsulates `VkBuffer` allocation and `VkDeviceMemory` binding. Supports staging allocations, GPU-local transfer operations, and persistent host mapping.
-*   **[VulkanDescriptors](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/src/core/VulkanDescriptors.hpp)**: Standardizes descriptor layouts, bindings, pools, and set allocations for camera matrices and global uniforms.
-*   **[VulkanCommandManager](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/src/core/VulkanCommandManager.hpp)**: Creates command pools and records frame buffer command sequences. Supports one-time command buffer execution for staging buffers uploads.
-*   **[VulkanFrameSync](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/src/core/VulkanFrameSync.hpp)**: Holds CPU-GPU synchronization elements, preventing race conditions via fences and swapchain image-acquisition semaphores.
+*   **[VulkanContext](../game/src/core/VulkanContext.hpp)**: Stores instance-wide structures, validation layer callbacks, and physical device enumerations.
+*   **[VulkanDevice](../game/src/core/VulkanDevice.hpp)**: Handles hardware physical devices selection (prioritizing discrete GPUs) and logical device creation. Configures queue families for graphics, presentation, and transfers.
+*   **[VulkanSwapchain](../game/src/core/VulkanSwapChain.hpp)**: Manages screen resolution changes, double/triple buffering image chains, render pass configurations, swapchain image views, and framebuffers.
+*   **[VulkanPipeline](../game/src/core/VulkanPipeline.hpp)**: Coordinates shader layout state bindings, viewport/scissor setup, depth/stencil tests, color blending, rasterization, and multi-sampling configurations.
+*   **[VulkanBuffer](../game/src/core/VulkanBuffer.hpp)**: Encapsulates `VkBuffer` allocation and `VkDeviceMemory` binding. Supports staging allocations, GPU-local transfer operations, and persistent host mapping.
+*   **[VulkanDescriptors](../game/src/core/VulkanDescriptors.hpp)**: Standardizes descriptor layouts, bindings, pools, and set allocations for camera matrices and global uniforms.
+*   **[VulkanCommandManager](../game/src/core/VulkanCommandManager.hpp)**: Creates command pools and records frame buffer command sequences. Supports one-time command buffer execution for staging buffers uploads.
+*   **[VulkanFrameSync](../game/src/core/VulkanFrameSync.hpp)**: Holds CPU-GPU synchronization elements, preventing race conditions via fences and swapchain image-acquisition semaphores.
 
 ---
 
 ## Double-Buffered Frame Synchronization
 
-To prevent the CPU from submitting draw commands faster than the GPU can process them (which would lead to visual artifacts or memory exhaust), the engine coordinates double-buffering using [VulkanFrameSync.hpp](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/src/core/VulkanFrameSync.hpp):
+To prevent the CPU from submitting draw commands faster than the GPU can process them (which would lead to visual artifacts or memory exhaust), the engine coordinates double-buffering using [VulkanFrameSync.hpp](../game/src/core/VulkanFrameSync.hpp):
 
 ```cpp
 struct VulkanFrameSync {
@@ -51,13 +51,13 @@ Shaders are written in GLSL and compiled to binary SPIR-V bytecode. The build pr
 *   `unlit.vert` / `unlit.frag` -> `unlit.vert.spv` / `unlit.frag.spv` (handles standard mesh drawing)
 *   `grid.vert` / `grid.frag` -> `grid.vert.spv` / `grid.frag.spv` (handles infinite grid rendering)
 
-The [PipelineBuilder](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/src/core/PipelineBuilder.hpp) dynamically builds the graphics pipelines. It links vertex input bindings, rasterization settings (cull modes, depth test enabling), color blending, and shader modules into a single `VkPipeline` state.
+The [PipelineBuilder](../game/src/core/PipelineBuilder.hpp) dynamically builds the graphics pipelines. It links vertex input bindings, rasterization settings (cull modes, depth test enabling), color blending, and shader modules into a single `VkPipeline` state.
 
 ---
 
 ## Instanced Drawing & Push Constants
 
-For maximum performance, the renderer avoids calling `vkCmdDraw` for every individual entity. Instead, it groups draw calls by **Mesh + Material combination** inside [RenderSystem.hpp](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/src/core/RenderSystem.hpp).
+For maximum performance, the renderer avoids calling `vkCmdDraw` for every individual entity. Instead, it groups draw calls by **Mesh + Material combination** inside [RenderSystem.hpp](../game/include/ecs/systems/RenderSystem.hpp).
 
 ### Per-Instance Data via Push Constants
 

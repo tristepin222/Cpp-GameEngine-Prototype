@@ -25,7 +25,7 @@ The engine is structured as a modular desktop application in C++20, utilizing GL
 
 ## Frame Lifecycle & Execution Flow
 
-The engine operates on a single-threaded game loop inside [main.cpp](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/src/main.cpp). The lifecycle of a single frame comprises polling OS events, updating active scenes, updating ECS systems, drawing the UI panels, and submitting Vulkan command buffers for drawing.
+The engine operates on a single-threaded game loop inside [main.cpp](../game/src/main.cpp). The lifecycle of a single frame comprises polling OS events, updating active scenes, updating ECS systems, drawing the UI panels, and submitting Vulkan command buffers for drawing.
 
 The sequence below illustrates the frame execution flow:
 

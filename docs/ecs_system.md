@@ -8,7 +8,7 @@ This document provides a technical deep-dive into the engine's custom, header-on
 
 ## Entity Allocation & Recycling
 
-The [Entity](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/include/ecs/Entity.hpp) class is a simple 32-bit wrapper around an integer identifier (`uint32_t`). To prevent fragmentation and maintain strict bounds, entity lifetime is governed by the [EntityManager](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/include/ecs/EntityManager.hpp).
+The [Entity](../game/include/ecs/Entity.hpp) class is a simple 32-bit wrapper around an integer identifier (`uint32_t`). To prevent fragmentation and maintain strict bounds, entity lifetime is governed by the [EntityManager](../game/include/ecs/EntityManager.hpp).
 
 *   **Max Entities**: The system caps the active entity list to `10,000` (defined by `MAX_ENTITIES`).
 *   **Recycling Queue**: Free entity IDs are stored in a `std::stack<uint32_t>`. When an entity is destroyed, its ID is recycled back to the stack, making it available for subsequent allocations.
@@ -18,7 +18,7 @@ The [Entity](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/include/ecs/Entity.
 
 ## ComponentStorage & The Swap-Remove Pattern
 
-Components are pure data structures with no behavior. To avoid CPU cache misses, components are stored contiguously in memory inside [ComponentStorage.hpp](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/include/ecs/ComponentStorage.hpp).
+Components are pure data structures with no behavior. To avoid CPU cache misses, components are stored contiguously in memory inside [ComponentStorage.hpp](../game/include/ecs/ComponentStorage.hpp).
 
 ```cpp
 template<typename T>
@@ -47,12 +47,12 @@ This keeps data perfectly aligned, contiguous, and packed tight in RAM, ensuring
 
 ## Event Subscriptions
 
-The [Registry](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/include/ecs/Registry.hpp) allows systems to subscribe to events when components are added or removed:
+The [Registry](../game/include/ecs/Registry.hpp) allows systems to subscribe to events when components are added or removed:
 ```cpp
 using ComponentAddedCallback = std::function<void(Entity)>;
 using ComponentRemovedCallback = std::function<void(Entity)>;
 ```
-This is heavily utilized in [RenderSystem.hpp](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/include/ecs/systems/RenderSystem.hpp) to automatically manage the rendering queues. When a `Mesh`, `Transform`, or `Material` component is added to an entity, the system caches it. When any of these components are removed, the entity is evicted from the renderer cache:
+This is heavily utilized in [RenderSystem.hpp](../game/include/ecs/systems/RenderSystem.hpp) to automatically manage the rendering queues. When a `Mesh`, `Transform`, or `Material` component is added to an entity, the system caches it. When any of these components are removed, the entity is evicted from the renderer cache:
 ```cpp
 registry.subscribeToAdded<Mesh>([this](Entity e) { checkAndAdd(e); });
 registry.subscribeToRemoved<Mesh>([this](Entity e) { removeEntity(e); });
@@ -107,7 +107,7 @@ struct Transform {
 std::vector<Transform> transforms;
 ```
 
-The SoA layout decomposes these fields into separate vectors inside [TransformSoA.hpp](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/include/soa/TransformSoA.hpp) and [MeshSoA.hpp](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/include/soa/MeshSoA.hpp):
+The SoA layout decomposes these fields into separate vectors inside [TransformSoA.hpp](../game/include/soa/TransformSoA.hpp) and [MeshSoA.hpp](../game/include/soa/MeshSoA.hpp):
 ```cpp
 // SoA Layout
 struct TransformSoA {
