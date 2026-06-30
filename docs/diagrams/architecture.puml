@@ -1,30 +1,44 @@
 @startuml Architecture
-package "Application Layer" {
-    class Main
+skinparam monochrome false
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam roundCorner 10
+
+' Style configuration
+skinparam class {
+    BackgroundColor White
+    BorderColor #4A4A4A
+    ArrowColor #5A5A5A
+    AttributeIconSize 0
+}
+
+package "Application Layer" #EBF3F9 {
+    class Main << (O, #FFD700) Orchestrator >>
     class SceneManager
     class TestScene
 }
 
-package "ECS Layer" {
-    class Registry
+package "Editor Layer" #FFF9EB {
+    class EditorUI
+    struct EditorModeState
+}
+
+package "ECS Layer" #EBF9EB {
+    class Registry << (C, #87CEEB) Core ECS >>
     class EntityManager
     class ComponentStorage
     class SystemManager
+    
     abstract class System
     class InputSystem
     class CameraSystem
     class RenderSystem
 }
 
-package "Editor Layer" {
-    class EditorUI
-    struct EditorModeState
-}
-
-package "Renderer Layer" {
-    class VulkanRenderer
+package "Renderer Layer" #F9EBEB {
+    class VulkanRenderer << (C, #FFA07A) Render Engine >>
     class VulkanDevice
-    class VulkanSwapchain
+    class VulkanSwapChain
     class VulkanPipeline
     class VulkanBuffer
     class VulkanDescriptors
@@ -34,44 +48,54 @@ package "Renderer Layer" {
     struct InstanceDataSoA
 }
 
-' Relationships
-Main --> VulkanRenderer : owns
-Main --> Registry : owns
-Main --> SystemManager : owns
-Main --> SceneManager : owns
-Main --> EditorUI : owns
-Main --> EditorModeState : owns
+' Hidden layout alignment links to structure the diagram tiers vertically
+"Application Layer" -[hidden]down-> "Editor Layer"
+"Editor Layer" -[hidden]right-> "ECS Layer"
+"Editor Layer" -[hidden]down-> "Renderer Layer"
+"ECS Layer" -[hidden]down-> "Renderer Layer"
 
-SceneManager --> TestScene : manages
-TestScene --> Registry : references
-TestScene --> VulkanRenderer : references
+' Control Flow
+Main -down-> SceneManager : updates scene
+Main -down-> SystemManager : updates system loops
+Main -down-> EditorUI : draws ImGui panels
+Main -down-> VulkanRenderer : manages lifecycle
 
-SystemManager *-- System : manages
+' Internal Application Relationships
+SceneManager *-- TestScene : manages
+TestScene -down-> Registry : sets up entities
+TestScene -down-> VulkanRenderer : uploads static mesh
+
+' Internal ECS Relationships
+Registry *-- EntityManager : recycles IDs
+Registry *-- ComponentStorage : owns dense pools
+SystemManager *-- System : executes updates
 System <|-- InputSystem
 System <|-- CameraSystem
 System <|-- RenderSystem
 
-InputSystem --> Registry : updates
-InputSystem --> VulkanRenderer : reads window
-InputSystem --> EditorModeState : updates
-
-CameraSystem --> Registry : views components
-CameraSystem --> VulkanRenderer : updates view/proj
-
-RenderSystem --> Registry : views components
-RenderSystem --> VulkanRenderer : issues draw calls
-
-EditorUI --> Registry : views/edits components
-EditorUI --> VulkanRenderer : renders ImGui overlay
-EditorUI --> SceneManager : controls scene loading/saving
-EditorUI --> EditorModeState : modifies modes
-
+' Internal Renderer Relationships
 VulkanRenderer *-- VulkanDevice
-VulkanRenderer *-- VulkanSwapchain
+VulkanRenderer *-- VulkanSwapChain
 VulkanRenderer *-- VulkanPipeline
+VulkanRenderer *-- VulkanBuffer : instanceBuffer
+VulkanRenderer *-- VulkanDescriptors
 VulkanRenderer *-- VulkanCommandManager
 VulkanRenderer *-- VulkanFrameSync
 VulkanRenderer *-- MeshSoA
 VulkanRenderer *-- InstanceDataSoA
-VulkanRenderer *-- VulkanBuffer : instanceBuffer
+
+' Inter-Package Dependencies (Aligned for minimal crossings)
+InputSystem -left-> EditorModeState : updates edit/fly state
+InputSystem -up-> Registry : updates InputComponent
+
+CameraSystem -up-> Registry : queries Transform/Camera
+CameraSystem -down-> VulkanRenderer : sets active view/projection
+
+RenderSystem -up-> Registry : queries Mesh/Transform/Material
+RenderSystem -down-> VulkanRenderer : batches instances & submits draw calls
+
+EditorUI -right-> Registry : views/edits active components
+EditorUI -left-> EditorModeState : toggles edit modes
+EditorUI -down-> VulkanRenderer : renders ImGui drawlist
+EditorUI -up-> SceneManager : triggers scene load/save
 @enduml
