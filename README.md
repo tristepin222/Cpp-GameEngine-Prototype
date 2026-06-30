@@ -69,19 +69,30 @@ Dependencies are managed automatically through the CMake configuration:
     git clone https://github.com/tristepin222/Cpp-GameEngine-Prototype.git
     cd Cpp-GameEngine-Prototype
     ```
-2.  **Configure and Build with CMake**:
-    The CMake script dynamically locates the Vulkan SDK, fetches dependencies, and **automatically compiles all shaders** to SPIR-V format on build. Run the following commands from the repository root:
+2.  **Configure and Build (Using Utility Script)**:
+    You can use the provided **`build.bat`** script at the repository root to automatically configure, compile shaders, build libraries, and compile the game:
     ```bash
-    # Configure the build (downloads dependencies and generates build files)
+    # Simple build
+    build.bat
+
+    # Clean existing build directory first
+    build.bat --clean
+
+    # Compile and launch the game immediately
+    build.bat --run
+    ```
+
+    Alternatively, you can run the standard CMake commands manually:
+    ```bash
+    # Configure workspace
     cmake -B build -DCMAKE_BUILD_TYPE=Release
 
-    # Compile the project
+    # Compile targets
     cmake --build build --config Release
     ```
 3.  **Run the Game**:
     The compiled binary, copied assets, and compiled shaders are located in the `build/sandbox_game/` output directory. Run it using:
     ```bash
-    # For MSBuild / Visual Studio configurations:
     cd build/sandbox_game/Release
     ./game.exe
     ```
