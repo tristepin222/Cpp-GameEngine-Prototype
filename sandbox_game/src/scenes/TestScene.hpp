@@ -2,8 +2,8 @@
 
 #include <glm/glm.hpp>
 
-#include "Scene.hpp"
-#include "../ecs/components/PrimitiveType.hpp"
+#include "scenes/Scene.hpp"
+#include "ecs/components/PrimitiveType.hpp"
 
 class TestScene : public Scene {
 public:

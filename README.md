@@ -96,7 +96,6 @@ Dependencies are managed automatically through the CMake configuration:
     ./game.exe
     ```
 
-> [!TIP]
 > **Visual Studio / CLion Users**: You can open the repository root folder directly in your IDE (via **File -> Open -> Folder**), and the IDE will automatically detect the `CMakeLists.txt`, fetch dependencies, and configure the project.
 
 ---
