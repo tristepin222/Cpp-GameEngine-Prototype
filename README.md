@@ -89,10 +89,11 @@ Dependencies are managed automatically through the CMake configuration:
     cmake --build build --config Release
     ```
 4.  **Run the Game**:
-    The compiled binary `game.exe` (or `game`) is outputted directly to the `game/` folder. Run it using:
+    The compiled binary and its copied assets/shaders are located in the `build` configuration directory (e.g., `build/Release/` or `build/Debug/` under Visual Studio, or directly in `build/` under Ninja/Make). Run it using:
     ```bash
-    cd game
-    ./game
+    # For MSBuild / Visual Studio configurations:
+    cd build/Release
+    ./game.exe
     ```
 
 > [!TIP]

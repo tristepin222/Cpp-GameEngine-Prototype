@@ -6,12 +6,6 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Redirect runtime binary output folder directly to the game/ directory.
-# This aligns the executable path with the assets/ and build/ folders.
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/game")
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/game")
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/game")
-
 # --- Dependencies Configuration ---
 
 # 1. Vulkan SDK
@@ -119,6 +113,21 @@ target_link_libraries(game PRIVATE
     Vulkan::Vulkan
     imgui
     imguizmo
+)
+
+# Post-Build Steps: Copy Assets and compiled Shaders directly to the executable directory.
+add_custom_command(TARGET game POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_SOURCE_DIR}/game/assets"
+    "$<TARGET_FILE_DIR:game>/assets"
+    COMMENT "Copying assets to output directory..."
+)
+
+add_custom_command(TARGET game POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_SOURCE_DIR}/game/build"
+    "$<TARGET_FILE_DIR:game>/build"
+    COMMENT "Copying shader builds to output directory..."
 )
 
 # Print confirmation
