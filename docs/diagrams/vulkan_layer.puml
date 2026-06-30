@@ -1,0 +1,80 @@
+@startuml VulkanLayer
+
+package "Vulkan Core Wrapper" {
+    class VulkanDevice {
+        - instance : VkInstance
+        - physicalDevice : VkPhysicalDevice
+        - device : VkDevice
+        - graphicsQueue : VkQueue
+        - graphicsQueueFamily : uint32_t
+    }
+
+    class VulkanSwapchain {
+        - swapChain : VkSwapChainKHR
+        - swapChainImages : vector<VkImage>
+        - swapChainImageViews : vector<VkImageView>
+        - swapChainFramebuffers : vector<VkFramebuffer>
+        - renderPass : VkRenderPass
+        - swapChainExtent : VkExtent2D
+    }
+
+    class VulkanPipeline {
+        - pipeline : VkPipeline
+        - layout : VkPipelineLayout
+    }
+
+    class VulkanBuffer {
+        - buffer : VkBuffer
+        - memory : VkDeviceMemory
+        - size : VkDeviceSize
+        + uploadData(void*, size_t)
+        + map() : void*
+        + unmap()
+    }
+
+    class VulkanDescriptors {
+        - descriptorPool : VkDescriptorPool
+        - descriptorSetLayout : VkDescriptorSetLayout
+        - descriptorSets : vector<VkDescriptorSet>
+    }
+
+    class VulkanCommandManager {
+        - commandPool : VkCommandPool
+        - commandBuffers : vector<VkCommandBuffer>
+    }
+
+    class VulkanFrameSync {
+        - imageAvailableSemaphores : vector<VkSemaphore>
+        - renderFinishedSemaphores : vector<VkSemaphore>
+        - inFlightFences : vector<VkFence>
+    }
+}
+
+class VulkanRenderer {
+    + device : VulkanDevice
+    + swapchain : VulkanSwapchain
+    + pipeline : VulkanPipeline
+    + cmdManager : VulkanCommandManager
+    + frameSync : VulkanFrameSync
+    + instanceBuffer : VulkanBuffer
+    + meshSoA : MeshSoA
+    + instanceDataCPU : InstanceDataSoA
+    + beginFrame()
+    + endFrame()
+    + recreateSwapchain()
+}
+
+class MeshSoA {
+    + vertexBuffers : vector<VulkanBuffer>
+    + indexBuffers : vector<VulkanBuffer>
+}
+
+VulkanRenderer *-- VulkanDevice
+VulkanRenderer *-- VulkanSwapchain
+VulkanRenderer *-- VulkanPipeline
+VulkanRenderer *-- VulkanCommandManager
+VulkanRenderer *-- VulkanFrameSync
+VulkanRenderer *-- VulkanBuffer : instanceBuffer
+VulkanRenderer *-- MeshSoA
+MeshSoA *-- VulkanBuffer : VBO/IBO
+@enduml

@@ -1,0 +1,184 @@
+# Custom Entity-Component System (ECS)
+
+This document provides a technical deep-dive into the engine's custom, header-only Entity-Component System (ECS). The ECS is designed from scratch to prioritize cache locality, fast component lookups, generational entity recycling, and compile-time template queries.
+
+```plantuml
+@startuml ECSStructure
+class Entity {
+    - id : uint32_t
+    + getId() : uint32_t
+}
+
+class EntityManager {
+    - alive : vector<uint32_t>
+    - freeIds : stack<uint32_t>
+    - masks : array<ComponentMask, 10000>
+    + create() : Entity
+    + destroy(Entity)
+    + getMask(Entity) : ComponentMask&
+}
+
+interface IStorage {
+    + {abstract} ~IStorage()
+    + {abstract} size() : size_t
+    + {abstract} removeEntity(Entity)
+    + {abstract} getEntities() : const vector<Entity>&
+}
+
+class ComponentStorage<T> {
+    - data : vector<T>
+    - entities : vector<Entity>
+    - entityToIndex : unordered_map<Entity, size_t>
+    + add(Entity, T)
+    + remove(Entity)
+    + has(Entity) : bool
+    + get(Entity) : T&
+}
+
+class Registry {
+    - entities : EntityManager
+    - storages : unordered_map<size_t, unique_ptr<IStorage>>
+    - componentAddedCallbacks : unordered_map<size_t, vector<ComponentAddedCallback>>
+    - componentRemovedCallbacks : unordered_map<size_t, vector<ComponentRemovedCallback>>
+    + create() : Entity
+    + destroy(Entity)
+    + emplace<T>(Entity, T&&) : T&
+    + remove<T>(Entity)
+    + get<T>(Entity) : T*
+    + has<T>(Entity) : bool
+    + view<Components...>() : View<Components...>
+}
+
+class View<Components...> {
+    + entities : vector<Entity>
+    + registry : Registry&
+    + begin() : Iterator
+    + end() : Iterator
+}
+
+IStorage <|-- ComponentStorage
+Registry *-- EntityManager
+Registry *-- IStorage : owns
+View ..> Registry : references
+EntityManager ..> Entity : allocates
+ComponentStorage ..> Entity : tracks
+@enduml
+```
+
+---
+
+## Entity Allocation & Recycling
+
+The [Entity](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/include/ecs/Entity.hpp) class is a simple 32-bit wrapper around an integer identifier (`uint32_t`). To prevent fragmentation and maintain strict bounds, entity lifetime is governed by the [EntityManager](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/include/ecs/EntityManager.hpp).
+
+*   **Max Entities**: The system caps the active entity list to `10,000` (defined by `MAX_ENTITIES`).
+*   **Recycling Queue**: Free entity IDs are stored in a `std::stack<uint32_t>`. When an entity is destroyed, its ID is recycled back to the stack, making it available for subsequent allocations.
+*   **Component Mask**: The `EntityManager` allocates an array of 64-bit masks (`std::bitset<64> ComponentMask`). Each bit represents whether an entity owns a specific component type.
+
+---
+
+## ComponentStorage & The Swap-Remove Pattern
+
+Components are pure data structures with no behavior. To avoid CPU cache misses, components are stored contiguously in memory inside [ComponentStorage.hpp](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/include/ecs/ComponentStorage.hpp).
+
+```cpp
+template<typename T>
+class ComponentStorage : public IStorage {
+private:
+    std::vector<T> data;                              // Contiguous component data
+    std::vector<Entity> entities;                     // Parallel vector tracking entity ownership
+    std::unordered_map<Entity, size_t> entityToIndex; // O(1) Index lookup map
+};
+```
+
+### The Swap-Remove Mechanics
+
+When a component is removed from an entity, removing from a middle index in a `std::vector` would shift all subsequent elements, which is an \(O(N)\) cost. 
+
+To achieve \(O(1)\) deletion while maintaining a dense, contiguous array, the storage implements the **Swap-Remove** (or swap-and-pop) pattern:
+1.  Locate the index of the component to delete via the `entityToIndex` map.
+2.  Swap this component with the *last* component in the vector.
+3.  Swap the corresponding entry in the parallel `entities` vector.
+4.  Update the swapped entity's index in the `entityToIndex` map to its new position.
+5.  Call `.pop_back()` on both vectors to remove the target component in \(O(1)\).
+
+This keeps data perfectly aligned, contiguous, and packed tight in RAM, ensuring maximum CPU cache efficiency during serial updates.
+
+---
+
+## Event Subscriptions
+
+The [Registry](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/include/ecs/Registry.hpp) allows systems to subscribe to events when components are added or removed:
+```cpp
+using ComponentAddedCallback = std::function<void(Entity)>;
+using ComponentRemovedCallback = std::function<void(Entity)>;
+```
+This is heavily utilized in [RenderSystem.hpp](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/include/ecs/systems/RenderSystem.hpp) to automatically manage the rendering queues. When a `Mesh`, `Transform`, or `Material` component is added to an entity, the system caches it. When any of these components are removed, the entity is evicted from the renderer cache:
+```cpp
+registry.subscribeToAdded<Mesh>([this](Entity e) { checkAndAdd(e); });
+registry.subscribeToRemoved<Mesh>([this](Entity e) { removeEntity(e); });
+```
+
+---
+
+## Compile-Time Multi-Component Views
+
+The most powerful feature of the custom ECS is the `Registry::view<Components...>()` query. It extracts a view of entities possessing the specified subset of components.
+
+### Optimization: Smallest Pool Heuristic
+
+To search for entities with components `A`, `B`, and `C`, iterating through all entities in the engine would be highly inefficient. 
+
+Instead, the `Registry` queries the size of each component pool and picks the **smallest storage pool** as the driver. It then iterates through that pool and filters out entities that do not contain the remaining components:
+
+```cpp
+template<typename First, typename Second, typename... Rest>
+IStorage* getSmallestStorage() {
+    IStorage* a = getStorage<First>();
+    IStorage* b = getSmallestStorage<Second, Rest...>();
+    if (!a) return b;
+    if (!b) return a;
+    return (a->size() < b->size()) ? a : b;
+}
+```
+
+### Iterator Structured Binding Support
+
+The view provides standard C++ Iterators, allowing systems to use simple range-based for loops with structured bindings:
+```cpp
+for (auto [entity, cam, transform, input] : registry.view<Camera, Transform, InputComponent>()) {
+    // Process components directly
+}
+```
+
+---
+
+## Structure of Arrays (SoA) Optimizations
+
+To push performance even further for bulk operations (like updating transforms or uploading mesh buffers to the GPU), the engine implements a **Structure of Arrays (SoA)** memory layout in the `soa/` directory.
+
+Unlike Array of Structures (AoS), where each entity holds a packed struct of positions, rotations, scales:
+```cpp
+// AoS Layout (Standard Transform Component)
+struct Transform {
+    glm::vec3 position;
+    glm::vec3 rotation;
+    glm::vec3 scale;
+};
+std::vector<Transform> transforms;
+```
+
+The SoA layout decomposes these fields into separate vectors inside [TransformSoA.hpp](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/include/soa/TransformSoA.hpp) and [MeshSoA.hpp](file:///f:/GitHub/Cpp-GameEngine-Prototype/game/include/soa/MeshSoA.hpp):
+```cpp
+// SoA Layout
+struct TransformSoA {
+    std::vector<glm::vec3> positions;
+    std::vector<glm::vec3> rotations;
+    std::vector<glm::vec3> scales;
+};
+```
+
+### Benefits of SoA in the Engine
+1.  **VRAM Upload Efficiency**: The `MeshSoA` stores vertex and index buffers contiguously, making bulk VRAM uploads via staging buffers highly streamable.
+2.  **Vectorization (SIMD)**: Separate arrays allow modern compilers to auto-vectorize mathematics (like updating positions, physics, or computing bounding matrices), since elements are packed contiguously in cache lines with zero stride.
+3.  **Dynamic Allocations**: The GPU instancing system reads from CPU-side `InstanceDataSoA` models, colors, and material IDs to batch upload GPU instance arrays in a single `vkCmdDrawIndexed` queue preparation loop.

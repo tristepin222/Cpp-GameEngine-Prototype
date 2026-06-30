@@ -1,0 +1,69 @@
+@startuml FrameLifecycle
+actor User
+participant Main
+participant GLFW
+participant SceneManager
+participant SystemManager
+participant InputSystem
+participant CameraSystem
+participant RenderSystem
+participant EditorUI
+participant VulkanRenderer
+
+Main -> GLFW : glfwPollEvents()
+Main -> VulkanRenderer : getDeltaTime()
+VulkanRenderer --> Main : dt
+
+Main -> SceneManager : update(dt)
+Main -> SystemManager : updateAll(dt)
+activate SystemManager
+
+SystemManager -> InputSystem : update(dt)
+activate InputSystem
+InputSystem -> GLFW : glfwGetCursorPos() / glfwGetKey()
+InputSystem -> EditorUI : updates EditorModeState
+InputSystem --> SystemManager
+deactivate InputSystem
+
+SystemManager -> CameraSystem : update(dt)
+activate CameraSystem
+CameraSystem -> GLFW : glfwGetWindowSize()
+CameraSystem -> VulkanRenderer : setActiveCamera(proj, pos, view)
+CameraSystem --> SystemManager
+deactivate CameraSystem
+
+SystemManager -> RenderSystem : update(dt)
+activate RenderSystem
+RenderSystem -> VulkanRenderer : updateInstanceBuffer()
+RenderSystem --> SystemManager
+deactivate RenderSystem
+
+deactivate SystemManager
+
+Main -> EditorUI : beginFrame()
+Main -> EditorUI : drawPanels()
+activate EditorUI
+EditorUI -> EditorUI : drawHierarchyPanel()
+EditorUI -> EditorUI : drawInspectorPanel()
+EditorUI -> EditorUI : drawGizmo() (ImGuizmo::Manipulate)
+EditorUI -> EditorUI : handleViewportPicking() (Raycast picking)
+EditorUI --> Main
+deactivate EditorUI
+
+Main -> RenderSystem : drawFrame(callback)
+activate RenderSystem
+RenderSystem -> VulkanRenderer : beginFrame()
+RenderSystem -> VulkanRenderer : getCurrentCommandBuffer()
+RenderSystem -> VulkanRenderer : updateCameraUBO()
+RenderSystem -> VulkanRenderer : upload InstanceData to GPU buffer
+
+RenderSystem -> VulkanRenderer : Draw Batches & Grids (Vulkan API draw calls)
+RenderSystem -> EditorUI : Invoke callback(cmd)
+activate EditorUI
+EditorUI -> VulkanRenderer : render(cmd) (ImGui overlay draw)
+deactivate EditorUI
+
+RenderSystem -> VulkanRenderer : endFrame()
+deactivate RenderSystem
+
+@enduml

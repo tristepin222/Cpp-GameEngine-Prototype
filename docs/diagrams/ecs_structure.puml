@@ -1,0 +1,61 @@
+@startuml ECSStructure
+
+class Entity {
+    - id : uint32_t
+    + getId() : uint32_t
+}
+
+class EntityManager {
+    - alive : vector<uint32_t>
+    - freeIds : stack<uint32_t>
+    - masks : array<ComponentMask, 10000>
+    + create() : Entity
+    + destroy(Entity)
+    + getMask(Entity) : ComponentMask&
+}
+
+interface IStorage {
+    + {abstract} ~IStorage()
+    + {abstract} size() : size_t
+    + {abstract} removeEntity(Entity)
+    + {abstract} getEntities() : const vector<Entity>&
+}
+
+class ComponentStorage<T> {
+    - data : vector<T>
+    - entities : vector<Entity>
+    - entityToIndex : unordered_map<Entity, size_t>
+    + add(Entity, T)
+    + remove(Entity)
+    + has(Entity) : bool
+    + get(Entity) : T&
+}
+
+class Registry {
+    - entities : EntityManager
+    - storages : unordered_map<size_t, unique_ptr<IStorage>>
+    - componentAddedCallbacks : unordered_map<size_t, vector<ComponentAddedCallback>>
+    - componentRemovedCallbacks : unordered_map<size_t, vector<ComponentRemovedCallback>>
+    + create() : Entity
+    + destroy(Entity)
+    + emplace<T>(Entity, T&&) : T&
+    + remove<T>(Entity)
+    + get<T>(Entity) : T*
+    + has<T>(Entity) : bool
+    + view<Components...>() : View<Components...>
+}
+
+class View<Components...> {
+    + entities : vector<Entity>
+    + registry : Registry&
+    + begin() : Iterator
+    + end() : Iterator
+}
+
+IStorage <|-- ComponentStorage
+Registry *-- EntityManager
+Registry *-- IStorage : owns
+View ..> Registry : references
+EntityManager ..> Entity : allocates
+ComponentStorage ..> Entity : tracks
+@enduml
