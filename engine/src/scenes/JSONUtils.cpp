@@ -1,0 +1,149 @@
+#include "scenes/JSONUtils.hpp"
+#include <sstream>
+
+namespace JSONUtils {
+
+    std::string indent(int level) {
+        return std::string(static_cast<size_t>(level) * 2, ' ');
+    }
+
+    std::string quote(const std::string& value) {
+        return "\"" + value + "\"";
+    }
+
+    std::string vec3ToJson(const glm::vec3& v) {
+        std::ostringstream out;
+        out << "[" << v.x << ", " << v.y << ", " << v.z << "]";
+        return out.str();
+    }
+
+    std::string vec4ToJson(const glm::vec4& v) {
+        std::ostringstream out;
+        out << "[" << v.r << ", " << v.g << ", " << v.b << ", " << v.a << "]";
+        return out.str();
+    }
+
+    std::string extractStringValue(const std::string& source, const std::string& key) {
+        const std::string token = "\"" + key + "\"";
+        size_t keyPos = source.find(token);
+        if (keyPos == std::string::npos) {
+            return {};
+        }
+
+        size_t colonPos = source.find(':', keyPos);
+        size_t firstQuote = source.find('"', colonPos + 1);
+        size_t secondQuote = source.find('"', firstQuote + 1);
+        if (colonPos == std::string::npos || firstQuote == std::string::npos || secondQuote == std::string::npos) {
+            return {};
+        }
+
+        return source.substr(firstQuote + 1, secondQuote - firstQuote - 1);
+    }
+
+    bool extractFloatArray(const std::string& source, const std::string& key, float* values, size_t count) {
+        const std::string token = "\"" + key + "\"";
+        size_t keyPos = source.find(token);
+        if (keyPos == std::string::npos) {
+            return false;
+        }
+
+        size_t open = source.find('[', keyPos);
+        size_t close = source.find(']', open);
+        if (open == std::string::npos || close == std::string::npos) {
+            return false;
+        }
+
+        std::string payload = source.substr(open + 1, close - open - 1);
+        for (char& c : payload) {
+            if (c == ',') {
+                c = ' ';
+            }
+        }
+
+        std::istringstream stream(payload);
+        for (size_t i = 0; i < count; ++i) {
+            if (!(stream >> values[i])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool extractFloatValue(const std::string& source, const std::string& key, float& value) {
+        const std::string token = "\"" + key + "\"";
+        size_t keyPos = source.find(token);
+        if (keyPos == std::string::npos) {
+            return false;
+        }
+
+        size_t colonPos = source.find(':', keyPos);
+        if (colonPos == std::string::npos) {
+            return false;
+        }
+
+        std::string payload = source.substr(colonPos + 1);
+        std::istringstream stream(payload);
+        return static_cast<bool>(stream >> value);
+    }
+
+    std::vector<std::string> extractEntityObjects(const std::string& source) {
+        std::vector<std::string> objects;
+        size_t entitiesPos = source.find("\"entities\"");
+        if (entitiesPos == std::string::npos) {
+            return objects;
+        }
+
+        size_t arrayOpen = source.find('[', entitiesPos);
+        if (arrayOpen == std::string::npos) {
+            return objects;
+        }
+
+        int arrayDepth = 0;
+        size_t arrayClose = std::string::npos;
+        for (size_t i = arrayOpen; i < source.size(); ++i) {
+            if (source[i] == '[') {
+                ++arrayDepth;
+            } else if (source[i] == ']') {
+                --arrayDepth;
+                if (arrayDepth == 0) {
+                    arrayClose = i;
+                    break;
+                }
+            }
+        }
+
+        if (arrayClose == std::string::npos) {
+            return objects;
+        }
+
+        size_t pos = arrayOpen + 1;
+        while (pos < arrayClose) {
+            size_t objectStart = source.find('{', pos);
+            if (objectStart == std::string::npos || objectStart > arrayClose) {
+                break;
+            }
+
+            int depth = 0;
+            size_t objectEnd = objectStart;
+            for (; objectEnd < source.size(); ++objectEnd) {
+                if (source[objectEnd] == '{') {
+                    ++depth;
+                } else if (source[objectEnd] == '}') {
+                    --depth;
+                    if (depth == 0) {
+                        break;
+                    }
+                }
+            }
+
+            if (depth == 0 && objectEnd < source.size()) {
+                objects.push_back(source.substr(objectStart, objectEnd - objectStart + 1));
+            }
+
+            pos = objectEnd + 1;
+        }
+
+        return objects;
+    }
+}

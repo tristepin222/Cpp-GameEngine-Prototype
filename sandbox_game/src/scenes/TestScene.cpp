@@ -1,6 +1,7 @@
 #include "scenes/TestScene.hpp"
 #include "ecs/EntityFactory.hpp"
 #include "ecs/components/Material.hpp"
+#include "GameMetadataComponent.hpp"
 #include <glm/glm.hpp>
 
 TestScene::TestScene(Registry& registry, VulkanRenderer& renderer)
@@ -67,5 +68,9 @@ void TestScene::createCube() {
     if (Material* material = registry.get<Material>(cube)) {
         material->color = { 0.0f, 1.0f, 0.0f, 1.0f };
     }
+    
+    // Attach custom GameMetadataComponent!
+    registry.emplace<GameMetadataComponent>(cube, GameMetadataComponent{ 99.0f, "Boss" });
+    
     trackEntity(cube);
 }

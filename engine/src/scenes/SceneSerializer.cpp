@@ -1,4 +1,5 @@
 #include "scenes/SceneSerializer.hpp"
+#include "scenes/ComponentSerializerRegistry.hpp"
 #include "ecs/EntityFactory.hpp"
 #include "renderer/VulkanRenderer.hpp"
 #include "ecs/components/Transform.hpp"
@@ -7,183 +8,175 @@
 #include "ecs/components/Material.hpp"
 #include "ecs/components/Camera.hpp"
 #include "ecs/components/Grid.hpp"
+#include "ecs/components/inputComponent.hpp"
+#include "ecs/components/primitives.hpp"
+#include <GLFW/glfw3.h>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 
-namespace {
-    std::string primitiveKindToString(PrimitiveKind kind) {
-        switch (kind) {
-        case PrimitiveKind::Triangle: return "Triangle";
-        case PrimitiveKind::Cube: return "Cube";
-        case PrimitiveKind::Quad: return "Quad";
-        default: return "Triangle";
-        }
-    }
-
-    bool tryParsePrimitiveKind(const std::string& value, PrimitiveKind& kind) {
-        if (value == "Triangle") {
-            kind = PrimitiveKind::Triangle;
-            return true;
-        }
-        if (value == "Cube") {
-            kind = PrimitiveKind::Cube;
-            return true;
-        }
-        if (value == "Quad") {
-            kind = PrimitiveKind::Quad;
-            return true;
-        }
-        return false;
-    }
-
-    std::string indent(int level) {
-        return std::string(static_cast<size_t>(level) * 2, ' ');
-    }
-
-    std::string quote(const std::string& value) {
-        return "\"" + value + "\"";
-    }
-
-    std::string vec3ToJson(const glm::vec3& v) {
-        std::ostringstream out;
-        out << "[" << v.x << ", " << v.y << ", " << v.z << "]";
-        return out.str();
-    }
-
-    std::string vec4ToJson(const glm::vec4& v) {
-        std::ostringstream out;
-        out << "[" << v.r << ", " << v.g << ", " << v.b << ", " << v.a << "]";
-        return out.str();
-    }
-
-    std::string extractStringValue(const std::string& source, const std::string& key) {
-        const std::string token = "\"" + key + "\"";
-        size_t keyPos = source.find(token);
-        if (keyPos == std::string::npos) {
-            return {};
-        }
-
-        size_t colonPos = source.find(':', keyPos);
-        size_t firstQuote = source.find('"', colonPos + 1);
-        size_t secondQuote = source.find('"', firstQuote + 1);
-        if (colonPos == std::string::npos || firstQuote == std::string::npos || secondQuote == std::string::npos) {
-            return {};
-        }
-
-        return source.substr(firstQuote + 1, secondQuote - firstQuote - 1);
-    }
-
-    bool extractFloatArray(const std::string& source, const std::string& key, float* values, size_t count) {
-        const std::string token = "\"" + key + "\"";
-        size_t keyPos = source.find(token);
-        if (keyPos == std::string::npos) {
-            return false;
-        }
-
-        size_t open = source.find('[', keyPos);
-        size_t close = source.find(']', open);
-        if (open == std::string::npos || close == std::string::npos) {
-            return false;
-        }
-
-        std::string payload = source.substr(open + 1, close - open - 1);
-        for (char& c : payload) {
-            if (c == ',') {
-                c = ' ';
+// Static initializer to register core engine components with the registry
+static bool registerBuiltinComponents() {
+    auto& reg = ComponentSerializerRegistry::getInstance();
+    
+    // 1. Camera Component
+    reg.registerComponent(
+        "Camera",
+        [](Registry& registry, Entity entity, std::ostream& out, int indent) {
+            if (auto* camera = registry.get<Camera>(entity)) {
+                out << ",\n" << JSONUtils::indent(indent) << "\"entityType\": " << JSONUtils::quote("Camera") << ",\n";
+                out << JSONUtils::indent(indent) << "\"fov\": " << camera->fov;
             }
-        }
-
-        std::istringstream stream(payload);
-        for (size_t i = 0; i < count; ++i) {
-            if (!(stream >> values[i])) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    bool extractFloatValue(const std::string& source, const std::string& key, float& value) {
-        const std::string token = "\"" + key + "\"";
-        size_t keyPos = source.find(token);
-        if (keyPos == std::string::npos) {
-            return false;
-        }
-
-        size_t colonPos = source.find(':', keyPos);
-        if (colonPos == std::string::npos) {
-            return false;
-        }
-
-        std::string payload = source.substr(colonPos + 1);
-        std::istringstream stream(payload);
-        return static_cast<bool>(stream >> value);
-    }
-
-    std::vector<std::string> extractEntityObjects(const std::string& source) {
-        std::vector<std::string> objects;
-        size_t entitiesPos = source.find("\"entities\"");
-        if (entitiesPos == std::string::npos) {
-            return objects;
-        }
-
-        size_t arrayOpen = source.find('[', entitiesPos);
-        if (arrayOpen == std::string::npos) {
-            return objects;
-        }
-
-        int arrayDepth = 0;
-        size_t arrayClose = std::string::npos;
-        for (size_t i = arrayOpen; i < source.size(); ++i) {
-            if (source[i] == '[') {
-                ++arrayDepth;
-            } else if (source[i] == ']') {
-                --arrayDepth;
-                if (arrayDepth == 0) {
-                    arrayClose = i;
-                    break;
-                }
-            }
-        }
-
-        if (arrayClose == std::string::npos) {
-            return objects;
-        }
-
-        size_t pos = arrayOpen + 1;
-        while (pos < arrayClose) {
-            size_t objectStart = source.find('{', pos);
-            if (objectStart == std::string::npos || objectStart > arrayClose) {
-                break;
-            }
-
-            int depth = 0;
-            size_t objectEnd = objectStart;
-            for (; objectEnd < source.size(); ++objectEnd) {
-                if (source[objectEnd] == '{') {
-                    ++depth;
-                } else if (source[objectEnd] == '}') {
-                    --depth;
-                    if (depth == 0) {
-                        break;
+        },
+        [](Registry& registry, VulkanRenderer& renderer, Entity entity, const std::string& json) {
+            float fov = 45.0f;
+            bool hasFov = JSONUtils::extractFloatValue(json, "fov", fov);
+            std::string type = JSONUtils::extractStringValue(json, "entityType");
+            
+            if (type == "Camera" || hasFov) {
+                registry.emplace<Camera>(entity, Camera{});
+                registry.emplace<InputComponent>(entity, InputComponent{});
+                
+                if (Camera* camera = registry.get<Camera>(entity)) {
+                    camera->fov = fov;
+                    int width = 0;
+                    int height = 0;
+                    glfwGetWindowSize(renderer.getWindow(), &width, &height);
+                    camera->aspect = static_cast<float>(width) / static_cast<float>(height);
+                    
+                    if (Transform* transform = registry.get<Transform>(entity)) {
+                        renderer.setActiveCamera(camera->projection(), transform->position, camera->view(*transform));
                     }
                 }
             }
-
-            if (depth == 0 && objectEnd < source.size()) {
-                objects.push_back(source.substr(objectStart, objectEnd - objectStart + 1));
-            }
-
-            pos = objectEnd + 1;
         }
+    );
 
-        return objects;
-    }
+    // 2. Grid Component
+    reg.registerComponent(
+        "Grid",
+        [](Registry& registry, Entity entity, std::ostream& out, int indent) {
+            if (auto* grid = registry.get<Grid>(entity)) {
+                out << ",\n" << JSONUtils::indent(indent) << "\"entityType\": " << JSONUtils::quote("Grid") << ",\n";
+                out << JSONUtils::indent(indent) << "\"gridSpacing\": " << grid->spacing << ",\n";
+                out << JSONUtils::indent(indent) << "\"gridSize\": " << grid->size;
+            }
+        },
+        [](Registry& registry, VulkanRenderer& renderer, Entity entity, const std::string& json) {
+            std::string type = JSONUtils::extractStringValue(json, "entityType");
+            float spacing = 1.0f;
+            float size = 100.0f;
+            bool hasSpacing = JSONUtils::extractFloatValue(json, "gridSpacing", spacing);
+            bool hasSize = JSONUtils::extractFloatValue(json, "gridSize", size);
+            
+            if (type == "Grid" || hasSpacing || hasSize) {
+                glm::vec4 color(0.3f, 0.3f, 0.3f, 1.0f);
+                float colorArray[4]{};
+                if (JSONUtils::extractFloatArray(json, "color", colorArray, 4)) {
+                    color = glm::vec4(colorArray[0], colorArray[1], colorArray[2], colorArray[3]);
+                }
+                
+                registry.emplace<PrimitiveType>(entity, PrimitiveType{ PrimitiveKind::Quad });
+                registry.emplace<Material>(entity, Material{ color });
+                registry.emplace<Mesh>(entity, Primitives::makeQuad());
+                registry.emplace<Grid>(entity, Grid{ spacing, size, color });
+                
+                PipelineHandle gridPipeline = renderer.createPipelineForShaders(
+                    "build/shaders/grid.vert.spv",
+                    "build/shaders/grid.frag.spv"
+                );
+                
+                if (Material* material = registry.get<Material>(entity)) {
+                    material->pipeline = gridPipeline.pipeline;
+                    material->pipelineLayout = gridPipeline.layout;
+                }
+                
+                EntityFactory::uploadMesh(registry, renderer, entity);
+            }
+        }
+    );
+
+    // 3. Primitive Component (Mesh & Material)
+    reg.registerComponent(
+        "Primitive",
+        [](Registry& registry, Entity entity, std::ostream& out, int indent) {
+            if (auto* primitive = registry.get<PrimitiveType>(entity)) {
+                if (registry.has<Grid>(entity)) {
+                    return; // Skip grid mesh details
+                }
+                
+                std::string primStr = "Cube";
+                if (primitive->kind == PrimitiveKind::Triangle) primStr = "Triangle";
+                else if (primitive->kind == PrimitiveKind::Quad) primStr = "Quad";
+                
+                out << ",\n" << JSONUtils::indent(indent) << "\"entityType\": " << JSONUtils::quote("Primitive") << ",\n";
+                out << JSONUtils::indent(indent) << "\"primitive\": " << JSONUtils::quote(primStr);
+            }
+            if (auto* material = registry.get<Material>(entity)) {
+                if (registry.has<Grid>(entity)) {
+                    return; // Skip grid color details
+                }
+                out << ",\n" << JSONUtils::indent(indent) << "\"color\": " << JSONUtils::vec4ToJson(material->color);
+            }
+        },
+        [](Registry& registry, VulkanRenderer& renderer, Entity entity, const std::string& json) {
+            std::string type = JSONUtils::extractStringValue(json, "entityType");
+            std::string primStr = JSONUtils::extractStringValue(json, "primitive");
+            
+            if (type == "Camera" || type == "Grid") {
+                return; // Managed by separate component deserializers
+            }
+            
+            if (type == "Primitive" || !primStr.empty()) {
+                PrimitiveKind kind = PrimitiveKind::Cube;
+                if (primStr == "Triangle") kind = PrimitiveKind::Triangle;
+                else if (primStr == "Quad") kind = PrimitiveKind::Quad;
+                
+                glm::vec4 color(1.0f);
+                float colorArray[4]{};
+                bool hasColor = JSONUtils::extractFloatArray(json, "color", colorArray, 4);
+                if (hasColor) {
+                    color = glm::vec4(colorArray[0], colorArray[1], colorArray[2], colorArray[3]);
+                } else {
+                    if (kind == PrimitiveKind::Triangle) color = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+                    else if (kind == PrimitiveKind::Cube) color = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
+                }
+                
+                registry.emplace<PrimitiveType>(entity, PrimitiveType{ kind });
+                
+                Mesh meshData;
+                switch (kind) {
+                case PrimitiveKind::Triangle: meshData = Primitives::makeTriangle(); break;
+                case PrimitiveKind::Cube: meshData = Primitives::makeCube(); break;
+                case PrimitiveKind::Quad: meshData = Primitives::makeQuad(); break;
+                }
+                
+                registry.emplace<Mesh>(entity, std::move(meshData));
+                registry.emplace<Material>(entity, Material{ color });
+                
+                PipelineHandle pipeline = renderer.createPipelineForShaders(
+                    "build/shaders/unlit.vert.spv",
+                    "build/shaders/unlit.frag.spv"
+                );
+                
+                if (Material* material = registry.get<Material>(entity)) {
+                    material->pipeline = pipeline.pipeline;
+                    material->pipelineLayout = pipeline.layout;
+                }
+                
+                EntityFactory::uploadMesh(registry, renderer, entity);
+            }
+        }
+    );
+
+    return true;
 }
 
 SceneSerializer::SceneSerializer(Registry& registry, VulkanRenderer& renderer)
     : registry(registry), renderer(renderer) {
+    // Force built-in components to be registered exactly once
+    static bool init = registerBuiltinComponents();
+    (void)init;
 }
 
 bool SceneSerializer::serialize(const std::string& path, const std::vector<Entity>& entities) {
@@ -198,8 +191,8 @@ bool SceneSerializer::serialize(const std::string& path, const std::vector<Entit
     }
 
     out << "{\n";
-    out << indent(1) << "\"scene\": " << quote("TestScene") << ",\n";
-    out << indent(1) << "\"entities\": [\n";
+    out << JSONUtils::indent(1) << "\"scene\": " << JSONUtils::quote("TestScene") << ",\n";
+    out << JSONUtils::indent(1) << "\"entities\": [\n";
 
     bool first = true;
     for (Entity entity : entities) {
@@ -214,36 +207,21 @@ bool SceneSerializer::serialize(const std::string& path, const std::vector<Entit
         }
         first = false;
 
-        out << indent(2) << "{\n";
-        out << indent(3) << "\"name\": " << quote(name->value) << ",\n";
-        out << indent(3) << "\"position\": " << vec3ToJson(transform->position) << ",\n";
-        out << indent(3) << "\"rotation\": " << vec3ToJson(transform->rotation) << ",\n";
-        out << indent(3) << "\"scale\": " << vec3ToJson(transform->scale);
+        out << JSONUtils::indent(2) << "{\n";
+        out << JSONUtils::indent(3) << "\"name\": " << JSONUtils::quote(name->value) << ",\n";
+        out << JSONUtils::indent(3) << "\"position\": " << JSONUtils::vec3ToJson(transform->position) << ",\n";
+        out << JSONUtils::indent(3) << "\"rotation\": " << JSONUtils::vec3ToJson(transform->rotation) << ",\n";
+        out << JSONUtils::indent(3) << "\"scale\": " << JSONUtils::vec3ToJson(transform->scale);
 
-        if (auto* primitive = registry.get<PrimitiveType>(entity)) {
-            out << ",\n" << indent(3) << "\"entityType\": " << quote("Primitive");
-            out << ",\n" << indent(3) << "\"primitive\": " << quote(primitiveKindToString(primitive->kind));
+        // Dynamically invoke all registered component serializers to append custom properties
+        for (const auto& reg : ComponentSerializerRegistry::getInstance().getRegistrations()) {
+            reg.serialize(registry, entity, out, 3);
         }
 
-        if (auto* material = registry.get<Material>(entity)) {
-            out << ",\n" << indent(3) << "\"color\": " << vec4ToJson(material->color);
-        }
-
-        if (auto* grid = registry.get<Grid>(entity)) {
-            out << ",\n" << indent(3) << "\"entityType\": " << quote("Grid");
-            out << ",\n" << indent(3) << "\"gridSpacing\": " << grid->spacing;
-            out << ",\n" << indent(3) << "\"gridSize\": " << grid->size;
-        }
-
-        if (auto* camera = registry.get<Camera>(entity)) {
-            out << ",\n" << indent(3) << "\"entityType\": " << quote("Camera");
-            out << ",\n" << indent(3) << "\"fov\": " << camera->fov;
-        }
-
-        out << "\n" << indent(2) << "}";
+        out << "\n" << JSONUtils::indent(2) << "}";
     }
 
-    out << "\n" << indent(1) << "]\n";
+    out << "\n" << JSONUtils::indent(1) << "]\n";
     out << "}\n";
     return true;
 }
@@ -258,108 +236,50 @@ bool SceneSerializer::deserialize(const std::string& path, std::vector<Entity>& 
     buffer << in.rdbuf();
     const std::string source = buffer.str();
 
-    struct SerializedEntity {
-        std::string entityType;
-        std::string primitive;
-        std::string name;
-        glm::vec3 position{ 0.0f };
-        glm::vec3 rotation{ 0.0f };
-        glm::vec3 scale{ 1.0f };
-        glm::vec4 color{ 1.0f };
-        float gridSpacing = 1.0f;
-        float gridSize = 100.0f;
-        float fov = 45.0f;
-        bool hasColor = false;
-        bool hasGrid = false;
-        bool hasFov = false;
-    };
-
-    std::vector<SerializedEntity> entitiesToCreate;
-    for (const std::string& entityJson : extractEntityObjects(source)) {
-        SerializedEntity data;
-        data.name = extractStringValue(entityJson, "name");
-        data.entityType = extractStringValue(entityJson, "entityType");
-        data.primitive = extractStringValue(entityJson, "primitive");
-
-        float position[3]{};
-        float rotation[3]{};
-        float scale[3]{};
-        float color[4]{};
-
-        if (extractFloatArray(entityJson, "position", position, 3)) {
-            data.position = glm::vec3(position[0], position[1], position[2]);
-        }
-        if (extractFloatArray(entityJson, "rotation", rotation, 3)) {
-            data.rotation = glm::vec3(rotation[0], rotation[1], rotation[2]);
-        }
-        if (extractFloatArray(entityJson, "scale", scale, 3)) {
-            data.scale = glm::vec3(scale[0], scale[1], scale[2]);
-        }
-        if (extractFloatArray(entityJson, "color", color, 4)) {
-            data.color = glm::vec4(color[0], color[1], color[2], color[3]);
-            data.hasColor = true;
-        }
-        if (extractFloatValue(entityJson, "gridSpacing", data.gridSpacing)) {
-            data.hasGrid = true;
-        }
-        if (extractFloatValue(entityJson, "gridSize", data.gridSize)) {
-            data.hasGrid = true;
-        }
-        if (extractFloatValue(entityJson, "fov", data.fov)) {
-            data.hasFov = true;
-        }
-
-        if (!data.name.empty()) {
-            entitiesToCreate.push_back(data);
-        }
-    }
-
-    if (entitiesToCreate.empty()) {
+    std::vector<std::string> entityObjects = JSONUtils::extractEntityObjects(source);
+    if (entityObjects.empty()) {
         return false;
     }
 
-    bool createdAny = false;
-    for (const SerializedEntity& data : entitiesToCreate) {
-        Entity entity;
+    for (const std::string& entityJson : entityObjects) {
+        std::string name = JSONUtils::extractStringValue(entityJson, "name");
+        if (name.empty()) {
+            continue;
+        }
 
-        if (data.entityType == "Camera" || data.hasFov) {
-            entity = EntityFactory::spawnCamera(registry, renderer, data.name, data.position, data.rotation, data.fov);
-        } else if (data.entityType == "Grid" || data.hasGrid) {
-            entity = EntityFactory::spawnGrid(
-                registry,
-                renderer,
-                data.name,
-                data.position,
-                data.rotation,
-                data.hasColor ? data.color : glm::vec4(0.3f, 0.3f, 0.3f, 1.0f),
-                data.gridSpacing,
-                data.gridSize
-            );
-        } else {
-            PrimitiveKind kind = PrimitiveKind::Cube;
-            if (!data.primitive.empty()) {
-                tryParsePrimitiveKind(data.primitive, kind);
-            } else if (data.name == "Triangle") {
-                kind = PrimitiveKind::Triangle;
-            } else if (data.name == "Grid") {
-                kind = PrimitiveKind::Quad;
-            }
+        Entity entity = registry.create();
+        if (entity.getId() == Entity::INVALID_ENTITY) {
+            continue;
+        }
 
-            entity = EntityFactory::spawnPrimitive(registry, renderer, kind, data.name, data.position);
-            if (Transform* transform = registry.get<Transform>(entity)) {
-                transform->rotation = data.rotation;
-                transform->scale = data.scale;
+        // Initialize core components
+        registry.emplace<Name>(entity, Name{ name });
+        registry.emplace<Transform>(entity, Transform{});
+        
+        Transform* transform = registry.get<Transform>(entity);
+        if (transform) {
+            float position[3]{};
+            float rotation[3]{};
+            float scale[3]{1.0f, 1.0f, 1.0f};
+
+            if (JSONUtils::extractFloatArray(entityJson, "position", position, 3)) {
+                transform->position = glm::vec3(position[0], position[1], position[2]);
             }
-            if (Material* material = registry.get<Material>(entity); material && data.hasColor) {
-                material->color = data.color;
+            if (JSONUtils::extractFloatArray(entityJson, "rotation", rotation, 3)) {
+                transform->rotation = glm::vec3(rotation[0], rotation[1], rotation[2]);
+            }
+            if (JSONUtils::extractFloatArray(entityJson, "scale", scale, 3)) {
+                transform->scale = glm::vec3(scale[0], scale[1], scale[2]);
             }
         }
 
-        if (entity.getId() != Entity::INVALID_ENTITY) {
-            outEntities.push_back(entity);
-            createdAny = true;
+        // Invoke all registered component deserializers
+        for (const auto& reg : ComponentSerializerRegistry::getInstance().getRegistrations()) {
+            reg.deserialize(registry, renderer, entity, entityJson);
         }
+
+        outEntities.push_back(entity);
     }
 
-    return createdAny;
+    return !outEntities.empty();
 }

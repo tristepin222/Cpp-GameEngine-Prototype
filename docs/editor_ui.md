@@ -91,17 +91,21 @@ For each entity in the registry view:
 
 ## Scene Serialization
 
-The engine implements a lightweight custom JSON parser and generator inside [SceneSerializer.cpp](../engine/src/scenes/SceneSerializer.cpp) to save and load scenes:
+The engine implements a decoupled, component-agnostic serialization framework using **[SceneSerializer.cpp](../engine/src/scenes/SceneSerializer.cpp)**, **[ComponentSerializerRegistry.hpp](../engine/include/scenes/ComponentSerializerRegistry.hpp)**, and **[JSONUtils.hpp](../engine/include/scenes/JSONUtils.hpp)**:
+
+*   **JSONUtils**: Exposes standard scanner helpers to format output streams (`indent`, `quote`, `vec3ToJson`) and extract data from JSON strings (`extractStringValue`, `extractFloatArray`, `extractFloatValue`).
+*   **ComponentSerializerRegistry**: A singleton registry where systems register `std::function` callbacks for serializing and deserializing specific component types.
 
 ### Saving Scene File
-*   Iterates through all entities matching the `<Name, Transform>` view.
-*   Writes out a JSON representation listing:
-    *   `name` (string)
-    *   `position`, `rotation`, `scale` (JSON Float arrays)
-    *   Component specific fields: `entityType` ("Primitive" / "Grid" / "Camera"), `primitive` ("Triangle" / "Cube" / "Quad"), `color` vector, `fov`, `gridSpacing`.
+1.  Iterates through all entities in the active scene.
+2.  Writes the core metadata common to all entities: `name`, `position`, `rotation`, and `scale`.
+3.  Loops through all registrations in the `ComponentSerializerRegistry` and triggers their serialize callbacks, allowing components to append their custom keys to the JSON representation stream.
 
 ### Loading Scene File
-*   Reads the scene file into a string buffer.
-*   Extracts entity objects using string scanning helper functions.
-*   Destroys all active entities to clear the scene.
-*   Re-instantiates entities and reconstructs components based on the parsed JSON key-value pairs.
+1.  Reads the scene file into a string buffer and splits it into entity JSON objects via `JSONUtils::extractEntityObjects`.
+2.  Unloads the active scene, destroying existing entities.
+3.  For each entity JSON object:
+    *   Creates a new entity and deserializes the core components (`Name` and `Transform`).
+    *   Loops through all registered component deserializers, passing the entity and its corresponding JSON block to dynamically emplace active components.
+
+This decoupled architecture allows developers to create and register custom components in game projects and save/load them without modifying any engine-level code.

@@ -51,6 +51,7 @@ set(ENGINE_SOURCES
     src/ecs/EntityCloner.cpp
     src/editor/EditorUI.cpp
     src/scenes/Scene.cpp
+    src/scenes/JSONUtils.cpp
     src/scenes/SceneManager.cpp
     src/scenes/SceneSerializer.cpp
 )

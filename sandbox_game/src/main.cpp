@@ -14,7 +14,8 @@
 #include "editor/EditorUI.hpp"
 #include "scenes/SceneManager.hpp"
 #include "scenes/TestScene.hpp"
-
+#include "scenes/ComponentSerializerRegistry.hpp"
+#include "GameMetadataComponent.hpp"
 
 int main() {
     glfwInit();
@@ -22,8 +23,26 @@ int main() {
     GLFWwindow* window = glfwCreateWindow(800, 600, "ECS Vulkan Engine", nullptr, nullptr);
 
     VulkanRenderer renderer(window);
-	Registry registry;
+    Registry registry;
     EditorModeState editorMode;
+
+    // Register custom game-level component with serialization registry
+    ComponentSerializerRegistry::getInstance().registerComponent(
+        "GameMetadata",
+        [](Registry& reg, Entity entity, std::ostream& out, int indent) {
+            if (auto* comp = reg.get<GameMetadataComponent>(entity)) {
+                out << ",\n" << JSONUtils::indent(indent) << "\"importance\": " << comp->importance << ",\n";
+                out << JSONUtils::indent(indent) << "\"tag\": " << JSONUtils::quote(comp->tag);
+            }
+        },
+        [](Registry& reg, VulkanRenderer&, Entity entity, const std::string& json) {
+            float importance = 0.0f;
+            if (JSONUtils::extractFloatValue(json, "importance", importance)) {
+                std::string tag = JSONUtils::extractStringValue(json, "tag");
+                reg.emplace<GameMetadataComponent>(entity, GameMetadataComponent{ importance, tag });
+            }
+        }
+    );
 
     renderer.createInstanceBuffer(10000);
     // Create systems

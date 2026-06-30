@@ -33,7 +33,7 @@ For a comprehensive explanation of execution flow and frame sequence, see the [A
     *   *Read more: [Editor UI & Raycast Picking Guide](docs/editor_ui.md)*
 6.  **3D Viewport Gizmos (ImGuizmo)**: Supports real-time translation, rotation, and scaling directly on selected entities in the 3D viewport, with automatic matrix decomposition back to ECS component transforms.
 7.  **Raycast Viewport Picking**: Mathematical unprojection of 2D screen-space mouse coordinates to 3D world-space picking rays, resolving bounding sphere intersects to select entities directly in the viewport.
-8.  **Scene Serialization**: Custom JSON scanning and loading routines to serialize/deserialize entity configurations, meshes, and material states into files.
+8.  **Generic Scene Serialization**: A component-agnostic serialization registry allowing dynamic registration of custom components so they save/load to JSON automatically without modifying core engine logic.
 
 ---
 
