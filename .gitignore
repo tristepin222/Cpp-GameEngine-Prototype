@@ -371,4 +371,7 @@ build/
 
 # Game executable build outputs
 game/game.exe
-game/game
+game/game
+
+# Allow generated documentation diagrams
+!docs/diagrams/out/
