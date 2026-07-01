@@ -52,7 +52,7 @@ To understand the engineering behind this prototype, explore the detailed docume
 
 ### Hardware & System Requirements
 *   **Operating System**: Windows 10/11
-*   **Vulkan SDK**: Vulkan SDK 1.3+ installed on your system.
+*   **Vulkan SDK**: Vulkan SDK 1.3+ installed on the host system.
 *   **Compiler**: C++20 compliant compiler (MSVC 2022, GCC 11+, or Clang 13+).
 *   **Build System**: CMake 3.20+.
 
@@ -70,7 +70,7 @@ Dependencies are managed automatically through the CMake configuration:
     cd Cpp-GameEngine-Prototype
     ```
 2.  **Configure and Build (Using Utility Script)**:
-    You can use the provided **`build.bat`** script at the repository root to automatically configure, compile shaders, build libraries, and compile the game:
+    The provided **`build.bat`** script at the repository root automatically configures, compiles shaders, builds libraries, and compiles the game:
     ```bash
     # Simple build
     build.bat
@@ -82,7 +82,7 @@ Dependencies are managed automatically through the CMake configuration:
     build.bat --run
     ```
 
-    Alternatively, you can run the standard CMake commands manually:
+    Alternatively, run the standard CMake commands manually:
     ```bash
     # Configure workspace
     cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -97,13 +97,23 @@ Dependencies are managed automatically through the CMake configuration:
     ./game.exe
     ```
 
-> **Visual Studio / CLion Users**: You can open the repository root folder directly in your IDE (via **File -> Open -> Folder**), and the IDE will automatically configure the workspace targets.
+### Generating API Documentation
+
+The codebase is fully documented using Doxygen-compliant comments. To compile the interactive HTML documentation site:
+1. Ensure Doxygen is installed and available in the system PATH.
+2. Run the following command at the repository root:
+   ```bash
+   doxygen Doxyfile
+   ```
+3. Open `docs/html/index.html` in any browser to inspect the full class hierarchies and documented members.
+
+> **Visual Studio / CLion Users**: Open the repository root folder directly in an IDE (via **File -> Open -> Folder**), and the IDE will automatically configure the workspace targets.
 
 ---
 
 ## Controls Reference
 
-When running the application, you can switch between editor controls and camera controls:
+When running the application, switch between editor controls and camera controls:
 
 | Hotkey / Input | Mode | Description |
 |---|---|---|

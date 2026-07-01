@@ -1,0 +1,38 @@
+# Doxyfile Configuration for Vulkan ECS Game Engine Prototype
+
+# Project Name and Info
+PROJECT_NAME           = "Vulkan ECS Game Engine Prototype"
+PROJECT_NUMBER         = "1.0.0"
+PROJECT_BRIEF          = "A high-performance C++20 game engine prototype showcasing a custom ECS, Vulkan renderer, and ImGui editor."
+
+# Directories and Inputs
+OUTPUT_DIRECTORY       = docs
+INPUT                  = engine/include engine/src sandbox_game/src README.md
+USE_MDFILE_AS_MAINPAGE = README.md
+RECURSIVE              = YES
+FILE_PATTERNS          = *.hpp *.cpp *.h *.md
+
+# Extraction Settings
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = YES
+EXTRACT_STATIC         = YES
+EXTRACT_LOCAL_CLASSES  = YES
+
+# Warning Settings
+QUIET                  = NO
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+
+# Output Generation
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_LATEX         = NO
+GENERATE_RTF           = NO
+GENERATE_XML           = NO
+
+# Visual Settings
+HTML_EXTRA_STYLESHEET  = 
+HTML_COLORSTYLE_HUE    = 220
+HTML_COLORSTYLE_SAT    = 100
+HTML_COLORSTYLE_VALUE  = 100
