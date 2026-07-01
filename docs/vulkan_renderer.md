@@ -43,6 +43,29 @@ struct VulkanFrameSync {
     *   **Fence Trigger**: Passes the `inFlightFence` to automatically trigger when the GPU has finished execution.
 5.  **Present Image**: Request presentation (`vkQueuePresentKHR`), waiting on the `renderFinishedSemaphore` to ensure rendering has finished.
 
+### Trade-Off: Double vs Triple Buffering
+* **Double Buffering (Engine Choice)**: Limits active frames in flight to 2. This keeps input latency low (the time between user input and screen update is at most 2 frames) and reduces VRAM allocation for swapchain buffers.
+* **Triple Buffering**: Allows a 3rd frame to start processing on the CPU while the GPU draws the 2nd and displays the 1st. While this hides framerate micro-stutters, it introduces an extra frame of input lag and requires additional buffer allocation memory pools.
+
+---
+
+## Resource Lifetimes & RAII Destruction Sequence
+
+Vulkan has strict rules regarding object lifetimes: objects cannot be destroyed while the GPU is still executing commands that reference them. Additionally, Vulkan handles must be destroyed in the **reverse order of their creation**.
+
+Our RAII wrappers coordinates resource disposal via an explicit cleanup sequence inside [VulkanRenderer::cleanup()](../engine/src/VulkanRenderer.cpp):
+
+1. **GPU Wait**: Wait for the GPU to complete all running queue operations using `vkDeviceWaitIdle(device)`.
+2. **Editor UI Disposal**: Call `ImGui_ImplVulkan_Shutdown()` and `ImGui_ImplGlfw_Shutdown()` to clean up GUI font allocations and render states.
+3. **Pipeline Cleanup**: Destroy pipelines (`VkPipeline`) and layouts (`VkPipelineLayout`).
+4. **Descriptor Sets**: Clear pools (`VkDescriptorPool`) and set layouts (`VkDescriptorSetLayout`).
+5. **Framebuffers & RenderPass**: Destroy framebuffers and the main render pass.
+6. **Swapchain**: Destroy the swapchain (`VkSwapchainKHR`) and its image views.
+7. **Buffer Deallocation**: Free vertex, index, and instancing dynamic buffers (`vkDestroyBuffer` and `vkFreeMemory`).
+8. **Sync Primitives**: Destroy fences and semaphores (`vkDestroyFence`, `vkDestroySemaphore`).
+9. **Logical Device & Instance**: Destroy the logical `VkDevice` handle, and finally the `VkInstance` instance.
+
+
 ---
 
 ## Shader & Graphics Pipeline Compilation

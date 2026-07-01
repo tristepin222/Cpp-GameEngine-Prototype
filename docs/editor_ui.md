@@ -54,29 +54,31 @@ To manipulate 3D entities in world space, the editor integrates **ImGuizmo**.
 
 ---
 
-## Viewport Raycast Picking Math
+## Viewport Viewport Raycast Picking Math
 
 When the user clicks in the 3D viewport, the screen-space click coordinate must be cast as a 3D ray into the scene to identify clicked objects.
 
-### Step 1: Normalized Device Coordinates (NDC)
+### Step-by-Step Projection Pipeline
+
+#### Step 1: Normalized Device Coordinates (NDC)
 Screens coordinates `(mouseX, mouseY)` in pixels are converted to NDC space $[-1, 1]$:
 \[nX = \frac{2.0 \cdot \text{mouseX}}{\text{width}} - 1.0\]
 \[nY = 1.0 - \frac{2.0 \cdot \text{mouseY}}{\text{height}}\]
 
-### Step 2: Unprojecting Clip Space Points
+#### Step 2: Unprojecting Clip Space Points
 We compute the inverse View-Projection matrix (`invVP`) and multiply it by the NDC coordinates at the near clip plane (\(z = -1.0\)) and far clip plane (\(z = 1.0\)):
 \[\text{nearClip} = \text{invVP} \cdot \begin{pmatrix} nX \\ nY \\ -1.0 \\ 1.0 \end{pmatrix}, \quad \text{farClip} = \text{invVP} \cdot \begin{pmatrix} nX \\ nY \\ 1.0 \\ 1.0 \end{pmatrix}\]
 
-### Step 3: Perspective Division
+#### Step 3: Perspective Division
 Divide clip coordinates by their projection scale component `w` to yield world-space coordinates:
 \[\text{nearPoint} = \frac{\text{nearClip}}{\text{nearClip.w}}, \quad \text{farPoint} = \frac{\text{farClip}}{\text{farClip.w}}\]
 
-### Step 4: Construct Ray
+#### Step 4: Construct Ray
 The ray's starting point is the near point, and its direction is the normalized vector pointing from near to far:
 \[\text{rayOrigin} = \text{nearPoint}\]
 \[\text{rayDirection} = \text{normalize}(\text{farPoint} - \text{nearPoint})\]
 
-### Step 5: Ray-Sphere Intersection Test
+#### Step 5: Ray-Sphere Intersection Test
 For each entity in the registry view:
 1.  Transforms vertex coordinates using its model matrix to calculate its world-space Axis-Aligned Bounding Box (AABB).
 2.  Computes a bounding sphere from AABB:
@@ -86,6 +88,57 @@ For each entity in the registry view:
     \[t^2 \cdot (\mathbf{d} \cdot \mathbf{d}) + 2t \cdot (\mathbf{oc} \cdot \mathbf{d}) + (\mathbf{oc} \cdot \mathbf{oc}) - r^2 = 0\]
     where $\mathbf{oc} = \text{rayOrigin} - \text{center}$ and $\mathbf{d} = \text{rayDirection}$.
 4.  If the discriminant is positive, the ray hits the sphere. The entity with the smallest intersection distance $t$ is selected.
+
+---
+
+## C++ Viewport Picking Implementation
+
+Below is the actual C++ implementation from [EditorUI::handleViewportPicking](../engine/src/editor/EditorUI.cpp):
+
+```cpp
+// 1. Calculate NDC
+const float normalizedX = static_cast<float>((2.0 * mouseX) / static_cast<double>(width) - 1.0);
+const float normalizedY = static_cast<float>(1.0 - (2.0 * mouseY) / static_cast<double>(height));
+
+// 2. Unproject near and far planes
+const glm::mat4 inverseViewProjection = glm::inverse(renderer.getActiveCameraViewProj());
+const glm::vec4 nearClip = inverseViewProjection * glm::vec4(normalizedX, normalizedY, -1.0f, 1.0f);
+const glm::vec4 farClip = inverseViewProjection * glm::vec4(normalizedX, normalizedY, 1.0f, 1.0f);
+
+// 3. Perspective Division
+const glm::vec3 nearPoint = glm::vec3(nearClip) / nearClip.w;
+const glm::vec3 farPoint = glm::vec3(farClip) / farClip.w;
+const glm::vec3 rayDirection = glm::normalize(farPoint - nearPoint);
+const glm::vec3 rayOrigin = nearPoint;
+
+// 4. Ray-Sphere Quadratic Solver
+glm::vec3 oc = rayOrigin - center;
+float a = glm::dot(rayDirection, rayDirection);
+float b = 2.0f * glm::dot(oc, rayDirection);
+float c = glm::dot(oc, oc) - radius * radius;
+
+float discriminant = b * b - 4.0f * a * c;
+if (discriminant >= 0.0f) {
+    float sqrtD = sqrt(discriminant);
+    float t0 = (-b - sqrtD) / (2.0f * a);
+    float t1 = (-b + sqrtD) / (2.0f * a);
+    float hitDistance = (t0 > 0.0f) ? t0 : t1;
+    // Track closest hit entity...
+}
+```
+
+---
+
+## ImGui Viewport Coordinates Note
+In a full-screen application, `glfwGetCursorPos` yields mouse offsets relative directly to the render buffer. 
+
+However, when drawing the viewport within a sub-docked ImGui panel (e.g., inside an "Editor Viewport" window), the coordinates must be offset:
+1. Subtract the ImGui window position: `mouseX -= ImGui::GetWindowPos().x`
+2. Subtract the tab/menu padding offset: `mouseY -= ImGui::GetWindowContentRegionMin().y`
+3. Use the content region bounds for projection width/height: `width = ImGui::GetContentRegionAvail().x`
+
+Currently, this prototype uses the full GLFW window size, assuming the editor controls wrap the viewport overlay dynamically. If shifting to dockable sub-viewports, adjusting the mouse coordinates by the window offsets prevents picking offsets.
+
 
 ---
 

@@ -117,7 +117,50 @@ struct TransformSoA {
 };
 ```
 
+### CPU Cache Line Visual Comparison
+
+```text
+Array of Structures (AoS) - Cache Line Pollution:
++-----------------------------------------------------------+
+| Entity 0 (Pos) | Entity 0 (Color) | Entity 0 (Name) | ... |
++-----------------------------------------------------------+
+(When updating positions, the CPU cache line is polluted with unused Colors and Names, wasting memory bandwidth).
+
+Structure of Arrays (SoA) - Cache Friendly:
++-----------------------------------------------------------+
+| Position 0     | Position 1       | Position 2      | ... |
++-----------------------------------------------------------+
+(Cache lines contain ONLY position data, guaranteeing a 100% cache hit rate during bulk updates).
+```
+
 ### Benefits of SoA in the Engine
 1.  **VRAM Upload Efficiency**: The `MeshSoA` stores vertex and index buffers contiguously, making bulk VRAM uploads via staging buffers highly streamable.
 2.  **Vectorization (SIMD)**: Separate arrays allow modern compilers to auto-vectorize mathematics (like updating positions, physics, or computing bounding matrices), since elements are packed contiguously in cache lines with zero stride.
 3.  **Dynamic Allocations**: The GPU instancing system reads from CPU-side `InstanceDataSoA` models, colors, and material IDs to batch upload GPU instance arrays in a single `vkCmdDrawIndexed` queue preparation loop.
+
+---
+
+## Example Usage Code (Registry & Views)
+
+Below is an example showing how to create entities, attach components, and query them using views:
+
+```cpp
+// 1. Create Registry
+Registry registry;
+
+// 2. Spawn Entity
+Entity player = registry.create();
+
+// 3. Attach Components
+registry.emplace<Transform>(player, glm::vec3(0.0f, 0.0f, 0.0f));
+registry.emplace<Mesh>(player, PrimitiveFactory::createCube());
+registry.emplace<Name>(player, "Player");
+
+// 4. Query entities with Transform and Mesh using compile-time Views
+for (auto [entity, transform, mesh] : registry.view<Transform, Mesh>()) {
+    // This loop automatically drives from the smallest component storage pool
+    // and operates directly on contiguous CPU memory pools.
+    transform.position.y += 1.0f * dt;
+}
+```
+

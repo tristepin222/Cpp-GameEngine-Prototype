@@ -27,6 +27,33 @@ The engine is structured as a modular desktop application in C++20, utilizing GL
 
 The engine operates on a single-threaded game loop inside [main.cpp](../sandbox_game/src/main.cpp). The lifecycle of a single frame comprises polling OS events, updating active scenes, updating ECS systems, drawing the UI panels, and submitting Vulkan command buffers for drawing.
 
+### Core Loop Structure (`main.cpp`)
+
+Below is the C++ structural skeleton of the game loop:
+
+```cpp
+while (!renderer.shouldClose()) {
+    // 1. Poll OS windowing and inputs events
+    glfwPollEvents();
+    float dt = renderer.getDeltaTime();
+
+    // 2. Update scene transitions and logic
+    sceneManager.update(dt);
+    
+    // 3. Process ECS systems (InputSystem -> CameraSystem -> RenderSystem compile)
+    sysManager.updateAll(dt);
+    
+    // 4. Begin ImGui frame and record editor panel overlays
+    editorUI.beginFrame();
+    editorUI.drawPanels();
+    
+    // 5. Draw model batches and submit Vulkan commands with ImGui rendering callback
+    renderSystem->drawFrame([&editorUI](VkCommandBuffer cmd) {
+        editorUI.render(cmd);
+    });
+}
+```
+
 The sequence below illustrates the frame execution flow:
 
 ![Frame Lifecycle Sequence](diagrams/out/frame_lifecycle/FrameLifecycle.png)
@@ -47,3 +74,16 @@ The sequence below illustrates the frame execution flow:
     4.  Draws grid elements and model batches using push constants.
     5.  Executes the overlay callback, triggering ImGui Vulkan backend render commands.
     6.  Submits the recorded command buffer to the graphics queue and presents the rendered swapchain image.
+
+---
+
+## Architectural Trade-Offs
+
+### Single-Threaded Game Loop
+* **Why**: The entire game loop operates on the main thread. This choice was made to simplify Vulkan command buffer recording and swapchain synchronization. Multi-threaded command submission in Vulkan requires complex layout barrier tracking and thread-local command pools, which can add significant overhead and synchronization bugs.
+* **Trade-off**: While this reduces pipeline complexity, it limits CPU throughput. In a production engine, long-running systems (like asset loading or physics calculation) would be offloaded to worker threads using a task scheduler.
+
+### Decoupled Scene / Engine Splitting
+* **Why**: The core engine is built as a static library, keeping it completely separated from the sandbox game executable. Game code only defines custom components and scenes, linking to the library.
+* **Trade-off**: This isolates systems nicely but requires compiling custom serialization hooks for custom game components (via `ComponentSerializerRegistry`) to bridge the engine-library boundary.
+
