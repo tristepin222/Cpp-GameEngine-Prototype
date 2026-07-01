@@ -1,5 +1,39 @@
 @startuml RaycastPicking
 
+' Modern Dark/Slate Theme configuration
+skinparam BackgroundColor #0f0f13
+skinparam Shadowing false
+skinparam Activity {
+    BackgroundColor #1e1e24
+    BorderColor #44445c
+    FontColor #e0e0e0
+    FontName "Segoe UI"
+    BarColor #65658a
+}
+skinparam Start {
+    Color #2ea043
+}
+skinparam End {
+    Color #da3633
+}
+skinparam Partition {
+    BackgroundColor #16161d
+    BorderColor #353549
+    FontColor #b0b0d0
+    FontName "Segoe UI"
+}
+skinparam Arrow {
+    Color #65658a
+    FontColor #9090b0
+    FontName "Segoe UI"
+}
+skinparam Note {
+    BackgroundColor #2d2d38
+    BorderColor #44445c
+    FontColor #9090b0
+    FontName "Segoe UI"
+}
+
 start
 
 :Detect Mouse Click Event (Left Button Press);

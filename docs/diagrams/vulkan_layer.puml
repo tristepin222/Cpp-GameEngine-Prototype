@@ -1,5 +1,29 @@
 @startuml VulkanLayer
 
+' Modern Dark/Slate Theme configuration
+skinparam BackgroundColor #0f0f13
+skinparam RoundCorner 8
+skinparam Shadowing false
+skinparam Class {
+    BackgroundColor #1e1e24
+    BorderColor #44445c
+    FontColor #e0e0e0
+    FontSize 12
+    FontName "Segoe UI"
+    HeaderBackgroundColor #2d2d38
+}
+skinparam Package {
+    BackgroundColor #16161d
+    BorderColor #353549
+    FontColor #b0b0d0
+    FontName "Segoe UI"
+}
+skinparam Arrow {
+    Color #65658a
+    FontColor #9090b0
+    FontName "Segoe UI"
+}
+
 package "Vulkan Core Wrapper" {
     class VulkanDevice {
         - instance : VkInstance

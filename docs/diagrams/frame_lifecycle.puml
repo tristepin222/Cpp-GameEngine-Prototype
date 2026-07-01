@@ -1,4 +1,31 @@
 @startuml FrameLifecycle
+
+' Modern Dark/Slate Theme configuration
+skinparam BackgroundColor #0f0f13
+skinparam RoundCorner 8
+skinparam Shadowing false
+skinparam Actor {
+    BackgroundColor #1e1e24
+    BorderColor #44445c
+    FontColor #e0e0e0
+    FontName "Segoe UI"
+}
+skinparam Participant {
+    BackgroundColor #1e1e24
+    BorderColor #44445c
+    FontColor #e0e0e0
+    FontName "Segoe UI"
+}
+skinparam Sequence {
+    LifeLineBorderColor #44445c
+    LifeLineBackgroundColor #2d2d38
+}
+skinparam Arrow {
+    Color #65658a
+    FontColor #9090b0
+    FontName "Segoe UI"
+}
+
 actor User
 participant Main
 participant GLFW

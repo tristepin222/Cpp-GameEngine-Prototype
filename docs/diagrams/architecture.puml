@@ -4,37 +4,52 @@ skinparam shadowing false
 skinparam packageStyle rectangle
 skinparam roundCorner 10
 
-' Style configuration
-skinparam class {
-    BackgroundColor White
-    BorderColor #4A4A4A
-    ArrowColor #5A5A5A
+' Modern Dark/Slate Theme configuration
+skinparam BackgroundColor #0f0f13
+skinparam Class {
+    BackgroundColor #1e1e24
+    BorderColor #44445c
+    FontColor #e0e0e0
+    FontSize 12
+    FontName "Segoe UI"
+    HeaderBackgroundColor #2d2d38
     AttributeIconSize 0
 }
+skinparam Package {
+    BackgroundColor #16161d
+    BorderColor #353549
+    FontColor #b0b0d0
+    FontName "Segoe UI"
+}
+skinparam Arrow {
+    Color #65658a
+    FontColor #9090b0
+    FontName "Segoe UI"
+}
 
-package "sandbox_game (Executable Target)" #EBF3F9 {
+package "sandbox_game (Executable Target)" #1a2636 {
     class Main << (O, #FFD700) Orchestrator >>
     class TestScene
 }
 
-package "engine (Static Library Target)" #F5F5F5 {
-    package "Scene Management" #E8F8F5 {
+package "engine (Static Library Target)" #15151a {
+    package "Scene Management" #102a24 {
         abstract class Scene
         class SceneManager
         class SceneSerializer
     }
 
-    package "Entity Utilities" #FEF9E7 {
+    package "Entity Utilities" #2b261b {
         class EntityFactory
         class EntityCloner
     }
 
-    package "Editor Layer" #FFF9EB {
+    package "Editor Layer" #2d2218 {
         class EditorUI
         struct EditorModeState
     }
 
-    package "ECS Layer" #EBF9EB {
+    package "ECS Layer" #182c1e {
         class Registry << (C, #87CEEB) Core ECS >>
         class EntityManager
         class ComponentStorage
@@ -46,7 +61,7 @@ package "engine (Static Library Target)" #F5F5F5 {
         class RenderSystem
     }
 
-    package "Renderer Layer" #F9EBEB {
+    package "Renderer Layer" #2e1b1b {
         class VulkanRenderer << (C, #FFA07A) Render Engine >>
         class VulkanDevice
         class VulkanSwapChain
