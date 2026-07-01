@@ -1,9 +1,15 @@
 #include "VulkanCommandManager.hpp"
 
+/**
+ * @brief Destroy the Vulkan Command Manager:: Vulkan Command Manager object.
+ */
 VulkanCommandManager::~VulkanCommandManager() {
     destroy();
 }
 
+/**
+ * @brief Destroys the Vulkan command pool.
+ */
 void VulkanCommandManager::destroy() {
     if (commandPool != VK_NULL_HANDLE) {
         vkDestroyCommandPool(device, commandPool, nullptr);
@@ -11,6 +17,12 @@ void VulkanCommandManager::destroy() {
     }
 }
 
+/**
+ * @brief Instantiates the command pool and primary command buffers.
+ * @param dev Logical device context.
+ * @param queueFamilyIndex Graphics queue family location index.
+ * @param commandBufferCount Number of primary command buffers.
+ */
 void VulkanCommandManager::create(VkDevice dev, uint32_t queueFamilyIndex, uint32_t commandBufferCount) {
     device = dev;
 
@@ -35,6 +47,9 @@ void VulkanCommandManager::create(VkDevice dev, uint32_t queueFamilyIndex, uint3
         throw std::runtime_error("Failed to allocate command buffers");
 }
 
+/**
+ * @brief Steps frame index and begins recording next frame command buffer.
+ */
 void VulkanCommandManager::beginFrame() {
     // For a double-buffered setup, alternate between 0 and 1
     currentFrame = (currentFrame + 1) % commandBuffers.size();
@@ -49,12 +64,19 @@ void VulkanCommandManager::beginFrame() {
         throw std::runtime_error("Failed to begin recording command buffer");
 }
 
+/**
+ * @brief Ends frame command buffer recording.
+ */
 void VulkanCommandManager::endFrame() {
     VkCommandBuffer cmd = commandBuffers[currentFrame];
     if (vkEndCommandBuffer(cmd) != VK_SUCCESS)
         throw std::runtime_error("Failed to end command buffer");
 }
 
+/**
+ * @brief Allocates and starts recording a one-time utility command buffer.
+ * @return Allocated command buffer.
+ */
 VkCommandBuffer VulkanCommandManager::beginOneTimeCommand() {
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -75,6 +97,11 @@ VkCommandBuffer VulkanCommandManager::beginOneTimeCommand() {
     return commandBuffer;
 }
 
+/**
+ * @brief Submits, waits on, and frees a one-time utility command buffer.
+ * @param commandBuffer Temporary command buffer handle.
+ * @param queue Command target queue.
+ */
 void VulkanCommandManager::endOneTimeCommand(VkCommandBuffer commandBuffer, VkQueue queue) {
     vkEndCommandBuffer(commandBuffer);
 

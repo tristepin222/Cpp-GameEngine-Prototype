@@ -5,6 +5,11 @@
 #include <iostream>
 
 // Helper for validation (simple)
+/**
+ * @brief Helper retrieving GLFW instance extensions and validation layers extensions.
+ * @param enableValidation True if validation layer checks are active.
+ * @return Array of extension names.
+ */
 static std::vector<const char*> getRequiredExtensions(bool enableValidation) {
     uint32_t glfwExtCount = 0;
     const char** glfwExt = glfwGetRequiredInstanceExtensions(&glfwExtCount);
@@ -20,19 +25,34 @@ static std::vector<const char*> getRequiredExtensions(bool enableValidation) {
 // Public Methods
 // ------------------------
 
+/**
+ * @brief Construct a new Vulkan Device:: Vulkan Device object.
+ * @param enableValidation Whether validation layers should be active.
+ */
 VulkanDevice::VulkanDevice(bool enableValidation) : enableValidationLayers(enableValidation) {}
+/**
+ * @brief Construct a new Vulkan Device:: Vulkan Device object with validation active by default.
+ */
 VulkanDevice::VulkanDevice() : enableValidationLayers(true) {}
 
+/**
+ * @brief Destroy the Vulkan Device:: Vulkan Device object.
+ */
 VulkanDevice::~VulkanDevice() {
     cleanup();
 }
 
-// initialize now only creates the VkInstance (not picking physical device / logical device)
+/**
+ * @brief Instantiates the root Vulkan Instance.
+ */
 void VulkanDevice::initialize() {
     createInstance();
     // NOTE: call pickPhysicalDevice(surface) and createLogicalDevice() later (after surface creation)
 }
 
+/**
+ * @brief Deallocates logical device and instance handles.
+ */
 void VulkanDevice::cleanup() {
     if (device != VK_NULL_HANDLE) {
         vkDestroyDevice(device, nullptr);
@@ -48,6 +68,9 @@ void VulkanDevice::cleanup() {
 // Private / Public Helpers
 // ------------------------
 
+/**
+ * @brief Sets up app structures and creates raw Vulkan instance.
+ */
 void VulkanDevice::createInstance() {
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -82,7 +105,10 @@ void VulkanDevice::createInstance() {
     }
 }
 
-// New: pick physical device using a VkSurfaceKHR, ensuring present support on same queue family as graphics
+/**
+ * @brief Enumerates physical devices and picks the first suitable GPU.
+ * @param surface Window rendering surface.
+ */
 void VulkanDevice::pickPhysicalDevice(VkSurfaceKHR surface) {
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
@@ -104,7 +130,12 @@ void VulkanDevice::pickPhysicalDevice(VkSurfaceKHR surface) {
     }
 }
 
-// Helper that checks for a queue family that supports graphics and present to the provided surface
+/**
+ * @brief Verifies if the physical device queue families support both graphics and surface presentation.
+ * @param dev Physical device.
+ * @param surface Presentation surface.
+ * @return True if suited, false otherwise.
+ */
 bool VulkanDevice::isDeviceSuitableForSurface(VkPhysicalDevice dev, VkSurfaceKHR surface) {
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(dev, &queueFamilyCount, nullptr);
@@ -130,6 +161,9 @@ bool VulkanDevice::isDeviceSuitableForSurface(VkPhysicalDevice dev, VkSurfaceKHR
     return false;
 }
 
+/**
+ * @brief Configures logical device properties and initializes graphics queues.
+ */
 void VulkanDevice::createLogicalDevice() {
     if (physicalDevice == VK_NULL_HANDLE) {
         throw std::runtime_error("Physical device not selected. Call pickPhysicalDevice(surface) first.");
@@ -163,6 +197,12 @@ void VulkanDevice::createLogicalDevice() {
     vkGetDeviceQueue(device, graphicsQueueFamily, 0, &graphicsQueue);
 }
 
+/**
+ * @brief Checks physical device memory types for a match.
+ * @param typeFilter Bitmask filtering memory types.
+ * @param properties Desired memory properties.
+ * @return Memory type index.
+ */
 uint32_t VulkanDevice::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const {
     VkPhysicalDeviceMemoryProperties memProperties;
     vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);

@@ -17,6 +17,10 @@
 #include "scenes/ComponentSerializerRegistry.hpp"
 #include "GameMetadataComponent.hpp"
 
+/**
+ * @brief Entry point for sandbox game application.
+ * @return EXIT_SUCCESS on successful exit.
+ */
 int main() {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);

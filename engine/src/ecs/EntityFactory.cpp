@@ -12,8 +12,18 @@
 #include <GLFW/glfw3.h>
 #include <stdexcept>
 
+/**
+ * @namespace EntityFactory
+ * @brief Factory methods for creating common game entities (cameras, grids, shapes) and uploading their mesh data.
+ */
 namespace EntityFactory {
 
+    /**
+     * @brief Uploads mesh component data to Vulkan GPU buffers.
+     * @param registry ECS registry containing target entity.
+     * @param renderer Vulkan renderer instance.
+     * @param entity Target entity.
+     */
     void uploadMesh(Registry& registry, VulkanRenderer& renderer, Entity entity) {
         Mesh* mesh = registry.get<Mesh>(entity);
         if (!mesh) {
@@ -27,6 +37,15 @@ namespace EntityFactory {
         mesh->indexBuffer = renderer.meshSoA.indexBuffers[meshID].get();
     }
 
+    /**
+     * @brief Spawns a primitive shape entity (e.g. Triangle, Cube, Quad).
+     * @param registry Target ECS Registry.
+     * @param renderer Vulkan renderer context.
+     * @param kind Primitive kind (Triangle, Cube, Quad).
+     * @param name Entity name.
+     * @param position Translation vector.
+     * @return Spawned entity handle.
+     */
     Entity spawnPrimitive(Registry& registry, VulkanRenderer& renderer, PrimitiveKind kind, const std::string& name, const glm::vec3& position) {
         Entity entity = registry.create();
         if (entity.getId() == Entity::INVALID_ENTITY) {
@@ -70,6 +89,16 @@ namespace EntityFactory {
         return entity;
     }
 
+    /**
+     * @brief Spawns a camera entity with projection setup.
+     * @param registry Target ECS Registry.
+     * @param renderer Vulkan renderer context.
+     * @param name Camera name.
+     * @param position Location vector.
+     * @param rotation Yaw, pitch, roll orientation.
+     * @param fov Field of view.
+     * @return Spawned camera entity handle.
+     */
     Entity spawnCamera(Registry& registry, VulkanRenderer& renderer, const std::string& name, const glm::vec3& position, const glm::vec3& rotation, float fov) {
         Entity cameraEntity = registry.create();
         if (cameraEntity.getId() == Entity::INVALID_ENTITY) {
@@ -99,6 +128,18 @@ namespace EntityFactory {
         return cameraEntity;
     }
 
+    /**
+     * @brief Spawns a grid overlay drawing reference.
+     * @param registry Target ECS Registry.
+     * @param renderer Vulkan renderer context.
+     * @param name Grid name.
+     * @param position Location vector.
+     * @param rotation Orientation rotation.
+     * @param color Grid line color.
+     * @param spacing Line separation distance.
+     * @param size Overall grid area size.
+     * @return Spawned grid entity handle.
+     */
     Entity spawnGrid(Registry& registry, VulkanRenderer& renderer, const std::string& name, const glm::vec3& position, const glm::vec3& rotation, const glm::vec4& color, float spacing, float size) {
         Entity grid = registry.create();
         if (grid.getId() == Entity::INVALID_ENTITY) {

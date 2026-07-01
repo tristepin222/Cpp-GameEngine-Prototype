@@ -1,13 +1,25 @@
 #include "VulkanBuffer.hpp"
 
+/**
+ * @brief Destroy the Vulkan Buffer:: Vulkan Buffer object and release Vulkan handles.
+ */
 VulkanBuffer::~VulkanBuffer() {
     destroy();
 }
 
+/**
+ * @brief Move constructor.
+ * @param other Buffer to move from.
+ */
 VulkanBuffer::VulkanBuffer(VulkanBuffer&& other) noexcept {
     *this = std::move(other);
 }
 
+/**
+ * @brief Move assignment operator.
+ * @param other Buffer to move.
+ * @return Reference to self.
+ */
 VulkanBuffer& VulkanBuffer::operator=(VulkanBuffer&& other) noexcept {
     if (this != &other) {
         destroy();
@@ -23,6 +35,14 @@ VulkanBuffer& VulkanBuffer::operator=(VulkanBuffer&& other) noexcept {
     return *this;
 }
 
+/**
+ * @brief Creates and allocates the buffer.
+ * @param dev Vulkan logical device context.
+ * @param phys Vulkan physical device.
+ * @param size Buffer size.
+ * @param usage Usage flags.
+ * @param properties Memory properties.
+ */
 void VulkanBuffer::create(VkDevice dev, VkPhysicalDevice phys,
     VkDeviceSize size, VkBufferUsageFlags usage,
     VkMemoryPropertyFlags properties) {
@@ -53,6 +73,9 @@ void VulkanBuffer::create(VkDevice dev, VkPhysicalDevice phys,
     vkBindBufferMemory(device, buffer, memory, 0);
 }
 
+/**
+ * @brief Safely destroys the buffer and memory.
+ */
 void VulkanBuffer::destroy() {
     if (buffer != VK_NULL_HANDLE) {
         vkDestroyBuffer(device, buffer, nullptr);
@@ -64,6 +87,11 @@ void VulkanBuffer::destroy() {
     }
 }
 
+/**
+ * @brief Uploads data to the buffer.
+ * @param srcData Source pointer.
+ * @param dataSize Transfer size.
+ */
 void VulkanBuffer::uploadData(const void* srcData, VkDeviceSize dataSize) {
     if (dataSize > bufferSize)
         throw std::runtime_error("uploadData() size exceeds buffer capacity");
@@ -74,6 +102,12 @@ void VulkanBuffer::uploadData(const void* srcData, VkDeviceSize dataSize) {
     vkUnmapMemory(device, memory);
 }
 
+/**
+ * @brief Selects the correct memory type on physical device.
+ * @param typeFilter Bitmask filtering memory types.
+ * @param properties Desired memory properties.
+ * @return Memory type index.
+ */
 uint32_t VulkanBuffer::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
     VkPhysicalDeviceMemoryProperties memProps;
     vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProps);

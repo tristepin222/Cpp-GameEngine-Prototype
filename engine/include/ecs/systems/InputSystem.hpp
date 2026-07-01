@@ -7,12 +7,26 @@
 #include "editor/EditorModeState.hpp"
 #include "renderer/VulkanRenderer.hpp"
 
+/**
+ * @class InputSystem
+ * @brief System that handles input from keyboard and mouse, updating InputComponents and switching camera modes.
+ */
 class InputSystem : public System {
 public:
+    /**
+     * @brief Construct a new Input System object.
+     * @param reg Reference to the ECS Registry.
+     * @param renderer Reference to the Vulkan Renderer.
+     * @param editorMode Reference to the Editor Mode State.
+     */
     InputSystem(Registry& reg, VulkanRenderer& renderer, EditorModeState& editorMode)
         : registry(reg), renderer(renderer), editorMode(editorMode) {
     }
 
+    /**
+     * @brief Updates inputs for entities and handles cursor mode switches.
+     * @param dt Delta time in seconds.
+     */
     void update(float dt) override {
 
         double x, y;
@@ -52,6 +66,11 @@ public:
 
     }
 
+    /**
+     * @brief Toggles between editor/fly mode and handles cursor state cache.
+     * @param lastY Reference to stored last Y position of the cursor.
+     * @param lastX Reference to stored last X position of the cursor.
+     */
     void switchMode(double& lastY, double& lastX) {
         static bool prevTabDown = false;
 
@@ -74,6 +93,9 @@ public:
     }
 
 
+    /**
+     * @brief Configures GLFW cursor modes based on current fly/editor state.
+     */
     void applyCursorMode() {
         GLFWwindow* window = renderer.getWindow();
 
@@ -87,7 +109,10 @@ public:
 
 
 private:
+    /** @brief Reference to the entity registry. */
     Registry& registry;
+    /** @brief Reference to the renderer. */
     VulkanRenderer& renderer;
+    /** @brief Reference to the editor mode state. */
     EditorModeState& editorMode;
 };

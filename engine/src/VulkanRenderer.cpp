@@ -1,6 +1,11 @@
-﻿#include "../include/renderer/VulkanRenderer.hpp"
+#include "../include/renderer/VulkanRenderer.hpp"
 #include <iostream>
 
+/**
+ * @brief Construct a new Vulkan Renderer:: Vulkan Renderer object.
+ * @param win Reference window.
+ * @param enableValidation True to configure validation layers, false otherwise.
+ */
 VulkanRenderer::VulkanRenderer(GLFWwindow* win, bool enableValidation)
     : window(win), enableValidationLayers(enableValidation)
 {
@@ -17,6 +22,9 @@ VulkanRenderer::VulkanRenderer(GLFWwindow* win, bool enableValidation)
     lastTime = glfwGetTime();
 }
 
+/**
+ * @brief Destroy the Vulkan Renderer:: Vulkan Renderer object.
+ */
 VulkanRenderer::~VulkanRenderer() {
     cleanup();
 }
@@ -25,6 +33,9 @@ VulkanRenderer::~VulkanRenderer() {
 // ─── Initialization ─────────────────────────────────────────────────────────────
 //
 // initVulkan() — orchestration (call this from ctor)
+/**
+ * @brief Initializes the Vulkan API contexts.
+ */
 void VulkanRenderer::initVulkan() {
     createInstanceAndDebug();       // create instance & debug messenger
     createWindowSurface();          // must create surface before picking physical device
@@ -38,6 +49,9 @@ void VulkanRenderer::initVulkan() {
 // -----------------------------
 // Instance & Debug
 // -----------------------------
+/**
+ * @brief Creates Vulkan instance and hooks validation callback logs.
+ */
 void VulkanRenderer::createInstanceAndDebug() {
     // This should create the VkInstance inside device.initialize()
     device.initialize();           // creates VkInstance
@@ -47,6 +61,9 @@ void VulkanRenderer::createInstanceAndDebug() {
 // -----------------------------
 // Surface, Device & Swapchain
 // -----------------------------
+/**
+ * @brief Creates the presentation surface coupling Vulkan and window context.
+ */
 void VulkanRenderer::createWindowSurface() {
     if (surface != VK_NULL_HANDLE) return; // already created
 
@@ -54,6 +71,9 @@ void VulkanRenderer::createWindowSurface() {
         throw std::runtime_error("Failed to create window surface");
 }
 
+/**
+ * @brief Selects physical GPU and configures device queues.
+ */
 void VulkanRenderer::createDeviceAndQueues() {
     // surface must be valid here
     if (surface == VK_NULL_HANDLE) {
@@ -64,6 +84,9 @@ void VulkanRenderer::createDeviceAndQueues() {
     device.createLogicalDevice();            // create device + queues
 }
 
+/**
+ * @brief Initializes swapchain presentation structures.
+ */
 void VulkanRenderer::createSwapchain() {
     swapchain.initialize(
         device.getDevice(),
@@ -76,11 +99,17 @@ void VulkanRenderer::createSwapchain() {
 // -----------------------------
 // Remaining setup
 // -----------------------------
+/**
+ * @brief Setup descriptor layouts and allocations.
+ */
 void VulkanRenderer::setupDescriptors() {
     descriptors.create(device.getDevice());
     descriptors.createCameraDescriptorSetLayout();
 }
 
+/**
+ * @brief Creates uniform buffers and compiles base pipeline.
+ */
 void VulkanRenderer::createBuffersAndPipelines() {
     createCameraUBO();
     descriptors.allocateCameraDescriptorSets(cameraBuffer.get(), cameraBuffer.getSize());
@@ -90,12 +119,18 @@ void VulkanRenderer::createBuffersAndPipelines() {
     createPipeline();
 }
 
+/**
+ * @brief Allocates command pools and sync structures.
+ */
 void VulkanRenderer::createCommandsAndSync() {
     cmdManager.create(device.getDevice(), device.getGraphicsQueueFamily(), 2);
     frameSync.create(device.getDevice(), 2);
 }
 
 
+/**
+ * @brief Builds the default graphics pipeline configuration.
+ */
 void VulkanRenderer::createPipeline() {
     const std::string vert = "build/shaders/grid.vert.spv";
     const std::string frag = "build/shaders/grid.frag.spv";
@@ -104,6 +139,9 @@ void VulkanRenderer::createPipeline() {
     pipeline.create(device.getDevice(), swapchain.getExtent(), swapchain.getRenderPass(), vert, frag, layouts);
 }
 
+/**
+ * @brief Prepares Vulkan contexts for command recording.
+ */
 void VulkanRenderer::beginFrame() {
     frameSync.waitForCurrentFrame();
 
@@ -158,6 +196,9 @@ void VulkanRenderer::beginFrame() {
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.getLayout(), 0, 1, &cameraDescriptorSet, 0, nullptr);
 }
 
+/**
+ * @brief Stops active render pass recording.
+ */
 void VulkanRenderer::endFrame() {
     VkCommandBuffer cmd = cmdManager.getCurrentCommandBuffer();
     vkCmdEndRenderPass(cmd);
@@ -166,6 +207,9 @@ void VulkanRenderer::endFrame() {
     submitAndPresent();
 }
 
+/**
+ * @brief Submits command buffers to graphics queue.
+ */
 void VulkanRenderer::submitAndPresent() {
     VkCommandBuffer cmdBuf = cmdManager.getCurrentCommandBuffer();
 
@@ -207,6 +251,10 @@ void VulkanRenderer::submitAndPresent() {
     frameSync.nextFrame();
 }
 
+/**
+ * @brief Allocates memory for model transformation instance buffer.
+ * @param maxInstances Number of maximum instances.
+ */
 void VulkanRenderer::createInstanceBuffer(size_t maxInstances) {
     VkDeviceSize size = maxInstances * sizeof(glm::mat4);
     instanceBuffer.create(device.getDevice(), device.getPhysicalDevice(), size,
@@ -214,6 +262,9 @@ void VulkanRenderer::createInstanceBuffer(size_t maxInstances) {
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 }
 
+/**
+ * @brief Uploads instanced structures to GPU buffers.
+ */
 void VulkanRenderer::updateInstanceBuffer() {
     if (instanceDataCPU.size() == 0) return;
 
@@ -227,17 +278,26 @@ void VulkanRenderer::updateInstanceBuffer() {
     instanceBuffer.uploadData(gpuData.data(), gpuData.size() * sizeof(InstanceDataGPU));
 }
 
+/**
+ * @brief Allocates memory for Camera Uniform Buffer.
+ */
 void VulkanRenderer::createCameraUBO() {
     cameraBuffer.create(device.getDevice(), device.getPhysicalDevice(), sizeof(CameraUBO),
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 }
 
+/**
+ * @brief Maps and uploads camera projection matrices to GPU.
+ */
 void VulkanRenderer::updateCameraUBO() {
     if (!hasActiveCameraData) return;
     cameraBuffer.uploadData(&activeCameraViewProj, sizeof(activeCameraViewProj));
 }
 
+/**
+ * @brief Deallocates current swapchain and rebuilds it matching window dimensions.
+ */
 void VulkanRenderer::recreateSwapchain() {
     int width = 0, height = 0;
     glfwGetFramebufferSize(window, &width, &height);
@@ -264,6 +324,9 @@ void VulkanRenderer::recreateSwapchain() {
     createPipeline();
 }
 
+/**
+ * @brief releases allocated Vulkan resources.
+ */
 void VulkanRenderer::cleanup() {
     vkDeviceWaitIdle(device.getDevice());
 
@@ -279,6 +342,12 @@ void VulkanRenderer::cleanup() {
     device.cleanup();
 }
 
+/**
+ * @brief Helper utility creating a separate graphics pipeline using target shaders.
+ * @param vert path to vertex bytecode.
+ * @param frag path to fragment bytecode.
+ * @return Pipeline handle.
+ */
 PipelineHandle VulkanRenderer::createPipelineForShaders(const std::string& vert, const std::string& frag) {
     auto pipe = std::make_unique<VulkanPipeline>();
     pipe->create(device.getDevice(), swapchain.getExtent(), swapchain.getRenderPass(),
@@ -291,6 +360,10 @@ PipelineHandle VulkanRenderer::createPipelineForShaders(const std::string& vert,
     return { p, l };
 }
 
+/**
+ * @brief Computes frame delta time since last invocation.
+ * @return Delta time value.
+ */
 float VulkanRenderer::getDeltaTime() {
     double currentTime = glfwGetTime();
     float dt = static_cast<float>(currentTime - lastTime);
@@ -298,10 +371,18 @@ float VulkanRenderer::getDeltaTime() {
     return dt;
 }
 
+/**
+ * @brief Verification if window close signals are active.
+ * @return True if close requested.
+ */
 bool VulkanRenderer::shouldClose() const {
     return glfwWindowShouldClose(window);
 }
 
+/**
+ * @brief Uploads mesh data to vertex and index buffers.
+ * @param meshID ID of target mesh.
+ */
 void VulkanRenderer::uploadMesh(size_t meshID) {
     auto& vertices = meshSoA.vertices[meshID];
     auto& indices = meshSoA.indices[meshID];
@@ -334,6 +415,10 @@ void VulkanRenderer::uploadMesh(size_t meshID) {
         meshSoA.indexBuffers[meshID].uploadData(indices.data(), size);
     }
 }
+/**
+ * @brief Populates validation debug create info parameters.
+ * @return debug create info.
+ */
 VkDebugUtilsMessengerCreateInfoEXT VulkanRenderer::populateDebugMessengerCreateInfo() {
     VkDebugUtilsMessengerCreateInfoEXT createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -354,6 +439,9 @@ VkDebugUtilsMessengerCreateInfoEXT VulkanRenderer::populateDebugMessengerCreateI
     createInfo.pUserData = nullptr;
     return createInfo;
 }
+/**
+ * @brief Attaches validation logger callbacks.
+ */
 void VulkanRenderer::setupDebugMessenger() {
     if (!enableValidationLayers) return;
 
@@ -367,6 +455,9 @@ void VulkanRenderer::setupDebugMessenger() {
         }
     }
 }
+/**
+ * @brief Deallocates debug messenger log handle.
+ */
 void VulkanRenderer::destroyDebugMessenger() {
     if (!enableValidationLayers || debugMessenger == VK_NULL_HANDLE) return;
 

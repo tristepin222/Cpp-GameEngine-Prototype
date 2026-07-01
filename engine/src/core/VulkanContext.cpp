@@ -3,6 +3,9 @@
 #include <stdexcept>
 #include <vector>
 
+/**
+ * @brief Configures app settings and creates raw Vulkan instance.
+ */
 void VulkanContext::createInstance() {
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -22,6 +25,9 @@ void VulkanContext::createInstance() {
         throw std::runtime_error("Failed to create Vulkan instance");
 }
 
+/**
+ * @brief Queries physical GPUs and selects the first active device.
+ */
 void VulkanContext::pickPhysicalDevice() {
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
@@ -35,6 +41,9 @@ void VulkanContext::pickPhysicalDevice() {
     physicalDevice = devices[0];
 }
 
+/**
+ * @brief Searches queue family layouts and allocates logical device bindings.
+ */
 void VulkanContext::createLogicalDevice() {
     // Find queue families
     uint32_t queueFamilyCount = 0;
@@ -92,6 +101,10 @@ void VulkanContext::createLogicalDevice() {
     vkGetDeviceQueue(device, presentIndex, 0, &presentQueue);
 }
 
+/**
+ * @brief Triggers the sequence of Vulkan initialization steps.
+ * @param window target window pointer.
+ */
 void VulkanContext::init(GLFWwindow* window) {
     createInstance();
 
@@ -104,6 +117,9 @@ void VulkanContext::init(GLFWwindow* window) {
     std::cout << "VulkanContext initialized successfully." << std::endl;
 }
 
+/**
+ * @brief Destroys logical devices, surfaces and instance.
+ */
 void VulkanContext::cleanup() {
     if (device) vkDestroyDevice(device, nullptr);
     if (surface) vkDestroySurfaceKHR(instance, surface, nullptr);

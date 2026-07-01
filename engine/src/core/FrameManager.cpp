@@ -1,10 +1,21 @@
 #include "FrameManager.hpp"
 #include <stdexcept>
 
+/**
+ * @brief Construct a new Frame Manager:: Frame Manager object.
+ * @param dev Logical device context.
+ * @param gQ Graphics queue.
+ * @param pQ Present queue.
+ * @param sc Swapchain.
+ * @param framesInFlight Frame buffer count.
+ */
 FrameManager::FrameManager(VkDevice dev, VkQueue gQ, VkQueue pQ, VkSwapchainKHR sc, uint32_t framesInFlight)
     : device(dev), graphicsQueue(gQ), presentQueue(pQ), swapchain(sc), maxFramesInFlight(framesInFlight) {
 }
 
+/**
+ * @brief Destroy the Frame Manager:: Frame Manager object and clean up synchronization handles.
+ */
 FrameManager::~FrameManager() {
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
@@ -13,6 +24,10 @@ FrameManager::~FrameManager() {
     }
 }
 
+/**
+ * @brief Initializes frame resources, creating semaphores, fences, and allocating command buffers.
+ * @param commandPool The Vulkan command pool.
+ */
 void FrameManager::init(VkCommandPool commandPool) {
     imageAvailableSemaphores.resize(maxFramesInFlight);
     renderFinishedSemaphores.resize(maxFramesInFlight);
@@ -46,6 +61,10 @@ void FrameManager::init(VkCommandPool commandPool) {
     }
 }
 
+/**
+ * @brief Waits on in-flight synchronization fences, gets next swapchain index and resets command buffers.
+ * @param imageIndex Target index reference.
+ */
 void FrameManager::beginFrame(uint32_t& imageIndex) {
     vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
     vkResetFences(device, 1, &inFlightFences[currentFrame]);
@@ -55,6 +74,10 @@ void FrameManager::beginFrame(uint32_t& imageIndex) {
     vkResetCommandBuffer(commandBuffers[currentFrame], 0);
 }
 
+/**
+ * @brief Submits rendering command buffer to graphics queue and registers present requests.
+ * @param imageIndex Target swapchain index.
+ */
 void FrameManager::endFrame(uint32_t imageIndex) {
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;

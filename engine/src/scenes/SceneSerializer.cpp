@@ -16,6 +16,10 @@
 #include <sstream>
 
 // Static initializer to register core engine components with the registry
+/**
+ * @brief Static function registering component serializers for built-in camera, grid, and primitive types.
+ * @return True when registered.
+ */
 static bool registerBuiltinComponents() {
     auto& reg = ComponentSerializerRegistry::getInstance();
     
@@ -172,6 +176,11 @@ static bool registerBuiltinComponents() {
     return true;
 }
 
+/**
+ * @brief Construct a new Scene Serializer:: Scene Serializer object.
+ * @param registry Reference to ECS registry.
+ * @param renderer Reference to Vulkan renderer.
+ */
 SceneSerializer::SceneSerializer(Registry& registry, VulkanRenderer& renderer)
     : registry(registry), renderer(renderer) {
     // Force built-in components to be registered exactly once
@@ -179,6 +188,12 @@ SceneSerializer::SceneSerializer(Registry& registry, VulkanRenderer& renderer)
     (void)init;
 }
 
+/**
+ * @brief Serializes a list of entities to a JSON file.
+ * @param path Target file path.
+ * @param entities List of entities to save.
+ * @return True if successful, false otherwise.
+ */
 bool SceneSerializer::serialize(const std::string& path, const std::vector<Entity>& entities) {
     std::filesystem::path outputPath(path);
     if (outputPath.has_parent_path()) {
@@ -226,6 +241,12 @@ bool SceneSerializer::serialize(const std::string& path, const std::vector<Entit
     return true;
 }
 
+/**
+ * @brief Deserializes scene entities from a JSON file.
+ * @param path Source file path.
+ * @param outEntities Vector to store deserialized entities.
+ * @return True if successful, false otherwise.
+ */
 bool SceneSerializer::deserialize(const std::string& path, std::vector<Entity>& outEntities) {
     std::ifstream in(path);
     if (!in.is_open()) {

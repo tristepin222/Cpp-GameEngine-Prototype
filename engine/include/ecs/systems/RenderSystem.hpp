@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "../System.hpp"
 #include "../Registry.hpp"
 #include "../components/Transform.hpp"
@@ -12,8 +12,17 @@
 #include "../components/pushconstants.hpp"
 #include <functional>
 
+/**
+ * @class RenderSystem
+ * @brief System that handles rendering of mesh and grid components, managing batches and Vulkan draw commands.
+ */
 class RenderSystem : public System {
 public:
+    /**
+     * @brief Construct a new Render System object and subscribes to component add/remove events.
+     * @param reg Reference to the ECS Registry.
+     * @param renderer Reference to the Vulkan Renderer.
+     */
     RenderSystem(Registry& reg, VulkanRenderer& renderer)
         : registry(reg), renderer(renderer) {
         // Auto-track entities with Mesh + Transform + Material
@@ -28,11 +37,19 @@ public:
         registry.subscribeToRemoved<Grid>([this](Entity e) { removeEntity(e); });
     }
 
+    /**
+     * @brief System update called each frame to rebuild instance data.
+     * @param dt Delta time in seconds.
+     */
     void update(float dt) override {
         buildInstanceData();
         renderer.updateInstanceBuffer();  // bulk upload to GPU
     }
 
+    /**
+     * @brief Executes the rendering pass, drawing geometry, grid, and optional GUI/overlay passes.
+     * @param overlayPass Optional callback function to execute additional rendering (e.g. ImGui) during the frame.
+     */
     void drawFrame(const std::function<void(VkCommandBuffer)>& overlayPass = {}) {
         renderer.beginFrame();
 
@@ -64,11 +81,19 @@ public:
     }
 
 private:
+    /** @brief Reference to the entity registry. */
     Registry& registry;
+    /** @brief Reference to the renderer. */
     VulkanRenderer& renderer;
+    /** @brief List of tracked entities that have renderable components. */
     std::vector<Entity> entities;
+    /** @brief Mapping from entity to its instance index in CPU buffers. */
     std::unordered_map<Entity, size_t> entityToInstanceIndex;
 
+    /**
+     * @brief Verifies if an entity meets requirements for rendering and adds it to the tracked list.
+     * @param e The entity to check.
+     */
     void checkAndAdd(Entity e) {
         if ((registry.get<Mesh>(e) && registry.get<Transform>(e) && registry.get<Material>(e))
             || registry.get<Grid>(e)) {
@@ -77,10 +102,17 @@ private:
         }
     }
 
+    /**
+     * @brief Removes an entity from tracking when components are removed.
+     * @param e The entity to remove.
+     */
     void removeEntity(Entity e) {
         entities.erase(std::remove(entities.begin(), entities.end(), e), entities.end());
     }
 
+    /**
+     * @brief Rebuilds instance data by iterating over entities.
+     */
     void buildInstanceData() {
         renderer.instanceDataCPU.clear();
         entityToInstanceIndex.clear();
@@ -103,6 +135,10 @@ private:
         }
     }
 
+    /**
+     * @brief Retrieves the active camera's world position.
+     * @return Camera position, or zero vector if none is active.
+     */
     glm::vec3 getCameraPosition() {
         if (renderer.hasActiveCamera()) {
             return renderer.getActiveCameraPosition();
@@ -110,6 +146,9 @@ private:
         return glm::vec3(0.0f);
     }
 
+    /**
+     * @brief Binds pipelines, descriptor sets, and draw buffers for geometry batches.
+     */
     void drawBatches() {
         VkCommandBuffer cmd = renderer.getCurrentCommandBuffer();
         VkDescriptorSet cameraSet = renderer.getCameraDescriptorSet();
@@ -188,6 +227,9 @@ private:
         }
     }
 
+    /**
+     * @brief Draws all active grid overlays.
+     */
     void drawGrids() {
         VkCommandBuffer cmd = renderer.getCurrentCommandBuffer();
         VkDescriptorSet cameraSet = renderer.getCameraDescriptorSet();
@@ -246,7 +288,16 @@ private:
         }
     }
 
+    /**
+     * @struct pair_hash
+     * @brief Custom hash function for std::pair<Mesh*, Material*> used in batch rendering maps.
+     */
     struct pair_hash {
+        /**
+         * @brief Computes hash for pair of Mesh and Material pointers.
+         * @param p The pointer pair.
+         * @return Combined hash value.
+         */
         std::size_t operator()(const std::pair<Mesh*, Material*>& p) const {
             return std::hash<Mesh*>()(p.first) ^ (std::hash<Material*>()(p.second) << 1);
         }

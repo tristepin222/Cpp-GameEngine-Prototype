@@ -1,28 +1,58 @@
 #include "scenes/JSONUtils.hpp"
 #include <sstream>
 
+/**
+ * @namespace JSONUtils
+ * @brief Helper utilities for hand-parsing and formatting simple JSON files.
+ */
 namespace JSONUtils {
 
+    /**
+     * @brief Returns a string of spaces representing indentation level.
+     * @param level Indentation multiplier level.
+     * @return Space character string.
+     */
     std::string indent(int level) {
         return std::string(static_cast<size_t>(level) * 2, ' ');
     }
 
+    /**
+     * @brief Quotes a string value.
+     * @param value Raw string.
+     * @return Quoted string.
+     */
     std::string quote(const std::string& value) {
         return "\"" + value + "\"";
     }
 
+    /**
+     * @brief Converts glm::vec3 value to a JSON array representation.
+     * @param v Input vector.
+     * @return JSON array representation.
+     */
     std::string vec3ToJson(const glm::vec3& v) {
         std::ostringstream out;
         out << "[" << v.x << ", " << v.y << ", " << v.z << "]";
         return out.str();
     }
 
+    /**
+     * @brief Converts glm::vec4 value to a JSON array representation.
+     * @param v Input vector.
+     * @return JSON array representation.
+     */
     std::string vec4ToJson(const glm::vec4& v) {
         std::ostringstream out;
         out << "[" << v.r << ", " << v.g << ", " << v.b << ", " << v.a << "]";
         return out.str();
     }
 
+    /**
+     * @brief Extract string values corresponding to target key.
+     * @param source Raw JSON source.
+     * @param key Target JSON property key.
+     * @return Extracted value.
+     */
     std::string extractStringValue(const std::string& source, const std::string& key) {
         const std::string token = "\"" + key + "\"";
         size_t keyPos = source.find(token);
@@ -40,6 +70,14 @@ namespace JSONUtils {
         return source.substr(firstQuote + 1, secondQuote - firstQuote - 1);
     }
 
+    /**
+     * @brief Extract float array values corresponding to target key.
+     * @param source Raw JSON source.
+     * @param key Target JSON property key.
+     * @param values Destination buffer.
+     * @param count Maximum array values to read.
+     * @return True if successful, false otherwise.
+     */
     bool extractFloatArray(const std::string& source, const std::string& key, float* values, size_t count) {
         const std::string token = "\"" + key + "\"";
         size_t keyPos = source.find(token);
@@ -70,6 +108,13 @@ namespace JSONUtils {
         return true;
     }
 
+    /**
+     * @brief Extract single float value corresponding to target key.
+     * @param source Raw JSON source.
+     * @param key Target JSON property key.
+     * @param value Destination variable reference.
+     * @return True if successful, false otherwise.
+     */
     bool extractFloatValue(const std::string& source, const std::string& key, float& value) {
         const std::string token = "\"" + key + "\"";
         size_t keyPos = source.find(token);
@@ -87,6 +132,11 @@ namespace JSONUtils {
         return static_cast<bool>(stream >> value);
     }
 
+    /**
+     * @brief Extracts individual entity JSON objects.
+     * @param source Raw JSON source.
+     * @return Vector of entity JSON strings.
+     */
     std::vector<std::string> extractEntityObjects(const std::string& source) {
         std::vector<std::string> objects;
         size_t entitiesPos = source.find("\"entities\"");

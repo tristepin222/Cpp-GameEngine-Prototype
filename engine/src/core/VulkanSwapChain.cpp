@@ -1,9 +1,19 @@
 #include "VulkanSwapchain.hpp"
 
+/**
+ * @brief Destroy the Vulkan Swapchain:: Vulkan Swapchain object.
+ */
 VulkanSwapchain::~VulkanSwapchain() {
     cleanup();
 }
 
+/**
+ * @brief Binds references and initializes swapchain creation.
+ * @param dev Logical device context.
+ * @param phys Physical device.
+ * @param surf Presentation surface context.
+ * @param queueFamily Graphics queue family index.
+ */
 void VulkanSwapchain::initialize(VkDevice dev, VkPhysicalDevice phys, VkSurfaceKHR surf, uint32_t queueFamily) {
     device = dev;
     physicalDevice = phys;
@@ -15,6 +25,9 @@ void VulkanSwapchain::initialize(VkDevice dev, VkPhysicalDevice phys, VkSurfaceK
     createFramebuffers();
 }
 
+/**
+ * @brief Destroys framebuffers, render pass, image views, and swapchain handles.
+ */
 void VulkanSwapchain::cleanup() {
     for (auto fb : framebuffers)
         vkDestroyFramebuffer(device, fb, nullptr);
@@ -39,6 +52,10 @@ void VulkanSwapchain::cleanup() {
 // Private internals
 // --------------------
 
+/**
+ * @brief Checks capabilities and creates swapchain object.
+ * @param graphicsQueueFamily Graphics queue family index.
+ */
 void VulkanSwapchain::createSwapchain(uint32_t graphicsQueueFamily) {
     VkSurfaceCapabilitiesKHR capabilities;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &capabilities);
@@ -98,6 +115,9 @@ void VulkanSwapchain::createSwapchain(uint32_t graphicsQueueFamily) {
     imageFormat = surfaceFormat.format;
 }
 
+/**
+ * @brief Wraps swapchain images into VkImageView descriptors.
+ */
 void VulkanSwapchain::createImageViews() {
     imageViews.resize(images.size());
 
@@ -122,6 +142,9 @@ void VulkanSwapchain::createImageViews() {
     }
 }
 
+/**
+ * @brief Configures layouts and subpass parameters, creating the default render pass.
+ */
 void VulkanSwapchain::createRenderPass() {
     VkAttachmentDescription colorAttachment{};
     colorAttachment.format = imageFormat;
@@ -153,6 +176,9 @@ void VulkanSwapchain::createRenderPass() {
         throw std::runtime_error("Failed to create render pass");
 }
 
+/**
+ * @brief Instantiates framebuffers binding image views to the render pass.
+ */
 void VulkanSwapchain::createFramebuffers() {
     framebuffers.resize(imageViews.size());
     for (size_t i = 0; i < imageViews.size(); i++) {
@@ -175,6 +201,11 @@ void VulkanSwapchain::createFramebuffers() {
 // Helpers
 // --------------------
 
+/**
+ * @brief Selects optimal color format and color space.
+ * @param formats List of supported formats.
+ * @return Surface format.
+ */
 VkSurfaceFormatKHR VulkanSwapchain::chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats) {
     for (const auto& f : formats)
         if (f.format == VK_FORMAT_B8G8R8A8_SRGB && f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
@@ -182,6 +213,11 @@ VkSurfaceFormatKHR VulkanSwapchain::chooseSurfaceFormat(const std::vector<VkSurf
     return formats[0];
 }
 
+/**
+ * @brief Chooses presentation mode (prioritizes Mailbox, defaults to FIFO).
+ * @param modes Available present modes.
+ * @return Present mode.
+ */
 VkPresentModeKHR VulkanSwapchain::choosePresentMode(const std::vector<VkPresentModeKHR>& modes) {
     for (const auto& m : modes)
         if (m == VK_PRESENT_MODE_MAILBOX_KHR)
@@ -189,6 +225,11 @@ VkPresentModeKHR VulkanSwapchain::choosePresentMode(const std::vector<VkPresentM
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
+/**
+ * @brief Adjusts resolution bounds matching capabilities.
+ * @param capabilities Surface capabilities.
+ * @return Frame buffer extent.
+ */
 VkExtent2D VulkanSwapchain::chooseExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
     if (capabilities.currentExtent.width != UINT32_MAX)
         return capabilities.currentExtent;

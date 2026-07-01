@@ -1,8 +1,16 @@
 #pragma once
 #include "Mesh.hpp"
 
+/**
+ * @namespace Primitives
+ * @brief Collection of helper functions for generating standard geometric primitive meshes.
+ */
 namespace Primitives {
 
+    /**
+     * @brief Creates a 2D triangle mesh.
+     * @return The generated Mesh object.
+     */
     inline Mesh makeTriangle() {
         return Mesh{
             {
@@ -14,6 +22,10 @@ namespace Primitives {
         };
     }
 
+    /**
+     * @brief Creates a 2D quad (square) mesh.
+     * @return The generated Mesh object.
+     */
     inline Mesh makeQuad() {
         return Mesh{
             {
@@ -26,6 +38,10 @@ namespace Primitives {
         };
     }
 
+    /**
+     * @brief Creates a 3D cube mesh.
+     * @return The generated Mesh object.
+     */
     inline Mesh makeCube() {
         std::vector<Vertex> verts = {
             // front

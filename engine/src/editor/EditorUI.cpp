@@ -28,14 +28,28 @@
 using namespace ImGui;
 using namespace std;
 
+/**
+ * @brief Construct a new Editor UI:: Editor UI object.
+ * @param registry Reference to ECS registry.
+ * @param renderer Reference to Vulkan renderer.
+ * @param sceneManager Reference to scene manager.
+ * @param editorMode Reference to editor mode state.
+ */
 EditorUI::EditorUI(Registry& registry, VulkanRenderer& renderer, SceneManager& sceneManager, EditorModeState& editorMode)
     : registry(registry), renderer(renderer), sceneManager(sceneManager), editorMode(editorMode) {
 }
 
+/**
+ * @brief Destroy the Editor UI:: Editor UI object.
+ */
 EditorUI::~EditorUI() {
     shutdown();
 }
 
+/**
+ * @brief Configures ImGui context and backends.
+ * @param window Target GLFW window context.
+ */
 void EditorUI::initialize(GLFWwindow* window) {
     if (initialized) {
         return;
@@ -78,6 +92,9 @@ void EditorUI::initialize(GLFWwindow* window) {
     initialized = true;
 }
 
+/**
+ * @brief Disposes descriptor pool and cleans up ImGui contexts.
+ */
 void EditorUI::shutdown() {
     if (!initialized) {
         return;
@@ -91,6 +108,9 @@ void EditorUI::shutdown() {
     initialized = false;
 }
 
+/**
+ * @brief Prepares a new frame for drawing GUI windows.
+ */
 void EditorUI::beginFrame() {
     if (!initialized) {
         return;
@@ -101,6 +121,9 @@ void EditorUI::beginFrame() {
     NewFrame();
 }
 
+/**
+ * @brief Directs layout drawing of active editor panels and overlays.
+ */
 void EditorUI::drawPanels() {
     if (!initialized) {
         return;
@@ -116,6 +139,9 @@ void EditorUI::drawPanels() {
     drawDebugPanel();
 }
 
+/**
+ * @brief Draws Gizmo handle overlay to translate/rotate selected entities.
+ */
 void EditorUI::drawGizmo()
 {
     if (!hasSelection)
@@ -160,6 +186,11 @@ void EditorUI::drawGizmo()
         decomposeMatrixToTransform(model, *transform);
 }
 
+/**
+ * @brief Decomposes raw matrix transform parameters to target transform object.
+ * @param mat Target source matrix.
+ * @param t Target transform destination reference.
+ */
 void EditorUI::decomposeMatrixToTransform(const glm::mat4& mat, Transform& t)
 {
     float matrixTranslation[3];
@@ -193,6 +224,9 @@ void EditorUI::decomposeMatrixToTransform(const glm::mat4& mat, Transform& t)
 }
 
 
+/**
+ * @brief Renders main level controls panel.
+ */
 void EditorUI::drawSceneControls() {
     if (Button(editorMode.flyMode ? "Switch To Edit Mode" : "Switch To Fly Mode")) {
         editorMode.flyMode = !editorMode.flyMode;
@@ -231,6 +265,9 @@ void EditorUI::drawSceneControls() {
     TextWrapped("%s", statusMessage.c_str());
 }
 
+/**
+ * @brief Renders hierarchy list of all names active in ECS.
+ */
 void EditorUI::drawHierarchyPanel() {
     Begin("Hierarchy");
     TextUnformatted("Scene Entities");
@@ -351,6 +388,9 @@ void EditorUI::drawHierarchyPanel() {
     End();
 }
 
+/**
+ * @brief Inspector panel routing control fields based on components.
+ */
 void EditorUI::drawInspectorPanel() {
     Begin("Inspector");
     TextUnformatted("Runtime ECS Editor");
@@ -407,6 +447,9 @@ void EditorUI::drawInspectorPanel() {
     End();
 }
 
+/**
+ * @brief Renders details panel of raycasts, metrics, and picking.
+ */
 void EditorUI::drawDebugPanel() {
     Begin("Debug", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 
@@ -444,6 +487,9 @@ void EditorUI::drawDebugPanel() {
     End();
 }
 
+/**
+ * @brief Renders inline controls for editing transform coordinates.
+ */
 void EditorUI::drawTransformEditor() {
     Transform* transform = registry.get<Transform>(selectedEntity);
     if (!transform || !CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -506,6 +552,9 @@ void EditorUI::drawTransformEditor() {
     }
 }
 
+/**
+ * @brief Color picking editor for Materials.
+ */
 void EditorUI::drawMaterialEditor() {
     Material* material = registry.get<Material>(selectedEntity);
     if (!material || !CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -518,6 +567,9 @@ void EditorUI::drawMaterialEditor() {
     }
 }
 
+/**
+ * @brief Drag inputs for grid dimensions.
+ */
 void EditorUI::drawGridEditor() {
     Grid* grid = registry.get<Grid>(selectedEntity);
     if (!grid || !CollapsingHeader("Grid", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -528,6 +580,9 @@ void EditorUI::drawGridEditor() {
     DragFloat("Size", &grid->size, 1.0f, 1.0f, 1000.0f);
 }
 
+/**
+ * @brief FOV and clipping range editor fields for camera.
+ */
 void EditorUI::drawCameraEditor() {
     Camera* camera = registry.get<Camera>(selectedEntity);
     Transform* transform = registry.get<Transform>(selectedEntity);
@@ -550,6 +605,9 @@ void EditorUI::drawCameraEditor() {
     }
 }
 
+/**
+ * @brief Performs picking ray-sphere checking against active entity geometries.
+ */
 void EditorUI::handleViewportPicking() {
 
     if (ImGuizmo::IsOver() || ImGuizmo::IsUsing())
@@ -690,6 +748,10 @@ void EditorUI::handleViewportPicking() {
 }
 
 
+/**
+ * @brief Submits generated draw list command structures to Vulkan.
+ * @param commandBuffer Destination command buffer.
+ */
 void EditorUI::render(VkCommandBuffer commandBuffer) {
     if (!initialized) {
         return;
@@ -699,6 +761,9 @@ void EditorUI::render(VkCommandBuffer commandBuffer) {
     ImGui_ImplVulkan_RenderDrawData(GetDrawData(), commandBuffer);
 }
 
+/**
+ * @brief Instantiates the ImGui dedicated descriptor pool.
+ */
 void EditorUI::createDescriptorPool() {
     VkDescriptorPoolSize poolSizes[] = {
         { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
@@ -726,6 +791,9 @@ void EditorUI::createDescriptorPool() {
     }
 }
 
+/**
+ * @brief Destroys the dedicated descriptor pool.
+ */
 void EditorUI::destroyDescriptorPool() {
     if (descriptorPool != VK_NULL_HANDLE) {
         vkDestroyDescriptorPool(renderer.device.getDevice(), descriptorPool, nullptr);
@@ -733,12 +801,23 @@ void EditorUI::destroyDescriptorPool() {
     }
 }
 
+/**
+ * @brief Spacing headers for component subsections.
+ * @param title Header title.
+ */
 void EditorUI::drawSectionHeader(const std::string& title) {
     Spacing();
     TextUnformatted(title.c_str());
     Separator();
 }
 
+/**
+ * @brief Multi-column float drag fields helper.
+ * @param label Control label.
+ * @param values Control value array pointer.
+ * @param speed Adjustment sensitivity.
+ * @return True if changed, false otherwise.
+ */
 bool EditorUI::drawVec3Control(const char* label, float* values, float speed) {
 
     bool changed = false;
@@ -775,6 +854,9 @@ bool EditorUI::drawVec3Control(const char* label, float* values, float speed) {
     return changed;
 }
 
+/**
+ * @brief Controls mouse cursor lock according to flying states.
+ */
 void EditorUI::applyInputMode() {
     if (!window) {
         return;

@@ -9,8 +9,19 @@
 #include "ecs/components/Camera.hpp"
 #include "ecs/components/Grid.hpp"
 
+/**
+ * @namespace EntityCloner
+ * @brief Utility functions for duplicating entities and their components.
+ */
 namespace EntityCloner {
 
+    /**
+     * @brief Clones a source entity and offsets its position slightly.
+     * @param registry ECS registry reference.
+     * @param renderer Vulkan renderer.
+     * @param source The target entity to clone.
+     * @return Offset clone entity.
+     */
     Entity clone(Registry& registry, VulkanRenderer& renderer, Entity source) {
         if (source.getId() == Entity::INVALID_ENTITY) {
             return Entity();

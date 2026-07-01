@@ -1,9 +1,16 @@
-﻿#include "SwapchainManager.hpp"
+#include "SwapchainManager.hpp"
 #include <vector>
 #include <stdexcept>
 #include <iostream>
 #include <algorithm> // std::clamp
 
+/**
+ * @brief Configures swapchain properties, creates KHR swapchain, extracts images, wraps image views, establishes render pass and framebuffers.
+ * @param device Vulkan logical device context.
+ * @param physicalDevice Physical device.
+ * @param surface Window rendering surface.
+ * @param windowSize Extent target dimensions.
+ */
 void SwapchainManager::create(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkExtent2D windowSize) {
     // --- 1️⃣ Query supported surface formats
     uint32_t formatCount = 0;
@@ -131,6 +138,10 @@ void SwapchainManager::create(VkDevice device, VkPhysicalDevice physicalDevice, 
 
 }
 
+/**
+ * @brief Destroys and cleans up swapchain, image views, render pass and framebuffers.
+ * @param device Logical device context.
+ */
 void SwapchainManager::cleanup(VkDevice device) {
     for (auto view : imageViews) vkDestroyImageView(device, view, nullptr);
     imageViews.clear();

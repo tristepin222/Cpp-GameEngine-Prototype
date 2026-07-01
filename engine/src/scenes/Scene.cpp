@@ -6,13 +6,24 @@
 #include "renderer/VulkanRenderer.hpp"
 #include <algorithm>
 
+/**
+ * @brief Construct a new Scene:: Scene object.
+ * @param registry Reference to ECS registry.
+ * @param renderer Reference to renderer.
+ */
 Scene::Scene(Registry& registry, VulkanRenderer& renderer)
     : registry(registry), renderer(renderer) {
 }
 
+/**
+ * @brief Destroy the Scene:: Scene object.
+ */
 Scene::~Scene() {
 }
 
+/**
+ * @brief Destroys all entities tracked by this scene.
+ */
 void Scene::unload() {
     for (Entity entity : ownedEntities) {
         registry.destroy(entity);
@@ -20,11 +31,21 @@ void Scene::unload() {
     ownedEntities.clear();
 }
 
+/**
+ * @brief Serializes scene entities to file.
+ * @param path Output path.
+ * @return True if successful, false otherwise.
+ */
 bool Scene::saveToFile(const std::string& path) {
     SceneSerializer serializer(registry, renderer);
     return serializer.serialize(path, ownedEntities);
 }
 
+/**
+ * @brief Deserializes and loads scene entities from file.
+ * @param path Input path.
+ * @return True if successful, false otherwise.
+ */
 bool Scene::loadFromFile(const std::string& path) {
     SceneSerializer serializer(registry, renderer);
     unload();
@@ -39,6 +60,11 @@ bool Scene::loadFromFile(const std::string& path) {
     return false;
 }
 
+/**
+ * @brief Spawns a primitive shape entity.
+ * @param primitiveType Shape type string ("Triangle", "Cube", "Quad").
+ * @return Spawned entity handle.
+ */
 Entity Scene::createPrimitiveEntity(const std::string& primitiveType) {
     PrimitiveKind kind = PrimitiveKind::Cube;
     std::string baseName = "Cube";
@@ -66,6 +92,11 @@ Entity Scene::createPrimitiveEntity(const std::string& primitiveType) {
     return trackEntity(entity);
 }
 
+/**
+ * @brief Spawns a component helper entity ("Camera", "Grid").
+ * @param entityType Type string.
+ * @return Spawned entity handle.
+ */
 Entity Scene::createEntityOfType(const std::string& entityType) {
     Entity entity;
     if (entityType == "Camera") {
@@ -95,6 +126,11 @@ Entity Scene::createEntityOfType(const std::string& entityType) {
     return trackEntity(entity);
 }
 
+/**
+ * @brief Clones the target entity.
+ * @param entity Entity to clone.
+ * @return Duplicated entity handle.
+ */
 Entity Scene::duplicateEntity(Entity entity) {
     Entity duplicated = EntityCloner::clone(registry, renderer, entity);
     if (duplicated.getId() != Entity::INVALID_ENTITY) {
@@ -108,6 +144,11 @@ Entity Scene::duplicateEntity(Entity entity) {
     return duplicated;
 }
 
+/**
+ * @brief Deletes and destroys the target entity.
+ * @param entity Entity to delete.
+ * @return True if successful, false otherwise.
+ */
 bool Scene::deleteEntity(Entity entity) {
     if (entity.getId() == Entity::INVALID_ENTITY) {
         return false;
@@ -117,11 +158,20 @@ bool Scene::deleteEntity(Entity entity) {
     return true;
 }
 
+/**
+ * @brief Registers entity under scene tracking list.
+ * @param entity Target entity.
+ * @return Tracked entity.
+ */
 Entity Scene::trackEntity(Entity entity) {
     ownedEntities.push_back(entity);
     return entity;
 }
 
+/**
+ * @brief Removes entity from scene tracking list.
+ * @param entity Target entity.
+ */
 void Scene::untrackEntity(Entity entity) {
     ownedEntities.erase(
         std::remove(ownedEntities.begin(), ownedEntities.end(), entity),
@@ -129,6 +179,11 @@ void Scene::untrackEntity(Entity entity) {
     );
 }
 
+/**
+ * @brief Resolves active entity matching name property.
+ * @param name Search name query.
+ * @return Entity handle.
+ */
 Entity Scene::findEntityByName(const std::string& name) const {
     for (auto [entity, entityName] : registry.view<Name>()) {
         if (entityName.value == name) {
@@ -138,6 +193,11 @@ Entity Scene::findEntityByName(const std::string& name) const {
     return Entity();
 }
 
+/**
+ * @brief Creates unique suffix indices if name conflicts.
+ * @param baseName Desired name.
+ * @return Unique name.
+ */
 std::string Scene::makeUniqueEntityName(const std::string& baseName) const {
     if (findEntityByName(baseName).getId() == Entity::INVALID_ENTITY) {
         return baseName;

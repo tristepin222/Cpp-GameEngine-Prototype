@@ -1,4 +1,4 @@
-﻿#include "Renderer.hpp"
+#include "Renderer.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include "../include/ecs/uniforms/instanceData.hpp"
 #include "../include/ecs/uniforms/uniforms.hpp"
@@ -6,6 +6,12 @@
 #include <cstring>
 #include <iostream>
 
+/**
+ * @brief Construct a new Renderer:: Renderer object.
+ * @param dev Logical Vulkan device.
+ * @param extent Viewport layout extent.
+ * @param frames Maximum frames allowed in flight.
+ */
 Renderer::Renderer(VkDevice dev, VkExtent2D extent, uint32_t frames)
     : device(dev), swapchainExtent(extent), framesInFlight(frames) {
     cameraBuffers.resize(frames);
@@ -13,12 +19,20 @@ Renderer::Renderer(VkDevice dev, VkExtent2D extent, uint32_t frames)
     descriptorSets.resize(frames);
 }
 
+/**
+ * @brief Destroy the Renderer:: Renderer object.
+ */
 Renderer::~Renderer() {
     if (descriptorSetLayout != VK_NULL_HANDLE)
         vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 }
 
 // --- Update per-frame camera UBO ---
+/**
+ * @brief Maps Camera Uniform Buffer memory and updates view/proj.
+ * @param frameIndex active frame index.
+ * @param ubo Camera view projection parameters.
+ */
 void Renderer::updateCameraUBO(uint32_t frameIndex, const CameraUBO& ubo) {
     VulkanBuffer& buffer = cameraBuffers[frameIndex];
     void* data;
@@ -28,6 +42,10 @@ void Renderer::updateCameraUBO(uint32_t frameIndex, const CameraUBO& ubo) {
 }
 
 // --- Update per-frame instance buffer ---
+/**
+ * @brief Maps GPU instanced matrices buffer and writes active CPU instance list.
+ * @param frameIndex active frame index.
+ */
 void Renderer::updateInstanceBuffer(uint32_t frameIndex) {
     VulkanBuffer& buffer = instanceBuffers[frameIndex];
     // Copy current transforms into instanceDataCPU
@@ -42,6 +60,9 @@ void Renderer::updateInstanceBuffer(uint32_t frameIndex) {
 }
 
 // --- Batch building ---
+/**
+ * @brief Collects active renderables and builds rendering batches.
+ */
 void Renderer::buildBatches() {
     batches.clear();
     std::unordered_map<uint64_t, RenderBatch> batchMap;
@@ -58,6 +79,16 @@ void Renderer::buildBatches() {
 }
 
 // --- Render a frame using per-frame buffers ---
+/**
+ * @brief Begins render passes and records draws for active batches.
+ * @param cmdBuffer Vulkan command buffer handle.
+ * @param pipeline Compiled graphics pipeline.
+ * @param layout pipeline layout layout.
+ * @param framebuffer target framebuffer.
+ * @param renderPass active render pass.
+ * @param extent Target rendering resolution.
+ * @param frameIndex active frame index.
+ */
 void Renderer::renderFrame(VkCommandBuffer cmdBuffer, VkPipeline pipeline,
     VkPipelineLayout layout,
     VkFramebuffer framebuffer,

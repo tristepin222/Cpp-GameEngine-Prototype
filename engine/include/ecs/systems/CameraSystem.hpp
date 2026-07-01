@@ -8,11 +8,24 @@
 #include "../components/Transform.hpp"
 #include "../components/inputComponent.hpp"
 
+/**
+ * @class CameraSystem
+ * @brief System that processes camera entities, updating their orientation, movement, aspect ratio, and submitting camera matrices to the renderer.
+ */
 class CameraSystem : public System {
 public:
+    /**
+     * @brief Construct a new Camera System object.
+     * @param reg Reference to the ECS Registry.
+     * @param renderer Reference to the Vulkan Renderer.
+     */
     CameraSystem(Registry& reg, VulkanRenderer& renderer)
         : registry(reg), renderer(renderer) {}
 
+    /**
+     * @brief Updates the camera's rotation, movement, aspect ratio, and view-projection matrices.
+     * @param dt Delta time in seconds.
+     */
     void update(float dt) override {
         for (auto [entity, cam, transform, input] : registry.view<Camera, Transform, InputComponent>()) {
             int width = 0;
@@ -50,6 +63,8 @@ public:
     }
 
 private:
+    /** @brief Reference to the entity registry. */
     Registry& registry;
+    /** @brief Reference to the renderer. */
     VulkanRenderer& renderer;
 };

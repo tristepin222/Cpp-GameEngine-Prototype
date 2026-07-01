@@ -3,14 +3,26 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+/**
+ * @struct CameraSoA
+ * @brief Structure of Arrays representing camera components for parallel view projection calculations.
+ */
 struct CameraSoA {
+    /** @brief Fields of view in degrees. */
     std::vector<float> fovs;
+    /** @brief Viewport aspect ratios. */
     std::vector<float> aspects;
+    /** @brief Distances to near clipping planes. */
     std::vector<float> nearPlanes;
+    /** @brief Distances to far clipping planes. */
     std::vector<float> farPlanes;
 
+    /** @brief Computed view-projection matrices ready for GPU transfer. */
     std::vector<glm::mat4> viewProjMatrices; // output for GPU
 
+    /**
+     * @brief Clears all arrays.
+     */
     void clear() {
         fovs.clear();
         aspects.clear();
@@ -19,6 +31,14 @@ struct CameraSoA {
         viewProjMatrices.clear();
     }
 
+    /**
+     * @brief Adds camera components to SoA.
+     * @param fov Field of view.
+     * @param aspect Aspect ratio.
+     * @param nearPlane Near plane.
+     * @param farPlane Far plane.
+     * @return Index of the new camera data.
+     */
     size_t pushCamera(float fov, float aspect, float nearPlane, float farPlane) {
         fovs.push_back(fov);
         aspects.push_back(aspect);
@@ -28,9 +48,17 @@ struct CameraSoA {
         return fovs.size() - 1;
     }
 
+    /**
+     * @brief Returns total camera count.
+     * @return Camera count.
+     */
     size_t size() const { return fovs.size(); }
 
-    // Optimized: aligned with TransformSoA (camera i == transform i)
+    /**
+     * @brief Batch updates view projection matrices.
+     * @tparam TransformSoAType Class representing transform array.
+     * @param transforms The transform list matching camera indexes.
+     */
     template<typename TransformSoAType>
     void updateViewProjections(const TransformSoAType& transforms) {
         size_t n = size();

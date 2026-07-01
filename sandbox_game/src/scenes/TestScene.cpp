@@ -4,10 +4,18 @@
 #include "GameMetadataComponent.hpp"
 #include <glm/glm.hpp>
 
+/**
+ * @brief Construct a new Test Scene:: Test Scene object.
+ * @param registry Reference to ECS registry.
+ * @param renderer Reference to renderer.
+ */
 TestScene::TestScene(Registry& registry, VulkanRenderer& renderer)
     : Scene(registry, renderer) {
 }
 
+/**
+ * @brief Spawns default entities like grid, camera, triangle, and cube.
+ */
 void TestScene::load() {
     createGrid();
     createCamera();
@@ -15,10 +23,17 @@ void TestScene::load() {
     createCube();
 }
 
+/**
+ * @brief Updates scene state.
+ * @param dt Elapsed frame time.
+ */
 void TestScene::update(float dt) {
     (void)dt;
 }
 
+/**
+ * @brief Spawns grid entity.
+ */
 void TestScene::createGrid() {
     trackEntity(EntityFactory::spawnGrid(
         registry,
@@ -32,6 +47,9 @@ void TestScene::createGrid() {
     ));
 }
 
+/**
+ * @brief Spawns camera entity.
+ */
 void TestScene::createCamera() {
     trackEntity(EntityFactory::spawnCamera(
         registry,
@@ -43,6 +61,9 @@ void TestScene::createCamera() {
     ));
 }
 
+/**
+ * @brief Spawns triangle primitive entity.
+ */
 void TestScene::createTriangle() {
     Entity triangle = EntityFactory::spawnPrimitive(
         registry,
@@ -57,6 +78,9 @@ void TestScene::createTriangle() {
     trackEntity(triangle);
 }
 
+/**
+ * @brief Spawns cube primitive entity.
+ */
 void TestScene::createCube() {
     Entity cube = EntityFactory::spawnPrimitive(
         registry,

@@ -1,9 +1,15 @@
-﻿#include "PipelineBuilder.hpp"
+#include "PipelineBuilder.hpp"
 #include <stdexcept>
 #include <iostream>
 #include <cstring>
 #include <vector>
 
+/**
+ * @brief Configures binding and attribute parameters for instanced matrix buffers.
+ * @param binding Target vertex buffer binding index.
+ * @param locationStart Starting location attribute index.
+ * @return Reference to self for chaining.
+ */
 PipelineBuilder& PipelineBuilder::addInstanceMatrixBinding(uint32_t binding, uint32_t locationStart) {
     // Each mat4 is 4 vec4 attributes at consecutive locations.
     // Binding description for per-instance data:
@@ -47,6 +53,11 @@ PipelineBuilder& PipelineBuilder::addInstanceMatrixBinding(uint32_t binding, uin
     return *this;
 }
 
+/**
+ * @brief Bundles settings and compiles VkPipeline.
+ * @param device Logical device context.
+ * @return Compiled pipeline.
+ */
 VkPipeline PipelineBuilder::build(VkDevice device) {
     if (layout == VK_NULL_HANDLE || renderPass == VK_NULL_HANDLE || vertShader == VK_NULL_HANDLE || fragShader == VK_NULL_HANDLE) {
         throw std::runtime_error("PipelineBuilder: Missing required fields (layout, renderPass, shaders)");

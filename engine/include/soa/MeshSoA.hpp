@@ -3,15 +3,29 @@
 #include "../ecs/components/mesh.hpp"
 #include "../../src/core/VulkanBuffer.hpp"
 
+/**
+ * @struct MeshSoA
+ * @brief Structure of Arrays representing mesh buffers and geometry information.
+ */
 struct MeshSoA {
+    /** @brief Unique mesh IDs. */
     std::vector<uint32_t> ids;
+    /** @brief Arrays of vertices for each mesh. */
     std::vector<std::vector<Vertex>> vertices;
+    /** @brief Arrays of indices for each mesh. */
     std::vector<std::vector<uint32_t>> indices;
 
-    // Use VulkanBuffer instead of raw VkBuffer
+    /** @brief Allocated Vulkan vertex buffers. */
     std::vector<VulkanBuffer> vertexBuffers;
+    /** @brief Allocated Vulkan index buffers. */
     std::vector<VulkanBuffer> indexBuffers;
 
+    /**
+     * @brief Pushes a new mesh geometry configuration.
+     * @param verts List of vertices.
+     * @param inds List of indices.
+     * @return The index of the added mesh configuration.
+     */
     size_t push(const std::vector<Vertex>& verts, const std::vector<uint32_t>& inds) {
         ids.push_back(ids.size());
         vertices.push_back(verts);

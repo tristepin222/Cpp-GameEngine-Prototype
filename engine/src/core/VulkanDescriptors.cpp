@@ -1,9 +1,15 @@
 #include "VulkanDescriptors.hpp"
 
+/**
+ * @brief Destroy the Vulkan Descriptors:: Vulkan Descriptors object.
+ */
 VulkanDescriptors::~VulkanDescriptors() {
     destroy();
 }
 
+/**
+ * @brief Safely destroys descriptor pools and layouts.
+ */
 void VulkanDescriptors::destroy() {
     if (descriptorPool != VK_NULL_HANDLE) {
         vkDestroyDescriptorPool(device, descriptorPool, nullptr);
@@ -15,6 +21,10 @@ void VulkanDescriptors::destroy() {
     }
 }
 
+/**
+ * @brief Allocates and initializes the Vulkan descriptor pool.
+ * @param dev Logical device context.
+ */
 void VulkanDescriptors::create(VkDevice dev, uint32_t /*maxFramesInFlight*/) {
     device = dev;
 
@@ -33,6 +43,9 @@ void VulkanDescriptors::create(VkDevice dev, uint32_t /*maxFramesInFlight*/) {
         throw std::runtime_error("Failed to create descriptor pool");
 }
 
+/**
+ * @brief Configures binding requirements and instantiates layout description.
+ */
 void VulkanDescriptors::createCameraDescriptorSetLayout() {
     // Binding for the camera UBO
     VkDescriptorSetLayoutBinding uboLayoutBinding{};
@@ -51,6 +64,11 @@ void VulkanDescriptors::createCameraDescriptorSetLayout() {
         throw std::runtime_error("Failed to create camera descriptor set layout");
 }
 
+/**
+ * @brief Allocates camera descriptor set and updates layout binding.
+ * @param uniformBuffer GPU uniform buffer handle.
+ * @param bufferSize Size of uniform buffer memory.
+ */
 void VulkanDescriptors::allocateCameraDescriptorSets(VkBuffer uniformBuffer, VkDeviceSize bufferSize) {
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;

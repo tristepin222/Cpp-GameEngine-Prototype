@@ -3,10 +3,16 @@
 // --------------------
 // Destructor & Cleanup
 // --------------------
+/**
+ * @brief Destroy the Vulkan Pipeline:: Vulkan Pipeline object.
+ */
 VulkanPipeline::~VulkanPipeline() {
     destroy();
 }
 
+/**
+ * @brief Frees graphics pipeline and pipeline layout resources.
+ */
 void VulkanPipeline::destroy() {
     if (graphicsPipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(device, graphicsPipeline, nullptr);
@@ -22,6 +28,11 @@ void VulkanPipeline::destroy() {
 // Helpers
 // --------------------
 
+/**
+ * @brief Reads shader binary bytecode files.
+ * @param filename Shader binary file path.
+ * @return Byte array.
+ */
 std::vector<char> VulkanPipeline::loadFile(const std::string& filename) {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
     if (!file.is_open())
@@ -35,6 +46,11 @@ std::vector<char> VulkanPipeline::loadFile(const std::string& filename) {
     return buffer;
 }
 
+/**
+ * @brief Instantiates a Vulkan shader module from bytecode.
+ * @param code Byte array.
+ * @return VkShaderModule handle.
+ */
 VkShaderModule VulkanPipeline::createShaderModule(const std::vector<char>& code) {
     VkShaderModuleCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -52,6 +68,15 @@ VkShaderModule VulkanPipeline::createShaderModule(const std::vector<char>& code)
 // Pipeline Creation
 // --------------------
 
+/**
+ * @brief Compiles shaders, configures pipeline attributes and compiles VkPipeline.
+ * @param dev Logical device context.
+ * @param swapchainExtent Swapchain viewport dimensions.
+ * @param renderPass Target render pass index.
+ * @param vertPath Vertex shader path.
+ * @param fragPath Fragment shader path.
+ * @param descriptorSetLayouts Binding set layouts list.
+ */
 void VulkanPipeline::create(VkDevice dev,
     VkExtent2D swapchainExtent,
     VkRenderPass renderPass,
