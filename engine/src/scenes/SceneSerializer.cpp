@@ -140,8 +140,30 @@ static bool registerBuiltinComponents() {
             if (type == "Camera" || type == "Grid") {
                 return; // Managed by separate component deserializers
             }
-            
-            if (type == "Primitive" || !primStr.empty() || !gltfPath.empty()) {
+
+            // Skip grids using key detection to avoid double parsing
+            float dummySpacing = 0.0f;
+            if (JSONUtils::extractFloatValue(json, "gridSpacing", dummySpacing)) {
+                return;
+            }
+
+            bool isPrimitive = (type == "Primitive" || !primStr.empty() || !gltfPath.empty());
+            if (!isPrimitive) {
+                float colorArray[4]{};
+                if (JSONUtils::extractFloatArray(json, "color", colorArray, 4)) {
+                    isPrimitive = true;
+                    std::string nameVal = JSONUtils::extractStringValue(json, "name");
+                    if (nameVal.find("Triangle") != std::string::npos) {
+                        primStr = "Triangle";
+                    } else if (nameVal.find("Quad") != std::string::npos) {
+                        primStr = "Quad";
+                    } else {
+                        primStr = "Cube";
+                    }
+                }
+            }
+
+            if (isPrimitive) {
                 PrimitiveKind kind = PrimitiveKind::Cube;
                 if (primStr == "Triangle") kind = PrimitiveKind::Triangle;
                 else if (primStr == "Quad") kind = PrimitiveKind::Quad;
