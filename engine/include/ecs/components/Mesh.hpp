@@ -15,15 +15,22 @@ struct Vertex {
     glm::vec3 normal;
     /** @brief Texture coordinate (UV) of the vertex. */
     glm::vec2 uv;
+    /** @brief Bone IDs that influence this vertex (Max 4). */
+    glm::ivec4 boneIDs;
+    /** @brief Bone weight influences (sums to 1.0). */
+    glm::vec4 boneWeights;
 
     /**
      * @brief Construct a new Vertex object.
      * @param pos Position of the vertex.
      * @param n Normal vector of the vertex.
      * @param u Texture coordinate of the vertex.
+     * @param bones Bone IDs.
+     * @param weights Bone weights.
      */
-    Vertex(const glm::vec3& pos = {}, const glm::vec3& n = {}, const glm::vec2& u = {})
-        : position(pos), normal(n), uv(u) {
+    Vertex(const glm::vec3& pos = {}, const glm::vec3& n = {}, const glm::vec2& u = {},
+           const glm::ivec4& bones = glm::ivec4(0), const glm::vec4& weights = glm::vec4(0.0f))
+        : position(pos), normal(n), uv(u), boneIDs(bones), boneWeights(weights) {
     }
 
     // --- Vulkan binding description ---
@@ -42,10 +49,10 @@ struct Vertex {
     // --- Vulkan attribute descriptions ---
     /**
      * @brief Retrieves the Vulkan vertex input attribute descriptions.
-     * @return A vector containing the attribute descriptions for position, normal, and UV.
+     * @return A vector containing the attribute descriptions.
      */
     static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions() {
-        std::vector<VkVertexInputAttributeDescription> attributes(3);
+        std::vector<VkVertexInputAttributeDescription> attributes(5);
 
         // position
         attributes[0].binding = 0;
@@ -64,6 +71,18 @@ struct Vertex {
         attributes[2].location = 2;
         attributes[2].format = VK_FORMAT_R32G32_SFLOAT;
         attributes[2].offset = offsetof(Vertex, uv);
+
+        // boneIDs
+        attributes[3].binding = 0;
+        attributes[3].location = 3;
+        attributes[3].format = VK_FORMAT_R32G32B32A32_SINT; // ivec4 format
+        attributes[3].offset = offsetof(Vertex, boneIDs);
+
+        // boneWeights
+        attributes[4].binding = 0;
+        attributes[4].location = 4;
+        attributes[4].format = VK_FORMAT_R32G32B32A32_SFLOAT; // vec4 format
+        attributes[4].offset = offsetof(Vertex, boneWeights);
 
         return attributes;
     }

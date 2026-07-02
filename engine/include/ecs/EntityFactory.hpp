@@ -50,6 +50,11 @@ namespace EntityFactory {
     Entity spawnGrid(Registry& registry, VulkanRenderer& renderer, const std::string& name, const glm::vec3& position, const glm::vec3& rotation, const glm::vec4& color, float spacing, float size);
     
     /**
+     * @brief Spawns an animated or static glTF mesh model.
+     */
+    Entity spawnAnimatedModel(Registry& registry, VulkanRenderer& renderer, const std::string& name, const std::string& gltfPath, const glm::vec3& position);
+    
+    /**
      * @brief Allocates and uploads GPU buffers for a mesh component on the specified entity.
      * @param registry Reference to the ECS Registry.
      * @param renderer Reference to the Vulkan Renderer.

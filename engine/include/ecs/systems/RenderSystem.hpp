@@ -4,6 +4,7 @@
 #include "../components/Transform.hpp"
 #include "../components/Mesh.hpp"
 #include "../components/Material.hpp"
+#include "../components/Skeleton.hpp"
 #include "../../renderer/VulkanRenderer.hpp"
 #include "../components/Renderable.hpp"
 #include "glm/gtc/matrix_access.hpp"
@@ -153,8 +154,8 @@ private:
         VkCommandBuffer cmd = renderer.getCurrentCommandBuffer();
         VkDescriptorSet cameraSet = renderer.getCameraDescriptorSet();
 
-        // --- Group instances by Mesh + Material using the *existing* instance indices
-        std::unordered_map<std::pair<Mesh*, Material*>, std::vector<size_t>, pair_hash> batches;
+        // --- Group instances by Mesh + Material using the *existing* instance indices and track their Entities
+        std::unordered_map<std::pair<Mesh*, Material*>, std::vector<std::pair<Entity, size_t>>, pair_hash> batches;
 
         for (Entity e : entities) {
             auto* mesh = registry.get<Mesh>(e);
@@ -165,7 +166,7 @@ private:
             auto it = entityToInstanceIndex.find(e);
             if (it == entityToInstanceIndex.end()) continue;
             size_t idx = it->second;
-            batches[{mesh, mat}].push_back(idx);
+            batches[{mesh, mat}].push_back({e, idx});
         }
 
         for (auto& [key, batch] : batches) {
@@ -205,7 +206,21 @@ private:
             vkCmdBindIndexBuffer(cmd, mesh->indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
             // Draw each instance in this batch individually, pushing its model/color
-            for (size_t instanceIdx : batch) {
+            for (auto& [e, instanceIdx] : batch) {
+                // Bind Joint Descriptor Set (Set 2) if entity has a Skeleton component
+                if (auto* skeleton = registry.get<SkeletonComponent>(e)) {
+                    if (skeleton->descriptorSet != VK_NULL_HANDLE) {
+                        vkCmdBindDescriptorSets(cmd,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mat->pipelineLayout,
+                            2, // Set 2
+                            1,
+                            &skeleton->descriptorSet,
+                            0,
+                            nullptr);
+                    }
+                }
+
                 // read instance data from renderer.instanceDataCPU
                 const InstanceDataGPU& inst = renderer.instanceDataCPU.get(instanceIdx);
 

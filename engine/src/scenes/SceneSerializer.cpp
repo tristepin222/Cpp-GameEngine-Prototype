@@ -11,6 +11,8 @@
 #include "ecs/components/Grid.hpp"
 #include "ecs/components/inputComponent.hpp"
 #include "ecs/components/primitives.hpp"
+#include "ecs/components/Skeleton.hpp"
+#include "ecs/components/Animator.hpp"
 #include <GLFW/glfw3.h>
 #include <filesystem>
 #include <fstream>
@@ -185,6 +187,13 @@ static bool registerBuiltinComponents() {
                     try {
                         meshData = renderer.resourceManager->loadMesh(gltfPath, renderer);
                         registry.emplace<PrimitiveType>(entity, PrimitiveType{ PrimitiveKind::Cube }); // Default placeholder
+
+                        SkeletonComponent skeleton{};
+                        AnimatorComponent animator{};
+                        if (renderer.resourceManager->loadSkeletonAndAnimations(gltfPath, skeleton, animator)) {
+                            registry.emplace<SkeletonComponent>(entity, std::move(skeleton));
+                            registry.emplace<AnimatorComponent>(entity, std::move(animator));
+                        }
                     } catch (const std::exception& e) {
                         std::cerr << "[SceneSerializer] Error loading mesh " << gltfPath << ": " << e.what() << std::endl;
                         meshData = Primitives::makeCube();
@@ -211,11 +220,12 @@ static bool registerBuiltinComponents() {
                     }
                 }
                 
+                bool hasSkin = registry.has<SkeletonComponent>(entity);
                 PipelineHandle pipeline = renderer.createPipelineForShaders(
-                    "build/shaders/unlit.vert.spv",
+                    hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
                     "build/shaders/unlit.frag.spv"
                 );
-                
+
                 if (Material* material = registry.get<Material>(entity)) {
                     material->pipeline = pipeline.pipeline;
                     material->pipelineLayout = pipeline.layout;

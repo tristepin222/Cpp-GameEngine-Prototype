@@ -20,6 +20,8 @@
 #include "ecs/components/Transform.hpp"
 #include "ecs/components/Camera.hpp"
 #include "ecs/components/Grid.hpp"
+#include "ecs/components/Skeleton.hpp"
+#include "ecs/components/Animator.hpp"
 #include "renderer/VulkanRenderer.hpp"
 #include "scenes/Scene.hpp"
 #include "scenes/SceneManager.hpp"
@@ -441,6 +443,8 @@ void EditorUI::drawInspectorPanel() {
     drawTransformEditor();
     drawMeshEditor();
     drawMaterialEditor();
+    drawSkeletonEditor();
+    drawAnimatorEditor();
     drawGridEditor();
     drawCameraEditor();
 
@@ -608,6 +612,26 @@ void EditorUI::drawMeshEditor() {
                 mesh->vertexBuffer = loaded.vertexBuffer;
                 mesh->indexBuffer = loaded.indexBuffer;
                 mesh->id = loaded.id;
+
+                registry.remove<SkeletonComponent>(selectedEntity);
+                registry.remove<AnimatorComponent>(selectedEntity);
+                SkeletonComponent skeleton{};
+                AnimatorComponent animator{};
+                if (renderer.resourceManager->loadSkeletonAndAnimations(mesh->gltfPath, skeleton, animator)) {
+                    registry.emplace<SkeletonComponent>(selectedEntity, std::move(skeleton));
+                    registry.emplace<AnimatorComponent>(selectedEntity, std::move(animator));
+                }
+
+                if (auto* material = registry.get<Material>(selectedEntity)) {
+                    bool hasSkin = registry.has<SkeletonComponent>(selectedEntity);
+                    PipelineHandle pipeline = renderer.createPipelineForShaders(
+                        hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
+                        "build/shaders/unlit.frag.spv"
+                    );
+                    material->pipeline = pipeline.pipeline;
+                    material->pipelineLayout = pipeline.layout;
+                }
+
                 statusMessage = "Loaded glTF mesh successfully.";
             } catch (const std::exception& e) {
                 statusMessage = std::string("Failed to load glTF: ") + e.what();
@@ -650,6 +674,26 @@ void EditorUI::drawAssetBrowser() {
                                     mesh->vertexBuffer = loaded.vertexBuffer;
                                     mesh->indexBuffer = loaded.indexBuffer;
                                     mesh->id = loaded.id;
+
+                                    registry.remove<SkeletonComponent>(selectedEntity);
+                                    registry.remove<AnimatorComponent>(selectedEntity);
+                                    SkeletonComponent skeleton{};
+                                    AnimatorComponent animator{};
+                                    if (renderer.resourceManager->loadSkeletonAndAnimations(pathStr, skeleton, animator)) {
+                                        registry.emplace<SkeletonComponent>(selectedEntity, std::move(skeleton));
+                                        registry.emplace<AnimatorComponent>(selectedEntity, std::move(animator));
+                                    }
+
+                                    if (auto* material = registry.get<Material>(selectedEntity)) {
+                                        bool hasSkin = registry.has<SkeletonComponent>(selectedEntity);
+                                        PipelineHandle pipeline = renderer.createPipelineForShaders(
+                                            hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
+                                            "build/shaders/unlit.frag.spv"
+                                        );
+                                        material->pipeline = pipeline.pipeline;
+                                        material->pipelineLayout = pipeline.layout;
+                                    }
+
                                     statusMessage = "Assigned glTF model: " + pathStr;
                                 } catch (const std::exception& e) {
                                     statusMessage = std::string("Error: ") + e.what();
@@ -995,5 +1039,65 @@ void EditorUI::applyInputMode() {
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     } else {
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    }
+}
+
+void EditorUI::drawSkeletonEditor() {
+    SkeletonComponent* skeleton = registry.get<SkeletonComponent>(selectedEntity);
+    if (!skeleton || !CollapsingHeader("Skeleton", ImGuiTreeNodeFlags_DefaultOpen)) {
+        return;
+    }
+    
+    Text("Bones count: %d", (int)skeleton->joints.size());
+    if (TreeNode("Bones List")) {
+        for (size_t i = 0; i < skeleton->joints.size(); ++i) {
+            const auto& joint = skeleton->joints[i];
+            BulletText("[%d] %s (Parent: %d)", (int)i, joint.name.c_str(), joint.parentIndex);
+        }
+        TreePop();
+    }
+}
+
+void EditorUI::drawAnimatorEditor() {
+    AnimatorComponent* animator = registry.get<AnimatorComponent>(selectedEntity);
+    if (!animator || !CollapsingHeader("Animator", ImGuiTreeNodeFlags_DefaultOpen)) {
+        return;
+    }
+    
+    if (animator->animations.empty()) {
+        TextUnformatted("No animation clips loaded.");
+        return;
+    }
+    
+    std::vector<const char*> clipNames;
+    for (const auto& anim : animator->animations) {
+        clipNames.push_back(anim.name.c_str());
+    }
+    
+    int currentClipIdx = animator->activeAnimationIndex;
+    if (Combo("Active Animation", &currentClipIdx, clipNames.data(), static_cast<int>(clipNames.size()))) {
+        animator->activeAnimationIndex = currentClipIdx;
+        animator->currentTime = 0.0f;
+    }
+    
+    SliderFloat("Playback Speed", &animator->playbackSpeed, 0.0f, 5.0f, "%.2fx");
+    Checkbox("Looping", &animator->loop);
+    
+    if (currentClipIdx >= 0 && currentClipIdx < static_cast<int>(animator->animations.size())) {
+        const auto& activeClip = animator->animations[currentClipIdx];
+        float progress = activeClip.duration > 0.0f ? (animator->currentTime / activeClip.duration) : 0.0f;
+        ProgressBar(progress, ImVec2(-1, 0), (std::to_string(animator->currentTime) + "s / " + std::to_string(activeClip.duration) + "s").c_str());
+        
+        if (Button("Play")) {
+            animator->playbackSpeed = 1.0f;
+        }
+        SameLine();
+        if (Button("Pause")) {
+            animator->playbackSpeed = 0.0f;
+        }
+        SameLine();
+        if (Button("Reset")) {
+            animator->currentTime = 0.0f;
+        }
     }
 }

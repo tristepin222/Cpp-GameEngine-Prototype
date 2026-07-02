@@ -1,5 +1,6 @@
 #include "ecs/EntityFactory.hpp"
 #include "renderer/VulkanRenderer.hpp"
+#include "renderer/ResourceManager.hpp"
 #include "ecs/components/Transform.hpp"
 #include "ecs/components/Name.hpp"
 #include "ecs/components/PrimitiveType.hpp"
@@ -9,6 +10,8 @@
 #include "ecs/components/inputComponent.hpp"
 #include "ecs/components/Grid.hpp"
 #include "ecs/components/primitives.hpp"
+#include "ecs/components/Skeleton.hpp"
+#include "ecs/components/Animator.hpp"
 #include <GLFW/glfw3.h>
 #include <stdexcept>
 
@@ -169,5 +172,45 @@ namespace EntityFactory {
 
         uploadMesh(registry, renderer, grid);
         return grid;
+    }
+
+    Entity spawnAnimatedModel(Registry& registry, VulkanRenderer& renderer, const std::string& name, const std::string& gltfPath, const glm::vec3& position) {
+        Entity entity = registry.create();
+        if (entity.getId() == Entity::INVALID_ENTITY) {
+            return Entity();
+        }
+
+        registry.emplace<Transform>(entity, Transform{ position });
+        registry.emplace<Name>(entity, Name{ name });
+
+        // Load Mesh using resource manager
+        Mesh mesh = renderer.resourceManager->loadMesh(gltfPath, renderer);
+        registry.emplace<Mesh>(entity, std::move(mesh));
+
+        // Check if there is a skeleton and animations
+        SkeletonComponent skeleton{};
+        AnimatorComponent animator{};
+        bool hasSkin = renderer.resourceManager->loadSkeletonAndAnimations(gltfPath, skeleton, animator);
+
+        Material material{ glm::vec4(1.0f) };
+        PipelineHandle pipeline;
+        if (hasSkin) {
+            pipeline = renderer.createPipelineForShaders(
+                "build/shaders/skinned.vert.spv",
+                "build/shaders/unlit.frag.spv"
+            );
+            registry.emplace<SkeletonComponent>(entity, std::move(skeleton));
+            registry.emplace<AnimatorComponent>(entity, std::move(animator));
+        } else {
+            pipeline = renderer.createPipelineForShaders(
+                "build/shaders/unlit.vert.spv",
+                "build/shaders/unlit.frag.spv"
+            );
+        }
+        material.pipeline = pipeline.pipeline;
+        material.pipelineLayout = pipeline.layout;
+        registry.emplace<Material>(entity, std::move(material));
+
+        return entity;
     }
 }

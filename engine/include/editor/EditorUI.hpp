@@ -109,6 +109,14 @@ private:
      */
     void drawCameraEditor();
     /**
+     * @brief Renders inline controls for Skeleton component fields.
+     */
+    void drawSkeletonEditor();
+    /**
+     * @brief Renders inline controls for Animator component fields.
+     */
+    void drawAnimatorEditor();
+    /**
      * @brief Draws a styled banner title inside component panels.
      * @param title Header title text.
      */

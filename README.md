@@ -47,6 +47,7 @@ To understand the engineering behind this prototype, explore the detailed docume
 *   **[Custom ECS Engine](docs/ecs_system.md)**: Registry, EntityManager, dense `ComponentStorage` vectors, swap-remove mechanics, compile-time views, and Structure of Arrays (SoA) memory optimizations.
 *   **[Vulkan Graphics Pipeline](docs/vulkan_renderer.md)**: Custom API wrappers, double-buffered frame synchronization (fences/semaphores), pipeline assembly, instanced drawing batch loop, and push constant parameters.
 *   **[Editor UI & Viewport Raycasting](docs/editor_ui.md)**: ImGui backend integration, viewport coordinate translation math (unprojecting NDC space), ray-sphere intersection solver, and JSON scene parser.
+*   **[Skeletal Animation & Skinning](docs/animation_system.md)** [PLAN]: Linear Blend Skinning (LBS) math, keyframe translation/rotation (SLERP) interpolation, hierarchical forward kinematics (FK), and Inverse Kinematics (IK) solvers.
 
 ---
 

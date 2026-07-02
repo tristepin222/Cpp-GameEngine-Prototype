@@ -5,6 +5,8 @@
 #include <unordered_map>
 #include <memory>
 #include "ecs/components/Mesh.hpp"
+#include "ecs/components/Skeleton.hpp"
+#include "ecs/components/Animator.hpp"
 
 class VulkanRenderer;
 
@@ -61,6 +63,15 @@ public:
      * @return The loaded Mesh component.
      */
     Mesh loadMesh(const std::string& path, VulkanRenderer& renderer);
+
+    /**
+     * @brief Loads skeletal skin and animations from a glTF file.
+     * @param path The glTF/glb file path.
+     * @param skeleton Target SkeletonComponent to populate.
+     * @param animator Target AnimatorComponent to populate.
+     * @return True if skin/animations were loaded successfully.
+     */
+    bool loadSkeletonAndAnimations(const std::string& path, SkeletonComponent& skeleton, AnimatorComponent& animator);
 
     /**
      * @brief Initializes the default 1x1 white texture for untextured material fallbacks.

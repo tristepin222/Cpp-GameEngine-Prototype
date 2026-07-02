@@ -333,12 +333,16 @@ Mesh ResourceManager::loadMesh(const std::string& path, VulkanRenderer& renderer
             cgltf_accessor* pos_accessor = nullptr;
             cgltf_accessor* norm_accessor = nullptr;
             cgltf_accessor* uv_accessor = nullptr;
+            cgltf_accessor* joints_accessor = nullptr;
+            cgltf_accessor* weights_accessor = nullptr;
 
             for (cgltf_size k = 0; k < prim.attributes_count; ++k) {
                 cgltf_attribute& attr = prim.attributes[k];
                 if (attr.type == cgltf_attribute_type_position) pos_accessor = attr.data;
                 else if (attr.type == cgltf_attribute_type_normal) norm_accessor = attr.data;
                 else if (attr.type == cgltf_attribute_type_texcoord) uv_accessor = attr.data;
+                else if (attr.type == cgltf_attribute_type_joints) joints_accessor = attr.data;
+                else if (attr.type == cgltf_attribute_type_weights) weights_accessor = attr.data;
             }
 
             if (!pos_accessor) continue;
@@ -361,6 +365,23 @@ Mesh ResourceManager::loadMesh(const std::string& path, VulkanRenderer& renderer
                     float uv[2]{};
                     cgltf_accessor_read_float(uv_accessor, k, uv, 2);
                     vert.uv = glm::vec2(uv[0], uv[1]);
+                }
+
+                if (joints_accessor) {
+                    float joints[4]{};
+                    cgltf_accessor_read_float(joints_accessor, k, joints, 4);
+                    vert.boneIDs = glm::ivec4(
+                        static_cast<int>(joints[0]),
+                        static_cast<int>(joints[1]),
+                        static_cast<int>(joints[2]),
+                        static_cast<int>(joints[3])
+                    );
+                }
+
+                if (weights_accessor) {
+                    float weights[4]{};
+                    cgltf_accessor_read_float(weights_accessor, k, weights, 4);
+                    vert.boneWeights = glm::vec4(weights[0], weights[1], weights[2], weights[3]);
                 }
 
                 mesh.vertices.push_back(vert);
@@ -428,4 +449,130 @@ void ResourceManager::cleanup(VkDevice device) {
     }
     textureCache.clear();
     meshCache.clear();
+}
+
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/quaternion.hpp>
+
+bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, SkeletonComponent& skeleton, AnimatorComponent& animator) {
+    cgltf_options options{};
+    cgltf_data* data = nullptr;
+    cgltf_result result = cgltf_parse_file(&options, path.c_str(), &data);
+    if (result != cgltf_result_success) {
+        return false;
+    }
+
+    result = cgltf_load_buffers(&options, data, path.c_str());
+    if (result != cgltf_result_success) {
+        cgltf_free(data);
+        return false;
+    }
+
+    if (data->skins_count == 0) {
+        cgltf_free(data);
+        return false;
+    }
+
+    cgltf_skin& skin = data->skins[0];
+    std::unordered_map<cgltf_node*, int> nodeToJointIndex;
+
+    // 1. Load Joint Hierarchies & IBMs
+    skeleton.joints.resize(skin.joints_count);
+    for (cgltf_size i = 0; i < skin.joints_count; ++i) {
+        cgltf_node* jointNode = skin.joints[i];
+        Joint& joint = skeleton.joints[i];
+        joint.name = jointNode->name ? jointNode->name : "Joint_" + std::to_string(i);
+        joint.parentIndex = -1;
+
+        nodeToJointIndex[jointNode] = static_cast<int>(i);
+
+        // Read Inverse Bind Matrix (IBM)
+        if (skin.inverse_bind_matrices) {
+            cgltf_accessor_read_float(skin.inverse_bind_matrices, i, &joint.inverseBindMatrix[0][0], 16);
+        } else {
+            joint.inverseBindMatrix = glm::mat4(1.0f);
+        }
+
+        // Read Local Transform from TRS properties
+        glm::vec3 translation(0.0f);
+        glm::quat rotation(1.0f, 0.0f, 0.0f, 0.0f);
+        glm::vec3 scale(1.0f);
+
+        if (jointNode->has_translation) {
+            translation = glm::vec3(jointNode->translation[0], jointNode->translation[1], jointNode->translation[2]);
+        }
+        if (jointNode->has_rotation) {
+            rotation = glm::quat(jointNode->rotation[3], jointNode->rotation[0], jointNode->rotation[1], jointNode->rotation[2]);
+        }
+        if (jointNode->has_scale) {
+            scale = glm::vec3(jointNode->scale[0], jointNode->scale[1], jointNode->scale[2]);
+        }
+
+        glm::mat4 tMat = glm::translate(glm::mat4(1.0f), translation);
+        glm::mat4 rMat = glm::toMat4(rotation);
+        glm::mat4 sMat = glm::scale(glm::mat4(1.0f), scale);
+        joint.localTransform = tMat * rMat * sMat;
+    }
+
+    // Resolve Parent Indices
+    for (cgltf_size i = 0; i < skin.joints_count; ++i) {
+        cgltf_node* jointNode = skin.joints[i];
+        if (jointNode->parent) {
+            auto it = nodeToJointIndex.find(jointNode->parent);
+            if (it != nodeToJointIndex.end()) {
+                skeleton.joints[i].parentIndex = it->second;
+            }
+        }
+    }
+
+    // 2. Load Animation Clips & Channels
+    animator.animations.resize(data->animations_count);
+    for (cgltf_size i = 0; i < data->animations_count; ++i) {
+        cgltf_animation& gltfAnim = data->animations[i];
+        AnimationClip& clip = animator.animations[i];
+        clip.name = gltfAnim.name ? gltfAnim.name : "Animation_" + std::to_string(i);
+        clip.duration = 0.0f;
+
+        for (cgltf_size j = 0; j < gltfAnim.channels_count; ++j) {
+            cgltf_animation_channel& channel = gltfAnim.channels[j];
+            cgltf_node* targetNode = channel.target_node;
+            if (!targetNode) continue;
+
+            auto it = nodeToJointIndex.find(targetNode);
+            if (it == nodeToJointIndex.end()) continue; // Channel targets a node outside our joint set
+
+            AnimationChannel animChannel{};
+            animChannel.jointIndex = it->second;
+
+            cgltf_animation_sampler* sampler = channel.sampler;
+            size_t keyframeCount = sampler->input->count;
+
+            for (size_t k = 0; k < keyframeCount; ++k) {
+                float time = 0.0f;
+                cgltf_accessor_read_float(sampler->input, k, &time, 1);
+                clip.duration = std::max(clip.duration, time);
+
+                float val[4]{};
+                if (channel.target_path == cgltf_animation_path_type_translation) {
+                    cgltf_accessor_read_float(sampler->output, k, val, 3);
+                    animChannel.translationKeys.push_back({ time, glm::vec3(val[0], val[1], val[2]) });
+                } else if (channel.target_path == cgltf_animation_path_type_rotation) {
+                    cgltf_accessor_read_float(sampler->output, k, val, 4);
+                    animChannel.rotationKeys.push_back({ time, glm::quat(val[3], val[0], val[1], val[2]) });
+                } else if (channel.target_path == cgltf_animation_path_type_scale) {
+                    cgltf_accessor_read_float(sampler->output, k, val, 3);
+                    animChannel.scaleKeys.push_back({ time, glm::vec3(val[0], val[1], val[2]) });
+                }
+            }
+
+            clip.channels.push_back(std::move(animChannel));
+        }
+    }
+
+    if (!animator.animations.empty()) {
+        animator.activeAnimationIndex = 0; // Default active clip
+    }
+
+    cgltf_free(data);
+    return true;
 }

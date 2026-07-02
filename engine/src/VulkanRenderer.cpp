@@ -109,6 +109,7 @@ void VulkanRenderer::setupDescriptors() {
     descriptors.create(device.getDevice());
     descriptors.createCameraDescriptorSetLayout();
     descriptors.createTextureDescriptorSetLayout();
+    descriptors.createJointsDescriptorSetLayout();
 }
 
 /**
@@ -366,7 +367,8 @@ PipelineHandle VulkanRenderer::createPipelineForShaders(const std::string& vert,
     auto pipe = std::make_unique<VulkanPipeline>();
     std::vector<VkDescriptorSetLayout> layouts = {
         descriptors.getCameraDescriptorSetLayout(),
-        descriptors.getTextureDescriptorSetLayout()
+        descriptors.getTextureDescriptorSetLayout(),
+        descriptors.getJointsDescriptorSetLayout()
     };
     pipe->create(device.getDevice(), swapchain.getExtent(), swapchain.getRenderPass(),
         vert, frag, layouts);

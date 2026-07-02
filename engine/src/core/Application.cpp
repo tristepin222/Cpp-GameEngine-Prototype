@@ -7,6 +7,7 @@
 #include "ecs/systems/RenderSystem.hpp"
 #include "ecs/systems/CameraSystem.hpp"
 #include "ecs/systems/InputSystem.hpp"
+#include "ecs/systems/AnimationSystem.hpp"
 #include "scenes/Scene.hpp"
 #include "scenes/JSONUtils.hpp"
 #include "scenes/DefaultScene.hpp"
@@ -68,9 +69,11 @@ namespace Engine {
         renderSystem = std::make_shared<RenderSystem>(registry, *renderer);
         auto cameraSystem = std::make_shared<CameraSystem>(registry, *renderer);
         auto inputSystem = std::make_shared<InputSystem>(registry, *renderer, editorMode);
+        auto animationSystem = std::make_shared<AnimationSystem>(registry, *renderer);
 
         systemManager.addSystem(inputSystem);
         systemManager.addSystem(cameraSystem);
+        systemManager.addSystem(animationSystem);
         systemManager.addSystem(renderSystem);
 
         // Setup initial editor fly mode based on whether editor UI is present
