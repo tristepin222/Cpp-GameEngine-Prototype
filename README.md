@@ -34,6 +34,8 @@ For a comprehensive explanation of execution flow and frame sequence, see the [A
 6.  **3D Viewport Gizmos (ImGuizmo)**: Supports real-time translation, rotation, and scaling directly on selected entities in the 3D viewport, with automatic matrix decomposition back to ECS component transforms.
 7.  **Raycast Viewport Picking**: Mathematical unprojection of 2D screen-space mouse coordinates to 3D world-space picking rays, resolving bounding sphere intersects to select entities directly in the viewport.
 8.  **Generic Scene Serialization**: A component-agnostic serialization registry allowing dynamic registration of custom components so they save/load to JSON automatically without modifying core engine logic.
+9.  **VRAM Resource Manager & Asset Pipeline** [NEW]: Integrated asset importer utilizing `cgltf` (glTF models) and `stb_image` (textures). Features automatic layout transitions, staging upload buffers, 1x1 color fallbacks, and reference caching to avoid duplicate VRAM allocations.
+10. **Application Lifecycle Encapsulation & Standalone Mode** [NEW]: Fully wraps Vulkan/GLFW bootstrapping and tick updates inside an `Engine::Application` base class. Supports standalone fullscreen play mode and project settings overrides via a simple `project.settings` configuration.
 
 ---
 

@@ -36,6 +36,7 @@ target_link_libraries(imguizmo PRIVATE imgui glm::glm)
 
 set(ENGINE_SOURCES
     src/VulkanRenderer.cpp
+    src/core/Application.cpp
     src/core/FrameManager.cpp
     src/core/PipelineBuilder.cpp
     src/core/SwapchainManager.cpp
@@ -54,6 +55,7 @@ set(ENGINE_SOURCES
     src/scenes/JSONUtils.cpp
     src/scenes/SceneManager.cpp
     src/scenes/SceneSerializer.cpp
+    src/renderer/ResourceManager.cpp
 )
 
 add_library(engine STATIC ${ENGINE_SOURCES})
@@ -62,6 +64,8 @@ add_library(engine STATIC ${ENGINE_SOURCES})
 target_include_directories(engine PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${cgltf_SOURCE_DIR}
+    ${stb_SOURCE_DIR}
 )
 
 target_link_libraries(engine PUBLIC

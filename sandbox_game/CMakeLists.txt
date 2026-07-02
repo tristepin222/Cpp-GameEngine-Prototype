@@ -4,8 +4,6 @@ project(SandboxGame LANGUAGES CXX)
 # Executable target sources
 set(SANDBOX_SOURCES
     src/main.cpp
-    src/scenes/TestScene.cpp
-    src/scenes/TestScene.hpp
 )
 
 add_executable(sandbox_game ${SANDBOX_SOURCES})
@@ -35,6 +33,13 @@ add_custom_command(TARGET sandbox_game POST_BUILD
     "${CMAKE_CURRENT_SOURCE_DIR}/assets"
     "$<TARGET_FILE_DIR:sandbox_game>/assets"
     COMMENT "Copying game assets to sandbox run folder..."
+)
+
+add_custom_command(TARGET sandbox_game POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy
+    "${CMAKE_CURRENT_SOURCE_DIR}/project.settings"
+    "$<TARGET_FILE_DIR:sandbox_game>/project.settings"
+    COMMENT "Copying project settings to sandbox run folder..."
 )
 
 # Rename binary output target name to 'game' or keep 'sandbox_game'

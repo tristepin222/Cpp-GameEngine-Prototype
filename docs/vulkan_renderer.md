@@ -71,10 +71,22 @@ Our RAII wrappers coordinates resource disposal via an explicit cleanup sequence
 ## Shader & Graphics Pipeline Compilation
 
 Shaders are written in GLSL and compiled to binary SPIR-V bytecode. The build process uses the `glslc` compiler to build:
-*   `unlit.vert` / `unlit.frag` -> `unlit.vert.spv` / `unlit.frag.spv` (handles standard mesh drawing)
+*   `unlit.vert` / `unlit.frag` -> `unlit.vert.spv` / `unlit.frag.spv` (handles textured and colored mesh drawing)
 *   `grid.vert` / `grid.frag` -> `grid.vert.spv` / `grid.frag.spv` (handles infinite grid rendering)
 
-The [PipelineBuilder](../engine/src/core/PipelineBuilder.hpp) dynamically builds the graphics pipelines. It links vertex input bindings, rasterization settings (cull modes, depth test enabling), color blending, and shader modules into a single `VkPipeline` state.
+The [PipelineBuilder](../engine/src/core/PipelineBuilder.hpp) dynamically builds the graphics pipelines. It links vertex input layouts, rasterization configurations (cull modes, polygon drawing modes), color blending, and shader modules into a single `VkPipeline` state.
+
+### Depth Buffering & Depth Clears
+To ensure objects render correctly in 3D depth order:
+1. **Swapchain Depth Buffer**: The `VulkanSwapchain` queries the GPU to find a supported depth format (e.g., `VK_FORMAT_D32_SFLOAT`). It allocates a GPU-local `VkImage`, assigns a `VkDeviceMemory` allocation, and creates a `VkImageView`.
+2. **RenderPass Attachment**: The main rendering pass is configured with **2 attachments**: Color (index 0) and Depth/Stencil (index 1). The subpass is configured to perform depth write and read tests.
+3. **Pipeline Depth Test**: The pipeline assembly enables `VkPipelineDepthStencilStateCreateInfo` with `depthTestEnable = VK_TRUE` and `depthWriteEnable = VK_TRUE`.
+4. **Depth Clears**: During `RenderSystem::drawFrame`, the command recorder specifies **2 clear values**: color clear value (e.g. dark grey) and depth clear value (`1.0f` representing maximum distance depth).
+
+### Descriptor Set Layouts (Camera & Textures)
+The engine binds graphics pipeline properties using **two separate descriptor sets**:
+* **Descriptor Set 0 (Global Uniforms)**: Binds the global Camera Uniform Buffer (containing View and Projection matrices) to binding 0. Bound once per frame.
+* **Descriptor Set 1 (Material Textures)**: Binds the texture's `VkImageView` and `VkSampler` to binding 0. Bound per material batch. A fallback 1x1 white texture descriptor is bound automatically if the entity's material doesn't specify a texture path.
 
 ---
 

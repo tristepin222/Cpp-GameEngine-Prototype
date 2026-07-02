@@ -143,20 +143,17 @@ void VulkanPipeline::create(VkDevice dev,
     attributes[5].format = VK_FORMAT_R32G32B32A32_SFLOAT;
     attributes[5].offset = sizeof(glm::mat4);
 
-    // Attribute description
-    VkVertexInputAttributeDescription attribute{};
-    attribute.location = 0; // matches 'inPos' in shader
-    attribute.binding = 0;  // same as above
-    attribute.format = VK_FORMAT_R32G32B32_SFLOAT; // vec3
-    attribute.offset = offsetof(Vertex, position);
+    // Vertex binding and attributes from Vertex structure
+    auto bindingDescription = Vertex::getBindingDescription();
+    auto attributeDescriptions = Vertex::getAttributeDescriptions();
 
     // Vertex input info
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.vertexBindingDescriptionCount = 1;
-    vertexInputInfo.pVertexBindingDescriptions = bindings;
-    vertexInputInfo.vertexAttributeDescriptionCount = 1;
-    vertexInputInfo.pVertexAttributeDescriptions = &attribute;
+    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
     // --- Input Assembly
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -262,7 +259,7 @@ void VulkanPipeline::create(VkDevice dev,
     pipelineInfo.pRasterizationState = &rasterizer;
     pipelineInfo.pMultisampleState = &multisampling;
     pipelineInfo.pColorBlendState = &colorBlending;
-    pipelineInfo.pDepthStencilState = nullptr; // Optional
+    pipelineInfo.pDepthStencilState = &depthStencil;
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = pipelineLayout;
     pipelineInfo.renderPass = renderPass;

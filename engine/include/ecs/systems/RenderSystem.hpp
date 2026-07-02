@@ -177,13 +177,18 @@ private:
             // --- Bind pipeline
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mat->pipeline);
 
-            // --- Bind descriptor sets (camera)
+            // --- Bind descriptor sets (camera at set 0, material sampler at set 1)
+            VkDescriptorSet descriptorSets[2] = {
+                cameraSet,
+                mat->descriptorSet != VK_NULL_HANDLE ? mat->descriptorSet : renderer.getDefaultTextureSet()
+            };
+
             vkCmdBindDescriptorSets(cmd,
                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                 mat->pipelineLayout,
                 0,
-                1,
-                &cameraSet,
+                2,
+                descriptorSets,
                 0,
                 nullptr);
 

@@ -82,6 +82,15 @@ private:
     /** @brief Render pass used for frame clearing and drawing. */
     VkRenderPass renderPass = VK_NULL_HANDLE;
 
+    /** @brief GPU depth image allocation handle. */
+    VkImage depthImage = VK_NULL_HANDLE;
+    /** @brief GPU depth memory handle. */
+    VkDeviceMemory depthImageMemory = VK_NULL_HANDLE;
+    /** @brief Depth image view wrapper. */
+    VkImageView depthImageView = VK_NULL_HANDLE;
+    /** @brief Selected depth format. */
+    VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
+
 private:
     /**
      * @brief Establishes the KHR swapchain handle.
@@ -100,6 +109,22 @@ private:
      * @brief Creates framebuffers linking image views to the render pass.
      */
     void createFramebuffers();
+    /**
+     * @brief Creates depth buffers and views.
+     */
+    void createDepthResources();
+    /**
+     * @brief Helper to query and select best depth format.
+     */
+    VkFormat findDepthFormat();
+    /**
+     * @brief Helper to find supported depth formats.
+     */
+    VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
+    /**
+     * @brief Helper to query suitable GPU memory index.
+     */
+    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
     /**
      * @brief Selects optimal color format and color space.

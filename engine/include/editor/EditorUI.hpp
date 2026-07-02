@@ -93,6 +93,14 @@ private:
      */
     void drawMaterialEditor();
     /**
+     * @brief Renders the asset browser panel.
+     */
+    void drawAssetBrowser();
+    /**
+     * @brief Renders inline controls for Mesh component fields.
+     */
+    void drawMeshEditor();
+    /**
      * @brief Renders inline controls for Grid component fields.
      */
     void drawGridEditor();

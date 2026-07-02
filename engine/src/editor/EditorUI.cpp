@@ -23,6 +23,8 @@
 #include "renderer/VulkanRenderer.hpp"
 #include "scenes/Scene.hpp"
 #include "scenes/SceneManager.hpp"
+#include "renderer/ResourceManager.hpp"
+#include <filesystem>
 #include "ImGuizmo.h"
 
 using namespace ImGui;
@@ -132,6 +134,7 @@ void EditorUI::drawPanels() {
 
     drawHierarchyPanel();
     drawInspectorPanel();
+    drawAssetBrowser();
 
     drawGizmo();
     handleViewportPicking();
@@ -436,6 +439,7 @@ void EditorUI::drawInspectorPanel() {
     drawSectionHeader(name->value.c_str());
 
     drawTransformEditor();
+    drawMeshEditor();
     drawMaterialEditor();
     drawGridEditor();
     drawCameraEditor();
@@ -553,7 +557,7 @@ void EditorUI::drawTransformEditor() {
 }
 
 /**
- * @brief Color picking editor for Materials.
+ * @brief Color and texture picking editor for Materials.
  */
 void EditorUI::drawMaterialEditor() {
     Material* material = registry.get<Material>(selectedEntity);
@@ -565,6 +569,131 @@ void EditorUI::drawMaterialEditor() {
     if (ColorEdit4("Color", color)) {
         material->color = { color[0], color[1], color[2], color[3] };
     }
+
+    char textureBuf[256]{};
+    snprintf(textureBuf, sizeof(textureBuf), "%s", material->texturePath.c_str());
+    if (InputText("Texture Path", textureBuf, sizeof(textureBuf))) {
+        material->texturePath = textureBuf;
+        if (!material->texturePath.empty()) {
+            if (auto* tex = renderer.resourceManager->loadTexture(material->texturePath, renderer)) {
+                material->descriptorSet = tex->descriptorSet;
+            }
+        } else {
+            material->descriptorSet = VK_NULL_HANDLE;
+        }
+    }
+}
+
+/**
+ * @brief Renders inline controls for editing Mesh geometry and glTF paths.
+ */
+void EditorUI::drawMeshEditor() {
+    Mesh* mesh = registry.get<Mesh>(selectedEntity);
+    if (!mesh || registry.has<Grid>(selectedEntity) || !CollapsingHeader("Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
+        return;
+    }
+
+    char gltfBuf[256]{};
+    snprintf(gltfBuf, sizeof(gltfBuf), "%s", mesh->gltfPath.c_str());
+    if (InputText("glTF Path", gltfBuf, sizeof(gltfBuf))) {
+        mesh->gltfPath = gltfBuf;
+    }
+    SameLine();
+    if (Button("Load glTF")) {
+        if (!mesh->gltfPath.empty()) {
+            try {
+                Mesh loaded = renderer.resourceManager->loadMesh(mesh->gltfPath, renderer);
+                mesh->vertices = loaded.vertices;
+                mesh->indices = loaded.indices;
+                mesh->vertexBuffer = loaded.vertexBuffer;
+                mesh->indexBuffer = loaded.indexBuffer;
+                mesh->id = loaded.id;
+                statusMessage = "Loaded glTF mesh successfully.";
+            } catch (const std::exception& e) {
+                statusMessage = std::string("Failed to load glTF: ") + e.what();
+            }
+        }
+    }
+
+    Text("Vertices: %d, Indices: %d", (int)mesh->vertices.size(), (int)mesh->indices.size());
+}
+
+/**
+ * @brief Renders the asset browser panel.
+ */
+void EditorUI::drawAssetBrowser() {
+    Begin("Asset Browser");
+
+    if (!std::filesystem::exists("assets")) {
+        std::filesystem::create_directories("assets");
+        std::filesystem::create_directories("assets/models");
+        std::filesystem::create_directories("assets/textures");
+    }
+
+    if (TreeNodeEx("Models", ImGuiTreeNodeFlags_DefaultOpen)) {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator("assets")) {
+            if (entry.is_regular_file()) {
+                auto ext = entry.path().extension().string();
+                if (ext == ".gltf" || ext == ".glb") {
+                    std::string pathStr = entry.path().generic_string();
+                    BulletText("%s", entry.path().filename().string().c_str());
+                    if (hasSelection) {
+                        SameLine();
+                        PushID(pathStr.c_str());
+                        if (Button("Use Model")) {
+                            if (auto* mesh = registry.get<Mesh>(selectedEntity)) {
+                                mesh->gltfPath = pathStr;
+                                try {
+                                    Mesh loaded = renderer.resourceManager->loadMesh(pathStr, renderer);
+                                    mesh->vertices = loaded.vertices;
+                                    mesh->indices = loaded.indices;
+                                    mesh->vertexBuffer = loaded.vertexBuffer;
+                                    mesh->indexBuffer = loaded.indexBuffer;
+                                    mesh->id = loaded.id;
+                                    statusMessage = "Assigned glTF model: " + pathStr;
+                                } catch (const std::exception& e) {
+                                    statusMessage = std::string("Error: ") + e.what();
+                                }
+                            }
+                        }
+                        PopID();
+                    }
+                }
+            }
+        }
+        TreePop();
+    }
+
+    Separator();
+
+    if (TreeNodeEx("Textures", ImGuiTreeNodeFlags_DefaultOpen)) {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator("assets")) {
+            if (entry.is_regular_file()) {
+                auto ext = entry.path().extension().string();
+                if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga") {
+                    std::string pathStr = entry.path().generic_string();
+                    BulletText("%s", entry.path().filename().string().c_str());
+                    if (hasSelection) {
+                        SameLine();
+                        PushID(pathStr.c_str());
+                        if (Button("Use Texture")) {
+                            if (auto* material = registry.get<Material>(selectedEntity)) {
+                                material->texturePath = pathStr;
+                                if (auto* tex = renderer.resourceManager->loadTexture(pathStr, renderer)) {
+                                    material->descriptorSet = tex->descriptorSet;
+                                    statusMessage = "Assigned texture: " + pathStr;
+                                }
+                            }
+                        }
+                        PopID();
+                    }
+                }
+            }
+        }
+        TreePop();
+    }
+
+    End();
 }
 
 /**

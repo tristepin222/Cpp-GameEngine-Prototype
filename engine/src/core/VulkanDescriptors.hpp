@@ -35,6 +35,11 @@ public:
      */
     void createCameraDescriptorSetLayout();
 
+    /**
+     * @brief Creates descriptor set layout for texture samplers.
+     */
+    void createTextureDescriptorSetLayout();
+
     // Allocate and update descriptor sets for a uniform buffer
     /**
      * @brief Allocates and binds descriptor sets for the camera UBO.
@@ -42,6 +47,14 @@ public:
      * @param bufferSize Size of UBO buffer.
      */
     void allocateCameraDescriptorSets(VkBuffer uniformBuffer, VkDeviceSize bufferSize);
+
+    /**
+     * @brief Allocates and binds descriptor set for a texture sampler.
+     * @param descriptorSet Reference to target descriptor set to allocate.
+     * @param imageView The image view to bind.
+     * @param sampler The sampler to bind.
+     */
+    void allocateTextureDescriptorSet(VkDescriptorSet& descriptorSet, VkImageView imageView, VkSampler sampler);
 
     // Cleanup
     /**
@@ -55,6 +68,11 @@ public:
      * @return VkDescriptorSetLayout handle.
      */
     VkDescriptorSetLayout getCameraDescriptorSetLayout() const { return cameraDescriptorSetLayout; }
+    /**
+     * @brief Gets raw texture descriptor set layout.
+     * @return VkDescriptorSetLayout handle.
+     */
+    VkDescriptorSetLayout getTextureDescriptorSetLayout() const { return textureDescriptorSetLayout; }
     /**
      * @brief Gets raw camera descriptor set.
      * @return VkDescriptorSet handle.
@@ -74,6 +92,8 @@ private:
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     /** @brief Descriptor set layout allocated for camera. */
     VkDescriptorSetLayout cameraDescriptorSetLayout = VK_NULL_HANDLE;
+    /** @brief Descriptor set layout allocated for textures. */
+    VkDescriptorSetLayout textureDescriptorSetLayout = VK_NULL_HANDLE;
     /** @brief Descriptor set allocated for camera. */
     VkDescriptorSet cameraDescriptorSet = VK_NULL_HANDLE;
 };

@@ -1,4 +1,5 @@
 #include "../include/renderer/VulkanRenderer.hpp"
+#include "renderer/ResourceManager.hpp"
 #include <iostream>
 
 /**
@@ -9,6 +10,8 @@
 VulkanRenderer::VulkanRenderer(GLFWwindow* win, bool enableValidation)
     : window(win), enableValidationLayers(enableValidation)
 {
+    resourceManager = std::make_unique<ResourceManager>();
+
     // Set up window resize callback
     glfwSetFramebufferSizeCallback(window, [](GLFWwindow* window, int width, int height) {
         auto renderer = reinterpret_cast<VulkanRenderer*>(glfwGetWindowUserPointer(window));
@@ -42,8 +45,8 @@ void VulkanRenderer::initVulkan() {
     createDeviceAndQueues();        // pick physical device using surface, create logical device
     createSwapchain();              // create swapchain (depends on device + surface)
     setupDescriptors();
-    createBuffersAndPipelines();
     createCommandsAndSync();
+    createBuffersAndPipelines();
 }
 
 // -----------------------------
@@ -105,6 +108,7 @@ void VulkanRenderer::createSwapchain() {
 void VulkanRenderer::setupDescriptors() {
     descriptors.create(device.getDevice());
     descriptors.createCameraDescriptorSetLayout();
+    descriptors.createTextureDescriptorSetLayout();
 }
 
 /**
@@ -114,6 +118,9 @@ void VulkanRenderer::createBuffersAndPipelines() {
     createCameraUBO();
     descriptors.allocateCameraDescriptorSets(cameraBuffer.get(), cameraBuffer.getSize());
     cameraDescriptorSet = descriptors.getCameraDescriptorSet();
+
+    // Create the default white texture fallback
+    resourceManager->createDefaultWhiteTexture(*this);
 
     createInstanceBuffer(10000);
     createPipeline();
@@ -165,15 +172,18 @@ void VulkanRenderer::beginFrame() {
     cmdManager.beginFrame();
     VkCommandBuffer cmd = cmdManager.getCurrentCommandBuffer();
 
-    VkClearValue clearColor = { {{0.1f, 0.1f, 0.1f, 1.0f}} };
+    VkClearValue clearValues[2]{};
+    clearValues[0].color = { {0.1f, 0.1f, 0.1f, 1.0f} };
+    clearValues[1].depthStencil = { 1.0f, 0 };
+
     VkRenderPassBeginInfo rpInfo{};
     rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     rpInfo.renderPass = swapchain.getRenderPass();
     rpInfo.framebuffer = swapchain.getFramebuffers().at(currentImageIndex);
     rpInfo.renderArea.offset = { 0, 0 };
     rpInfo.renderArea.extent = swapchain.getExtent();
-    rpInfo.clearValueCount = 1;
-    rpInfo.pClearValues = &clearColor;
+    rpInfo.clearValueCount = 2;
+    rpInfo.pClearValues = clearValues;
 
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -332,6 +342,10 @@ void VulkanRenderer::cleanup() {
 
     destroyDebugMessenger();
 
+    if (resourceManager) {
+        resourceManager->cleanup(device.getDevice());
+    }
+
     pipeline.destroy();
     descriptors.destroy();
     instanceBuffer.destroy();
@@ -350,8 +364,12 @@ void VulkanRenderer::cleanup() {
  */
 PipelineHandle VulkanRenderer::createPipelineForShaders(const std::string& vert, const std::string& frag) {
     auto pipe = std::make_unique<VulkanPipeline>();
+    std::vector<VkDescriptorSetLayout> layouts = {
+        descriptors.getCameraDescriptorSetLayout(),
+        descriptors.getTextureDescriptorSetLayout()
+    };
     pipe->create(device.getDevice(), swapchain.getExtent(), swapchain.getRenderPass(),
-        vert, frag, { descriptors.getCameraDescriptorSetLayout() });
+        vert, frag, layouts);
 
     VkPipeline p = pipe->get();
     VkPipelineLayout l = pipe->getLayout();
@@ -466,5 +484,16 @@ void VulkanRenderer::destroyDebugMessenger() {
     if (func != nullptr) {
         func(device.getInstance(), debugMessenger, nullptr);
     }
+}
+
+/**
+ * @brief Retrieves the default white texture descriptor set fallback.
+ * @return VkDescriptorSet handle.
+ */
+VkDescriptorSet VulkanRenderer::getDefaultTextureSet() const {
+    if (resourceManager) {
+        return resourceManager->getDefaultWhiteTexture()->descriptorSet;
+    }
+    return VK_NULL_HANDLE;
 }
 

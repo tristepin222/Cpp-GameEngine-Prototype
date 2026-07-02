@@ -2,6 +2,7 @@
 #include "scenes/ComponentSerializerRegistry.hpp"
 #include "ecs/EntityFactory.hpp"
 #include "renderer/VulkanRenderer.hpp"
+#include "renderer/ResourceManager.hpp"
 #include "ecs/components/Transform.hpp"
 #include "ecs/components/Name.hpp"
 #include "ecs/components/PrimitiveType.hpp"
@@ -104,34 +105,43 @@ static bool registerBuiltinComponents() {
     reg.registerComponent(
         "Primitive",
         [](Registry& registry, Entity entity, std::ostream& out, int indent) {
-            if (auto* primitive = registry.get<PrimitiveType>(entity)) {
+            if (auto* mesh = registry.get<Mesh>(entity)) {
                 if (registry.has<Grid>(entity)) {
                     return; // Skip grid mesh details
                 }
-                
-                std::string primStr = "Cube";
-                if (primitive->kind == PrimitiveKind::Triangle) primStr = "Triangle";
-                else if (primitive->kind == PrimitiveKind::Quad) primStr = "Quad";
-                
-                out << ",\n" << JSONUtils::indent(indent) << "\"entityType\": " << JSONUtils::quote("Primitive") << ",\n";
-                out << JSONUtils::indent(indent) << "\"primitive\": " << JSONUtils::quote(primStr);
+                if (!mesh->gltfPath.empty()) {
+                    out << ",\n" << JSONUtils::indent(indent) << "\"entityType\": " << JSONUtils::quote("Primitive") << ",\n";
+                    out << JSONUtils::indent(indent) << "\"gltfPath\": " << JSONUtils::quote(mesh->gltfPath);
+                } else if (auto* primitive = registry.get<PrimitiveType>(entity)) {
+                    std::string primStr = "Cube";
+                    if (primitive->kind == PrimitiveKind::Triangle) primStr = "Triangle";
+                    else if (primitive->kind == PrimitiveKind::Quad) primStr = "Quad";
+                    
+                    out << ",\n" << JSONUtils::indent(indent) << "\"entityType\": " << JSONUtils::quote("Primitive") << ",\n";
+                    out << JSONUtils::indent(indent) << "\"primitive\": " << JSONUtils::quote(primStr);
+                }
             }
             if (auto* material = registry.get<Material>(entity)) {
                 if (registry.has<Grid>(entity)) {
                     return; // Skip grid color details
                 }
                 out << ",\n" << JSONUtils::indent(indent) << "\"color\": " << JSONUtils::vec4ToJson(material->color);
+                if (!material->texturePath.empty()) {
+                    out << ",\n" << JSONUtils::indent(indent) << "\"texturePath\": " << JSONUtils::quote(material->texturePath);
+                }
             }
         },
         [](Registry& registry, VulkanRenderer& renderer, Entity entity, const std::string& json) {
             std::string type = JSONUtils::extractStringValue(json, "entityType");
             std::string primStr = JSONUtils::extractStringValue(json, "primitive");
+            std::string gltfPath = JSONUtils::extractStringValue(json, "gltfPath");
+            std::string texturePath = JSONUtils::extractStringValue(json, "texturePath");
             
             if (type == "Camera" || type == "Grid") {
                 return; // Managed by separate component deserializers
             }
             
-            if (type == "Primitive" || !primStr.empty()) {
+            if (type == "Primitive" || !primStr.empty() || !gltfPath.empty()) {
                 PrimitiveKind kind = PrimitiveKind::Cube;
                 if (primStr == "Triangle") kind = PrimitiveKind::Triangle;
                 else if (primStr == "Quad") kind = PrimitiveKind::Quad;
@@ -146,17 +156,38 @@ static bool registerBuiltinComponents() {
                     else if (kind == PrimitiveKind::Cube) color = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
                 }
                 
-                registry.emplace<PrimitiveType>(entity, PrimitiveType{ kind });
-                
+                bool isAssetMesh = !gltfPath.empty();
                 Mesh meshData;
-                switch (kind) {
-                case PrimitiveKind::Triangle: meshData = Primitives::makeTriangle(); break;
-                case PrimitiveKind::Cube: meshData = Primitives::makeCube(); break;
-                case PrimitiveKind::Quad: meshData = Primitives::makeQuad(); break;
+                
+                if (isAssetMesh) {
+                    try {
+                        meshData = renderer.resourceManager->loadMesh(gltfPath, renderer);
+                        registry.emplace<PrimitiveType>(entity, PrimitiveType{ PrimitiveKind::Cube }); // Default placeholder
+                    } catch (const std::exception& e) {
+                        std::cerr << "[SceneSerializer] Error loading mesh " << gltfPath << ": " << e.what() << std::endl;
+                        meshData = Primitives::makeCube();
+                        registry.emplace<PrimitiveType>(entity, PrimitiveType{ PrimitiveKind::Cube });
+                    }
+                } else {
+                    registry.emplace<PrimitiveType>(entity, PrimitiveType{ kind });
+                    switch (kind) {
+                    case PrimitiveKind::Triangle: meshData = Primitives::makeTriangle(); break;
+                    case PrimitiveKind::Cube: meshData = Primitives::makeCube(); break;
+                    case PrimitiveKind::Quad: meshData = Primitives::makeQuad(); break;
+                    }
                 }
                 
                 registry.emplace<Mesh>(entity, std::move(meshData));
                 registry.emplace<Material>(entity, Material{ color });
+                
+                if (!texturePath.empty()) {
+                    if (auto* material = registry.get<Material>(entity)) {
+                        material->texturePath = texturePath;
+                        if (auto* tex = renderer.resourceManager->loadTexture(texturePath, renderer)) {
+                            material->descriptorSet = tex->descriptorSet;
+                        }
+                    }
+                }
                 
                 PipelineHandle pipeline = renderer.createPipelineForShaders(
                     "build/shaders/unlit.vert.spv",
@@ -168,7 +199,9 @@ static bool registerBuiltinComponents() {
                     material->pipelineLayout = pipeline.layout;
                 }
                 
-                EntityFactory::uploadMesh(registry, renderer, entity);
+                if (!isAssetMesh) {
+                    EntityFactory::uploadMesh(registry, renderer, entity);
+                }
             }
         }
     );

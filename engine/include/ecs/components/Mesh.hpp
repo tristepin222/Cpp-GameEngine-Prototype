@@ -2,6 +2,7 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <glm/glm.hpp>
+#include <string>
 
 /**
  * @struct Vertex
@@ -76,6 +77,9 @@ struct Mesh {
 
     /** @brief Unique identifier for this mesh. */
     uint32_t id;
+
+    /** @brief Target glTF/glb file path. */
+    std::string gltfPath;
 
     /** @brief CPU-side vertex data. */
     std::vector<Vertex> vertices;

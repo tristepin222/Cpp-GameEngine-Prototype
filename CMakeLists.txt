@@ -36,6 +36,24 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
+# Fetch cgltf
+FetchContent_Declare(
+    cgltf
+    GIT_REPOSITORY https://github.com/jkuhlmann/cgltf.git
+    GIT_TAG v1.14
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(cgltf)
+
+# Fetch stb (for stb_image)
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG master
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(stb)
+
 # --- Add Subdirectories ---
 add_subdirectory(engine)
 add_subdirectory(sandbox_game)

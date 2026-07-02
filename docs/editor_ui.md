@@ -29,11 +29,15 @@ The UI is divided into dockable panels providing full control over the active sc
     *   Delete entities from the active registry.
 2.  **Inspector Panel**: Exposes components attached to the selected entity for real-time modification:
     *   **Transform Editor**: Direct floating-point fields and slider controls to adjust 3D Translation, Rotation, and Scale.
-    *   **Material Editor**: Color picker to adjust RGB tinting.
+    *   **Mesh Editor**: Exposes glTF path fields. Allows loading external geometries (like `.gltf` or `.glb`) onto the entity mesh component.
+    *   **Material Editor**: Color picker to adjust RGB tinting, and a texture path field to load image assets onto the material.
     *   **Camera Editor**: Slides to modify Field of View (FOV), speed settings, and mouse sensitivity.
     *   **Grid Editor**: Configures infinite grid line spacing, spacing colors, and fade-off distance bounds.
-3.  **Scene Controls Panel**: Contains controls to serialise/deserialise the active scene JSON file.
-4.  **Debug Console Panel**: Displays frame rate metrics (FPS), picking data (ray origin, ray direction, click ray intersects), and active state descriptions.
+3.  **Asset Browser Panel**:
+    *   Recursively scans the local `assets/` directory and renders a neat file tree.
+    *   Contextually displays assignment buttons (e.g. "Use Model" or "Use Texture") next to recognized file types if an active entity is selected. Clicking these automatically loads and maps the asset onto the selection.
+4.  **Scene Controls Panel**: Contains controls to serialize/deserialize the active scene JSON file (defaults to `assets/scenes/test_scene.json`).
+5.  **Debug Console Panel**: Displays frame rate metrics (FPS), picking data (ray origin, ray direction, click ray intersects), and active state descriptions.
 
 ---
 

@@ -114,6 +114,8 @@ struct InstanceDataSoA {
 };
 
 
+class ResourceManager;
+
 /**
  * @class VulkanRenderer
  * @brief Manages core Vulkan pipeline states, device interaction, frames, buffers, and command submissions.
@@ -258,6 +260,19 @@ public:
         return cameraDescriptorSet;
     }
     /**
+     * @brief Gets Descriptor Set Layout for Textures.
+     * @return VkDescriptorSetLayout handle.
+     */
+    VkDescriptorSetLayout getTextureDescriptorSetLayout() const {
+        return descriptors.getTextureDescriptorSetLayout();
+    }
+    /**
+     * @brief Gets Default White Texture Descriptor Set fallback.
+     * @return VkDescriptorSet handle.
+     */
+    VkDescriptorSet getDefaultTextureSet() const;
+
+    /**
      * @brief Configures active camera matrices.
      * @param viewProj View-Projection matrix.
      * @param position 3D position vector.
@@ -324,6 +339,8 @@ public:
     VulkanSwapchain swapchain;
     /** @brief Global Vulkan descriptor set management module. */
     VulkanDescriptors descriptors;
+    /** @brief Global Resource Manager instance. */
+    std::unique_ptr<ResourceManager> resourceManager;
 
 private:
     /** @brief Pointer to GLFW window. */

@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
+#include <string>
 /**
  * @struct Material
  * @brief Represents a material component defining rendering properties.
@@ -12,6 +13,8 @@ struct Material {
 
     /** @brief The base color of the material (RGBA). */
     glm::vec4 color{ 1.0f }; // RGBA
+    /** @brief Target texture resource path. */
+    std::string texturePath;
     /** @brief Vulkan descriptor set representing resource bindings. */
     VkDescriptorSet descriptorSet{ VK_NULL_HANDLE };
     /** @brief Optional per-material custom Vulkan pipeline. */
