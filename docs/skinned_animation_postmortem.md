@@ -70,7 +70,43 @@ graph TD
 
 ---
 
+### 6. ImGui Widget Collision (Duplicate Node Names)
+*   **The Issue**: Rigged models containing multiple submesh nodes with identical names (e.g. `Armor_part`) caused ImGui warnings and asset selection glitches in the editor hierarchy panel.
+*   **The Cause**: Dear ImGui tracks widget states using a hash map keyed by label strings. If two selectables share the exact same text, they produce identical hashes, causing collisions where selecting one item mistakenly activates or focuses the other.
+*   **The Fix**: Appended a hidden unique suffix `##<EntityID>` to the selectable label strings in the hierarchy rendering tree. ImGui parses this suffix to compute unique hashes while hiding the hash details from the user-facing text.
+
+---
+
+### 7. Save Mirroring (Build Directory Cleanups)
+*   **The Issue**: Scene configurations created in the running sandbox application were completely wiped and reset to default files whenever the project was recompiled.
+*   **The Cause**: Project build scripts clean and copy the source resource folders to the target binary run directories, erasing any runtime JSON scene changes that were only saved in the build output folder.
+*   **The Fix**: Implemented dual-save mirroring in the scene saving routine. Whenever the application saves a scene, it writes the JSON file to the runtime folder and immediately mirrors a copy back to the source directory (`sandbox_game/assets/scenes/`).
+
+---
+
+### 8. Multi-Mesh Rigid Attachments (Hierarchy Flattening)
+*   **The Issue**: When splitting a complex glTF model, rigid non-skinned submesh attachments (like armor plates, shields, or weapons) remained static in mid-air while the main skinned body animated.
+*   **The Cause**: During model splitting, child entities are parented to the root entity in the ECS, flattening the hierarchical node chain defined in the glTF file. Because the submeshes did not have vertex skin weights, they were rendered using static model transforms and did not track bone movements.
+*   **The Fix**: Refactored the mesh loader to traverse up node parents in the glTF data and store the direct bone ancestor name in `Mesh::parentBoneName`. The transform resolver checks this property and automatically multiplies the world matrix of rigid parts by their parent bone's animated matrix.
+
+---
+
+### 9. FABRIK Bone Splitting (Mismatched Joint Rotations)
+*   **The Issue**: Running the iterative FABRIK solver caused character limbs to stretch, split, or deform unnaturally under extreme target angles.
+*   **The Cause**: The solver was updating joint coordinates to hit target positions but leaving joint orientations unchanged. Mismatched rotations caused subsequent bones in the chain to evaluate starting from wrong coordinates, breaking joint length constraints.
+*   **The Fix**: Integrated a sequential Forward Kinematics pass inside the FABRIK solver. As the loop resolves each joint, it calculates the rotation mapping the original bone direction to the solved position and updates the parent joint orientation, propagating changes down the chain to keep bone lengths intact.
+
+---
+
+### 10. ECS Skeletal Sharing (Descriptor Set Overhead)
+*   **The Issue**: Creating separate skeletons and animators for each split submesh caused severe performance overhead, desynchronized animations, and broken IK limbs.
+*   **The Cause**: Instantiating separate components forced the CPU to run duplicate joint calculations and map separate Vulkan buffers for each child mesh, causing massive driver descriptor overhead.
+*   **The Fix**: Structured the engine to only spawn a single `SkeletonComponent` and `AnimatorComponent` on the root parent. The rendering pipeline was modified so that child mesh entities automatically detect and bind the parent's descriptor set (Set 2) during drawing.
+
+---
+
 ## Key Takeaways for Portfolio
-*   **Vulkan Layout Compliance**: Shader uniform arrays must have matching buffer allocations. Dynamically sizing UBOs below what the shader expects causes driver-level memory mismatches.
-*   **glTF Channel De-duplication**: Animation tracks targeting the same scene node must be grouped and updated atomically rather than processed sequentially.
-*   **Matrix Decomposition**: Storing discrete bind-pose TRS parameters is essential for blending, keyframe fallbacks, and maintaining joint relationships when animation channels are sparse.
+*   **Skeletal Sharing**: Skinned submeshes should share a single root skeleton descriptor set to minimize Vulkan buffer uploads and keep joint transformations synchronized.
+*   **glTF Ancestor Tracing**: Tracking glTF joint parentage during mesh loading is crucial for supporting rigid body bone attachments in a flattened ECS hierarchy.
+*   **ImGui String Hashing**: Appending unique ID suffixes is standard practice to prevent hash collisions in dynamic widget lists.
+*   **Sequential FK Propagation**: Iterative solvers (like FABRIK) must update joint orientations sequentially down the chain to maintain skeletal continuity and prevent bone splitting.

@@ -84,17 +84,64 @@ layout(set = 2, binding = 0) uniform JointPalette {
 
 ---
 
-## 5. Roadmap: Inverse Kinematics (IK)
+## 5. Locomotion State Machines & 1D Blend Trees
 
-While Forward Kinematics (FK) moves joints from parent to child, **Inverse Kinematics (IK)** calculates joint angles backwards to reach a target destination (e.g., placing a foot exactly on uneven terrain).
+To implement complex movement animations (like walking, running, and turning), the engine features a locomotion state machine and pose-blending system.
 
-We plan to implement two standard solvers:
-1.  **Analytical Solver (2-Bone IK)**: Closed-form mathematical solution utilizing the Law of Cosines to solve simple joint chains like elbows and knees.
-2.  **Iterative Solver (FABRIK / CCD)**: *Forward And Backward Reaching Inverse Kinematics*. An extremely fast, iterative algorithm that projects joint chains back and forth along straight lines until the target is reached, ideal for procedural spine bending or hand grabbing.
+### Locomotion State Machine
+Managed by the `AnimationControllerComponent`, the state machine tracks:
+*   **States**: Defined animation clips with custom speed coefficients.
+*   **Parameters**: Input floats (e.g. `speed`, `direction`) evaluated to trigger transitions.
+*   **Transitions**: Directed state connections containing condition arrays (e.g., transition from `Idle` to `Walk` if `speed > 0.1`).
+*   **Crossfading**: Smooth linear interpolation (LERP) of bone translations/scales and spherical linear interpolation (SLERP) of bone orientations between the outgoing and incoming states over a configurable duration (e.g., `0.3` seconds).
+
+### 1D Blend Trees
+States can point to 1D Blend Trees, which blend multiple keyframe clips together based on an input parameter. For example:
+*   A `Movement` state contains clips for `Walk` (threshold `0.2`) and `Run` (threshold `0.8`).
+*   If `speed` is `0.5`, the system samples keyframes from both clips at the same timeline offset and interpolates their joint transforms linearly using the blending weight \(\beta = \frac{0.5 - 0.2}{0.8 - 0.2} = 0.5\).
 
 ---
 
-## 📄 Case Study & Engineering Post-Mortem
+## 6. Inverse Kinematics (IK) Solvers
 
-To read about the real-world bugs, rendering constraints, and architectural challenges solved during the development of this Stage 3 system, please refer to:
+While Forward Kinematics (FK) computes joint locations from parent to child, **Inverse Kinematics (IK)** computes joint rotations backwards to place an end-effector (e.g., foot, hand) exactly at a target position. The engine supports two solver types in the `IKSolverComponent`:
+
+### 2-Bone Analytical Solver (Law of Cosines)
+Used for simple limb joints (like thigh-shin-foot or shoulder-elbow-wrist). Given bone lengths \(a\) and \(b\), and distance to target \(c\):
+1.  We calculate the interior angles of the triangle formed by the joint chain using the Law of Cosines:
+    \[\cos\theta_{\text{knee}} = \frac{a^2 + b^2 - c^2}{2ab}\]
+2.  We rotate the middle joint by \(\theta_{\text{knee}}\) relative to the hinge axis.
+3.  We calculate the orientation of the start joint to align the end joint exactly with the target position.
+4.  A world-space **pole vector** controls the bend direction of the hinge joint.
+
+### Multi-Joint Iterative FABRIK Solver
+The Forward And Backward Reaching Inverse Kinematics (FABRIK) solver resolves arbitrary joint chains (spines, tails, arms). It works in two passes:
+1.  **Backward Pass**: Sets the tip joint position to the target, then pulls each preceding joint along the bone segment line to maintain constant bone lengths.
+2.  **Forward Pass**: Sets the base joint back to its origin, and pushes each subsequent joint along the segment line.
+3.  **Orientation Solver**: Once positions are solved, a sequential Forward Kinematics pass calculates the rotation quaternions between the original bone directions and the solved directions, propagating rotations down the chain. This preserves bone lengths and structural continuity.
+
+---
+
+## 7. Entity Transform Hierarchy & Skeletal Sharing
+
+To support complex glTF models made of multiple submeshes (like a character with separate clothes or weapon parts), the ECS manages relationships using a parent-child transform hierarchy:
+
+### Multi-Mesh Splitting
+During model import, the engine splits multi-primitive glTF assets into separate child entities in the ECS parented to the first part root node using `HierarchyComponent`.
+
+### Skeletal Sharing
+To prevent duplicate bone math and GPU upload overhead:
+*   Only the parent root entity holds the `SkeletonComponent` and `AnimatorComponent`.
+*   During rendering, `RenderSystem` detects child entities. If they don't have a skeleton, it binds the parent root's joint matrices descriptor set (Set 2).
+*   For skinned child meshes, the GPU vertex shader deforms vertices using this shared joint palette.
+*   For rigid (non-skinned) child attachments, `RenderSystem::getWorldMatrix` searches for a bone matching the child's `parentBoneName` or `nodeName` in the parent's skeleton and multiplies the child's world matrix by the animated bone matrix.
+
+### Recursive Deletion
+When destroying a parent entity via the editor hierarchy panel, `Scene::deleteEntity` recursively gathers and deletes all child and grandchild descendants in the hierarchy tree to prevent memory leaks and orphaned entities in the registry.
+
+---
+
+## Case Study & Engineering Post-Mortem
+
+To read about the real-world bugs, rendering constraints, and architectural challenges solved during the development of these systems, please refer to:
 *   **[Skinned Animation Case Study (Post-Mortem)](file:///f:/GitHub/Cpp-GameEngine-Prototype/docs/skinned_animation_postmortem.md)**
