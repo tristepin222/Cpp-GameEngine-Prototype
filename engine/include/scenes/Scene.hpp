@@ -76,7 +76,6 @@ public:
      */
     virtual bool deleteEntity(Entity entity);
 
-protected:
     /**
      * @brief Tracks an entity under scene ownership.
      * @param entity Entity to track.
@@ -88,6 +87,8 @@ protected:
      * @param entity Entity to untrack.
      */
     void untrackEntity(Entity entity);
+
+protected:
     
     /**
      * @brief Locates an entity by its Name component.

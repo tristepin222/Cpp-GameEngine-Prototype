@@ -99,6 +99,12 @@ struct Mesh {
 
     /** @brief Target glTF/glb file path. */
     std::string gltfPath;
+    /** @brief Index of the primitive submesh in glTF. */
+    int primitiveIndex = -1;
+    /** @brief Name of the node associated with this mesh. */
+    std::string nodeName;
+    /** @brief Name of the parent bone/joint in glTF. */
+    std::string parentBoneName;
 
     /** @brief CPU-side vertex data. */
     std::vector<Vertex> vertices;
@@ -113,6 +119,9 @@ struct Mesh {
     VkBuffer indexBuffer{ VK_NULL_HANDLE };
     /** @brief GPU memory backing the index buffer. */
     VkDeviceMemory indexBufferMemory{ VK_NULL_HANDLE };
+
+    /** @brief Whether this mesh has skin weights and is deformed on GPU. */
+    bool isSkinned = false;
 
     /**
      * @brief Construct a new Mesh object.
@@ -131,6 +140,6 @@ struct Mesh {
         VkBuffer iBuf = VK_NULL_HANDLE,
         VkDeviceMemory iMem = VK_NULL_HANDLE
     ) : vertices(verts), indices(inds), vertexBuffer(vBuf), vertexBufferMemory(vMem),
-        indexBuffer(iBuf), indexBufferMemory(iMem) {
+        indexBuffer(iBuf), indexBufferMemory(iMem), isSkinned(false) {
     }
 };

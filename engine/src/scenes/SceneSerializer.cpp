@@ -13,6 +13,13 @@
 #include "ecs/components/primitives.hpp"
 #include "ecs/components/Skeleton.hpp"
 #include "ecs/components/Animator.hpp"
+#include "ecs/components/Hierarchy.hpp"
+#include "ecs/components/AnimationController.hpp"
+#include "ecs/components/IKSolver.hpp"
+
+struct ParentNameComponent {
+    std::string name;
+};
 #include <GLFW/glfw3.h>
 #include <filesystem>
 #include <fstream>
@@ -114,6 +121,9 @@ static bool registerBuiltinComponents() {
                 if (!mesh->gltfPath.empty()) {
                     out << ",\n" << JSONUtils::indent(indent) << "\"entityType\": " << JSONUtils::quote("Primitive") << ",\n";
                     out << JSONUtils::indent(indent) << "\"gltfPath\": " << JSONUtils::quote(mesh->gltfPath);
+                    if (mesh->primitiveIndex != -1) {
+                        out << ",\n" << JSONUtils::indent(indent) << "\"primitiveIndex\": " << mesh->primitiveIndex;
+                    }
                 } else if (auto* primitive = registry.get<PrimitiveType>(entity)) {
                     std::string primStr = "Cube";
                     if (primitive->kind == PrimitiveKind::Triangle) primStr = "Triangle";
@@ -179,13 +189,20 @@ static bool registerBuiltinComponents() {
                     if (kind == PrimitiveKind::Triangle) color = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
                     else if (kind == PrimitiveKind::Cube) color = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
                 }
+
+                float primIndexFloat = -1.0f;
+                int primitiveIndex = -1;
+                if (JSONUtils::extractFloatValue(json, "primitiveIndex", primIndexFloat)) {
+                    primitiveIndex = static_cast<int>(primIndexFloat);
+                }
                 
                 bool isAssetMesh = !gltfPath.empty();
                 Mesh meshData;
                 
                 if (isAssetMesh) {
                     try {
-                        meshData = renderer.resourceManager->loadMesh(gltfPath, renderer);
+                        meshData = renderer.resourceManager->loadMesh(gltfPath, renderer, primitiveIndex);
+                        meshData.primitiveIndex = primitiveIndex;
                         registry.emplace<PrimitiveType>(entity, PrimitiveType{ PrimitiveKind::Cube }); // Default placeholder
 
                         SkeletonComponent skeleton{};
@@ -234,6 +251,217 @@ static bool registerBuiltinComponents() {
                 if (!isAssetMesh) {
                     EntityFactory::uploadMesh(registry, renderer, entity);
                 }
+            }
+        }
+    );
+
+    // 4. Hierarchy Component (Parent-Child relationship)
+    reg.registerComponent(
+        "Hierarchy",
+        [](Registry& registry, Entity entity, std::ostream& out, int indent) {
+            if (auto* hierarchy = registry.get<HierarchyComponent>(entity)) {
+                if (hierarchy->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hierarchy->parent)) {
+                    if (auto* parentName = registry.get<Name>(hierarchy->parent)) {
+                        out << ",\n" << JSONUtils::indent(indent) << "\"entityType\": " << JSONUtils::quote("Hierarchy") << ",\n";
+                        out << JSONUtils::indent(indent) << "\"parentName\": " << JSONUtils::quote(parentName->value);
+                    }
+                }
+            }
+        },
+        [](Registry& registry, VulkanRenderer& renderer, Entity entity, const std::string& json) {
+            std::string parentNameStr = JSONUtils::extractStringValue(json, "parentName");
+            if (!parentNameStr.empty()) {
+                registry.emplace<ParentNameComponent>(entity, ParentNameComponent{ parentNameStr });
+            }
+        }
+    );
+
+    // 5. Animation Controller Component
+    reg.registerComponent(
+        "AnimationController",
+        [](Registry& registry, Entity entity, std::ostream& out, int indent) {
+            if (auto* controller = registry.get<AnimationControllerComponent>(entity)) {
+                out << ",\n" << JSONUtils::indent(indent) << "\"entityType\": " << JSONUtils::quote("AnimationController");
+                out << ",\n" << JSONUtils::indent(indent) << "\"currentState\": " << JSONUtils::quote(controller->currentState);
+                
+                bool hasLocomotion = (controller->states.size() == 2 && controller->transitions.size() == 2);
+                out << ",\n" << JSONUtils::indent(indent) << "\"hasLocomotionSetup\": " << (hasLocomotion ? "true" : "false");
+                
+                out << ",\n" << JSONUtils::indent(indent) << "\"parameters\": {";
+                bool first = true;
+                for (const auto& [name, val] : controller->parameters) {
+                    if (!first) out << ", ";
+                    out << JSONUtils::quote(name) << ": " << val;
+                    first = false;
+                }
+                out << "}";
+            }
+        },
+        [](Registry& registry, VulkanRenderer& renderer, Entity entity, const std::string& json) {
+            if (json.find("\"entityType\": \"AnimationController\"") != std::string::npos ||
+                json.find("\"entityType\":\"AnimationController\"") != std::string::npos) {
+                
+                AnimationControllerComponent controller{};
+                controller.currentState = JSONUtils::extractStringValue(json, "currentState");
+                
+                bool hasLocomotion = false;
+                if (json.find("\"hasLocomotionSetup\": true") != std::string::npos ||
+                    json.find("\"hasLocomotionSetup\":true") != std::string::npos) {
+                    hasLocomotion = true;
+                }
+                
+                float speedVal = 0.0f;
+                size_t speedPos = json.find("\"speed\"");
+                if (speedPos != std::string::npos) {
+                    size_t colonPos = json.find(":", speedPos);
+                    if (colonPos != std::string::npos) {
+                        std::string valStr;
+                        for (size_t i = colonPos + 1; i < json.size(); ++i) {
+                            char c = json[i];
+                            if (std::isdigit(c) || c == '.' || c == '-') {
+                                valStr += c;
+                            } else if (!valStr.empty()) {
+                                break;
+                            }
+                        }
+                        if (!valStr.empty()) {
+                            speedVal = std::stof(valStr);
+                        }
+                    }
+                }
+                controller.parameters["speed"] = speedVal;
+
+                if (hasLocomotion) {
+                    AnimationState idleState;
+                    idleState.name = "Idle";
+                    idleState.clipName = "idle";
+                    idleState.isBlendTree = false;
+                    
+                    AnimationState moveState;
+                    moveState.name = "Movement";
+                    moveState.isBlendTree = true;
+                    moveState.blendTree.parameterName = "speed";
+                    
+                    if (auto* animator = registry.get<AnimatorComponent>(entity)) {
+                        if (!animator->animations.empty()) idleState.clipName = animator->animations[0].name;
+                        if (animator->animations.size() >= 2) {
+                            BlendNode nodeWalk{ animator->animations[0].name, 0.0f };
+                            BlendNode nodeRun{ animator->animations[1].name, 1.0f };
+                            moveState.blendTree.nodes = { nodeWalk, nodeRun };
+                        } else if (!animator->animations.empty()) {
+                            BlendNode nodeWalk{ animator->animations[0].name, 0.0f };
+                            moveState.blendTree.nodes = { nodeWalk };
+                        }
+                    }
+                    
+                    controller.states = { idleState, moveState };
+
+                    AnimationTransition toMove;
+                    toMove.fromState = "Idle";
+                    toMove.toState = "Movement";
+                    toMove.crossfadeDuration = 0.3f;
+                    TransitionCondition condMove{ "speed", ">", 0.1f };
+                    toMove.conditions = { condMove };
+                    
+                    AnimationTransition toIdle;
+                    toIdle.fromState = "Movement";
+                    toIdle.toState = "Idle";
+                    toIdle.crossfadeDuration = 0.3f;
+                    TransitionCondition condIdle2{ "speed", "<", 0.1f };
+                    toIdle.conditions = { condIdle2 };
+                    
+                    controller.transitions = { toMove, toIdle };
+                }
+
+                registry.emplace<AnimationControllerComponent>(entity, std::move(controller));
+            }
+        }
+    );
+
+    // 6. IK Solver Component
+    reg.registerComponent(
+        "IKSolver",
+        [](Registry& registry, Entity entity, std::ostream& out, int indent) {
+            if (auto* ik = registry.get<IKSolverComponent>(entity)) {
+                out << ",\n" << JSONUtils::indent(indent) << "\"entityType\": " << JSONUtils::quote("IKSolver");
+                out << ",\n" << JSONUtils::indent(indent) << "\"enabled\": " << (ik->enabled ? "true" : "false");
+                out << ",\n" << JSONUtils::indent(indent) << "\"solverType\": " << static_cast<int>(ik->solverType);
+                out << ",\n" << JSONUtils::indent(indent) << "\"startJointName\": " << JSONUtils::quote(ik->startJointName);
+                out << ",\n" << JSONUtils::indent(indent) << "\"middleJointName\": " << JSONUtils::quote(ik->middleJointName);
+                out << ",\n" << JSONUtils::indent(indent) << "\"endJointName\": " << JSONUtils::quote(ik->endJointName);
+                out << ",\n" << JSONUtils::indent(indent) << "\"maxIterations\": " << ik->maxIterations;
+                out << ",\n" << JSONUtils::indent(indent) << "\"tolerance\": " << ik->tolerance;
+                
+                out << ",\n" << JSONUtils::indent(indent) << "\"jointChainNames\": [";
+                for (size_t i = 0; i < ik->jointChainNames.size(); ++i) {
+                    if (i > 0) out << ", ";
+                    out << JSONUtils::quote(ik->jointChainNames[i]);
+                }
+                out << "]";
+                
+                out << ",\n" << JSONUtils::indent(indent) << "\"targetPosition\": " << JSONUtils::vec3ToJson(ik->targetPosition);
+                out << ",\n" << JSONUtils::indent(indent) << "\"polePosition\": " << JSONUtils::vec3ToJson(ik->polePosition);
+                out << ",\n" << JSONUtils::indent(indent) << "\"targetWeight\": " << ik->targetWeight;
+            }
+        },
+        [](Registry& registry, VulkanRenderer& renderer, Entity entity, const std::string& json) {
+            if (json.find("\"entityType\": \"IKSolver\"") != std::string::npos ||
+                json.find("\"entityType\":\"IKSolver\"") != std::string::npos) {
+                
+                IKSolverComponent ik{};
+                ik.enabled = (json.find("\"enabled\": true") != std::string::npos || json.find("\"enabled\":true") != std::string::npos);
+                
+                float typeVal = 0.0f;
+                if (JSONUtils::extractFloatValue(json, "solverType", typeVal)) {
+                    ik.solverType = static_cast<int>(typeVal) == 0 ? IKSolverType::TwoBone : IKSolverType::FABRIK;
+                }
+                
+                ik.startJointName = JSONUtils::extractStringValue(json, "startJointName");
+                ik.middleJointName = JSONUtils::extractStringValue(json, "middleJointName");
+                ik.endJointName = JSONUtils::extractStringValue(json, "endJointName");
+                
+                float maxIter = 10.0f;
+                if (JSONUtils::extractFloatValue(json, "maxIterations", maxIter)) {
+                    ik.maxIterations = static_cast<int>(maxIter);
+                }
+                float tol = 0.001f;
+                JSONUtils::extractFloatValue(json, "tolerance", tol);
+                ik.tolerance = tol;
+                
+                // Parse joint chain names array
+                size_t arrayStart = json.find("\"jointChainNames\"");
+                if (arrayStart != std::string::npos) {
+                    size_t braceStart = json.find("[", arrayStart);
+                    size_t braceEnd = json.find("]", arrayStart);
+                    if (braceStart != std::string::npos && braceEnd != std::string::npos && braceEnd > braceStart) {
+                        std::string arrayContent = json.substr(braceStart + 1, braceEnd - braceStart - 1);
+                        std::stringstream ss(arrayContent);
+                        std::string item;
+                        while (std::getline(ss, item, ',')) {
+                            size_t q1 = item.find("\"");
+                            size_t q2 = item.rfind("\"");
+                            if (q1 != std::string::npos && q2 != std::string::npos && q2 > q1) {
+                                ik.jointChainNames.push_back(item.substr(q1 + 1, q2 - q1 - 1));
+                            }
+                        }
+                    }
+                }
+                
+                float targetPos[3]{};
+                if (JSONUtils::extractFloatArray(json, "targetPosition", targetPos, 3)) {
+                    ik.targetPosition = glm::vec3(targetPos[0], targetPos[1], targetPos[2]);
+                }
+                float polePos[3]{};
+                if (JSONUtils::extractFloatArray(json, "polePosition", polePos, 3)) {
+                    ik.polePosition = glm::vec3(polePos[0], polePos[1], polePos[2]);
+                }
+                
+                float weight = 1.0f;
+                if (JSONUtils::extractFloatValue(json, "targetWeight", weight)) {
+                    ik.targetWeight = weight;
+                }
+                
+                registry.emplace<IKSolverComponent>(entity, std::move(ik));
             }
         }
     );
@@ -365,6 +593,29 @@ bool SceneSerializer::deserialize(const std::string& path, std::vector<Entity>& 
         }
 
         outEntities.push_back(entity);
+    }
+
+    // Resolve parent entity links in HierarchyComponent using temporary ParentNameComponent records
+    for (auto [entity, parentNameComp] : registry.view<ParentNameComponent>()) {
+        Entity parentEntity;
+        for (auto [parentCandidate, nameComp] : registry.view<Name>()) {
+            if (nameComp.value == parentNameComp.name) {
+                parentEntity = parentCandidate;
+                break;
+            }
+        }
+        if (parentEntity.getId() != Entity::INVALID_ENTITY) {
+            registry.emplace<HierarchyComponent>(entity, HierarchyComponent{ parentEntity });
+        }
+    }
+    
+    // Clean up temporary ParentNameComponent storage
+    std::vector<Entity> toClean;
+    for (auto [entity, parentNameComp] : registry.view<ParentNameComponent>()) {
+        toClean.push_back(entity);
+    }
+    for (Entity e : toClean) {
+        registry.remove<ParentNameComponent>(e);
     }
 
     return !outEntities.empty();

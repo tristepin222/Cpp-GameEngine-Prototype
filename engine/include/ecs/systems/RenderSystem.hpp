@@ -11,7 +11,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "../components/Grid.hpp"
 #include "../components/pushconstants.hpp"
+#include "../components/Hierarchy.hpp"
 #include <functional>
+#include <fstream>
 
 /**
  * @class RenderSystem
@@ -112,6 +114,71 @@ private:
     }
 
     /**
+     * @brief Computes the absolute world matrix of an entity by traversing the hierarchy.
+     */
+    glm::mat4 getWorldMatrix(Entity entity) {
+        glm::mat4 model = glm::mat4(1.0f);
+        if (auto* transform = registry.get<Transform>(entity)) {
+            model = transform->matrix();
+        }
+        if (auto* hierarchy = registry.get<HierarchyComponent>(entity)) {
+            if (hierarchy->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hierarchy->parent)) {
+                // If this is a child mesh entity that is rigid/non-skinned, attach it to its parent bone if matching joint exists
+                if (auto* mesh = registry.get<Mesh>(entity)) {
+                    if (!mesh->isSkinned) {
+                        std::string targetBone = mesh->parentBoneName.empty() ? mesh->nodeName : mesh->parentBoneName;
+                        if (!targetBone.empty()) {
+                            if (auto* parentSkeleton = registry.get<SkeletonComponent>(hierarchy->parent)) {
+                                int jointIdx = -1;
+                                
+                                // 1. Exact match
+                                for (size_t i = 0; i < parentSkeleton->joints.size(); ++i) {
+                                    if (parentSkeleton->joints[i].name == targetBone) {
+                                        jointIdx = static_cast<int>(i);
+                                        break;
+                                    }
+                                }
+                                
+                                // 2. Case-insensitive match fallback
+                                if (jointIdx == -1) {
+                                    auto toLower = [](std::string s) {
+                                        for (char& c : s) c = static_cast<char>(std::tolower(c));
+                                        return s;
+                                    };
+                                    std::string lowerTarget = toLower(targetBone);
+                                    for (size_t i = 0; i < parentSkeleton->joints.size(); ++i) {
+                                        if (toLower(parentSkeleton->joints[i].name) == lowerTarget) {
+                                            jointIdx = static_cast<int>(i);
+                                            break;
+                                        }
+                                    }
+                                }
+                                
+                                // 3. Substring match fallback (handles prefixes/suffixes)
+                                if (jointIdx == -1) {
+                                    for (size_t i = 0; i < parentSkeleton->joints.size(); ++i) {
+                                        if (parentSkeleton->joints[i].name.find(targetBone) != std::string::npos ||
+                                            targetBone.find(parentSkeleton->joints[i].name) != std::string::npos) {
+                                            jointIdx = static_cast<int>(i);
+                                            break;
+                                        }
+                                    }
+                                }
+                                
+                                if (jointIdx != -1 && jointIdx < static_cast<int>(parentSkeleton->jointMatrices.size())) {
+                                    return getWorldMatrix(hierarchy->parent) * parentSkeleton->jointMatrices[jointIdx];
+                                }
+                            }
+                        }
+                    }
+                }
+                model = getWorldMatrix(hierarchy->parent) * model;
+            }
+        }
+        return model;
+    }
+
+    /**
      * @brief Rebuilds instance data by iterating over entities.
      */
     void buildInstanceData() {
@@ -126,7 +193,7 @@ private:
             if (registry.get<Grid>(entity)) continue;
 
             InstanceData inst{};
-            inst.model = transform.matrix();
+            inst.model = getWorldMatrix(entity);
             inst.materialID = material.id;
             inst.meshID = mesh.id;
             inst.color = material.color;
@@ -207,18 +274,25 @@ private:
 
             // Draw each instance in this batch individually, pushing its model/color
             for (auto& [e, instanceIdx] : batch) {
-                // Bind Joint Descriptor Set (Set 2) if entity has a Skeleton component
-                if (auto* skeleton = registry.get<SkeletonComponent>(e)) {
-                    if (skeleton->descriptorSet != VK_NULL_HANDLE) {
-                        vkCmdBindDescriptorSets(cmd,
-                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            mat->pipelineLayout,
-                            2, // Set 2
-                            1,
-                            &skeleton->descriptorSet,
-                            0,
-                            nullptr);
+                // Bind Joint Descriptor Set (Set 2) if entity (or parent) has a Skeleton component
+                SkeletonComponent* skeleton = registry.get<SkeletonComponent>(e);
+                if (!skeleton) {
+                    if (auto* hierarchy = registry.get<HierarchyComponent>(e)) {
+                        if (hierarchy->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hierarchy->parent)) {
+                            skeleton = registry.get<SkeletonComponent>(hierarchy->parent);
+                        }
                     }
+                }
+
+                if (skeleton && skeleton->descriptorSet != VK_NULL_HANDLE) {
+                    vkCmdBindDescriptorSets(cmd,
+                        VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        mat->pipelineLayout,
+                        2, // Set 2
+                        1,
+                        &skeleton->descriptorSet,
+                        0,
+                        nullptr);
                 }
 
                 // read instance data from renderer.instanceDataCPU

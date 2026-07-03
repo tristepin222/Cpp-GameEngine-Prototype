@@ -62,7 +62,14 @@ public:
      * @param renderer Reference to active VulkanRenderer.
      * @return The loaded Mesh component.
      */
-    Mesh loadMesh(const std::string& path, VulkanRenderer& renderer);
+    Mesh loadMesh(const std::string& path, VulkanRenderer& renderer, int primitiveIndex = -1);
+
+    /**
+     * @brief Scans a glTF file and returns the count of primitive submesh parts.
+     * @param path The glTF file path.
+     * @return Number of primitive submesh parts.
+     */
+    int getMeshPrimitiveCount(const std::string& path);
 
     /**
      * @brief Loads skeletal skin and animations from a glTF file.

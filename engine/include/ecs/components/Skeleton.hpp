@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <memory>
 
 class VulkanBuffer;
@@ -19,6 +20,11 @@ struct Joint {
     glm::mat4 inverseBindMatrix = glm::mat4(1.0f);
     /** @brief Local animation pose transform (Translation * Rotation * Scale). */
     glm::mat4 localTransform = glm::mat4(1.0f);
+    
+    // Bind pose local TRS components
+    glm::vec3 bindTranslation = glm::vec3(0.0f);
+    glm::quat bindRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+    glm::vec3 bindScale = glm::vec3(1.0f);
 };
 
 /**

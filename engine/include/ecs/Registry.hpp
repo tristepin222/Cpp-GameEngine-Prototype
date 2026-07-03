@@ -83,6 +83,17 @@ public:
     }
 
     /**
+     * @brief Checks if an entity is alive and valid.
+     * @param e Entity to check.
+     * @return True if valid, false otherwise.
+     */
+    bool isValid(Entity e) const {
+        if (e.getId() == Entity::INVALID_ENTITY) return false;
+        const auto& alive = entities.getAlive();
+        return std::find(alive.begin(), alive.end(), e.getId()) != alive.end();
+    }
+
+    /**
      * @brief Emplaces a component on an entity.
      * @tparam T Component type to emplace.
      * @param e Entity to emplace component on.

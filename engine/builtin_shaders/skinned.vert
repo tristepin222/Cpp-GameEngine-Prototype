@@ -20,20 +20,27 @@ layout(set = 0, binding = 0) uniform CameraUBO {
 } cam;
 
 layout(set = 2, binding = 0) uniform JointPalette {
-    mat4 joints[128]; // Max 128 bones supported
+    mat4 joints[256]; // Max 256 bones supported (16 KB limit compliant)
 } palette;
 
 layout(location = 0) out vec4 vColor;
 layout(location = 1) out vec2 vUV;
 
 void main() {
-    // Linear Blend Skinning formula:
-    // Accumulate weighted bone matrices for this vertex
-    mat4 skinMat = 
-        palette.joints[inBoneIDs.x] * inBoneWeights.x +
-        palette.joints[inBoneIDs.y] * inBoneWeights.y +
-        palette.joints[inBoneIDs.z] * inBoneWeights.z +
-        palette.joints[inBoneIDs.w] * inBoneWeights.w;
+    float totalWeight = inBoneWeights.x + inBoneWeights.y + inBoneWeights.z + inBoneWeights.w;
+    mat4 skinMat;
+    
+    if (totalWeight < 0.01) {
+        skinMat = mat4(1.0); // Default to identity if no weights are defined
+    } else {
+        skinMat = 
+            palette.joints[inBoneIDs.x] * inBoneWeights.x +
+            palette.joints[inBoneIDs.y] * inBoneWeights.y +
+            palette.joints[inBoneIDs.z] * inBoneWeights.z +
+            palette.joints[inBoneIDs.w] * inBoneWeights.w;
+        // Normalize weights just in case they don't sum to 1.0
+        skinMat = skinMat / totalWeight;
+    }
 
     vec4 skinnedPos = skinMat * vec4(inPos, 1.0);
     gl_Position = cam.viewProj * push.model * skinnedPos;

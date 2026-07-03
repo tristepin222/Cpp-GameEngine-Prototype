@@ -8,7 +8,11 @@
 #include "renderer/VulkanRenderer.hpp"
 #include "core/VulkanBuffer.hpp"
 #include <iostream>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/matrix_decompose.hpp>
 #include <stdexcept>
+#include <fstream>
+#include <algorithm>
 
 // --- Helper Functions for Vulkan Image Operations ---
 
@@ -299,37 +303,52 @@ void ResourceManager::createDefaultWhiteTexture(VulkanRenderer& renderer) {
     renderer.descriptors.allocateTextureDescriptorSet(defaultWhiteTexture.descriptorSet, defaultWhiteTexture.imageView, defaultWhiteTexture.sampler);
 }
 
-Mesh ResourceManager::loadMesh(const std::string& path, VulkanRenderer& renderer) {
-    auto it = meshCache.find(path);
-    if (it != meshCache.end()) {
-        return it->second;
-    }
+static void traverseNodes(cgltf_data* data, cgltf_node* node, const glm::mat4& parentTransform, Mesh& mesh, int targetPrimIndex, int& currentPrimIndex) {
+    glm::mat4 local(1.0f);
+    cgltf_node_transform_local(node, &local[0][0]);
+    glm::mat4 global = parentTransform * local;
 
-    Mesh mesh{};
-    mesh.gltfPath = path;
+    if (node->mesh) {
+        cgltf_mesh* gltfMesh = node->mesh;
+        for (cgltf_size j = 0; j < gltfMesh->primitives_count; ++j) {
+            cgltf_primitive& prim = gltfMesh->primitives[j];
+            
+            int primIdx = currentPrimIndex++;
+            if (targetPrimIndex != -1 && primIdx != targetPrimIndex) {
+                continue;
+            }
 
-    cgltf_options options{};
-    cgltf_data* data = nullptr;
-    cgltf_result result = cgltf_parse_file(&options, path.c_str(), &data);
-    if (result != cgltf_result_success) {
-        throw std::runtime_error("Failed to parse glTF file: " + path);
-    }
+            if (node->name) {
+                mesh.nodeName = node->name;
+            } else if (node->mesh && node->mesh->name) {
+                mesh.nodeName = node->mesh->name;
+            } else {
+                mesh.nodeName = "MeshPart_" + std::to_string(primIdx);
+            }
 
-    result = cgltf_load_buffers(&options, data, path.c_str());
-    if (result != cgltf_result_success) {
-        cgltf_free(data);
-        throw std::runtime_error("Failed to load glTF buffers: " + path);
-    }
-
-    // Traverse meshes and primitives
-    for (cgltf_size i = 0; i < data->meshes_count; ++i) {
-        cgltf_mesh& gltfMesh = data->meshes[i];
-        for (cgltf_size j = 0; j < gltfMesh.primitives_count; ++j) {
-            cgltf_primitive& prim = gltfMesh.primitives[j];
+            // Find parent bone name by traversing up ancestors in glTF
+            cgltf_node* ancestor = node->parent;
+            while (ancestor) {
+                bool isJoint = false;
+                for (cgltf_size s = 0; s < data->skins_count; ++s) {
+                    cgltf_skin& skin = data->skins[s];
+                    for (cgltf_size jk = 0; jk < skin.joints_count; ++jk) {
+                        if (skin.joints[jk] == ancestor) {
+                            isJoint = true;
+                            break;
+                        }
+                    }
+                    if (isJoint) break;
+                }
+                if (isJoint && ancestor->name) {
+                    mesh.parentBoneName = ancestor->name;
+                    break;
+                }
+                ancestor = ancestor->parent;
+            }
 
             size_t vert_start = mesh.vertices.size();
 
-            // Read vertex attributes
             cgltf_accessor* pos_accessor = nullptr;
             cgltf_accessor* norm_accessor = nullptr;
             cgltf_accessor* uv_accessor = nullptr;
@@ -347,19 +366,34 @@ Mesh ResourceManager::loadMesh(const std::string& path, VulkanRenderer& renderer
 
             if (!pos_accessor) continue;
 
+            bool isSkinned = (joints_accessor != nullptr && weights_accessor != nullptr);
+            mesh.isSkinned = isSkinned;
+
             size_t vert_count = pos_accessor->count;
             for (size_t k = 0; k < vert_count; ++k) {
                 Vertex vert{};
 
                 float pos[3]{};
                 cgltf_accessor_read_float(pos_accessor, k, pos, 3);
-                vert.position = glm::vec3(pos[0], pos[1], pos[2]);
+                glm::vec3 position = glm::vec3(pos[0], pos[1], pos[2]);
 
+                glm::vec3 normal(0.0f);
                 if (norm_accessor) {
                     float norm[3]{};
                     cgltf_accessor_read_float(norm_accessor, k, norm, 3);
-                    vert.normal = glm::vec3(norm[0], norm[1], norm[2]);
+                    normal = glm::vec3(norm[0], norm[1], norm[2]);
                 }
+
+                // If not skinned, pre-transform static vertices by global node matrix
+                if (!isSkinned) {
+                    position = glm::vec3(global * glm::vec4(position, 1.0f));
+                    if (norm_accessor) {
+                        normal = glm::normalize(glm::vec3(glm::transpose(glm::inverse(global)) * glm::vec4(normal, 0.0f)));
+                    }
+                }
+
+                vert.position = position;
+                vert.normal = normal;
 
                 if (uv_accessor) {
                     float uv[2]{};
@@ -368,8 +402,8 @@ Mesh ResourceManager::loadMesh(const std::string& path, VulkanRenderer& renderer
                 }
 
                 if (joints_accessor) {
-                    float joints[4]{};
-                    cgltf_accessor_read_float(joints_accessor, k, joints, 4);
+                    cgltf_uint joints[4]{};
+                    cgltf_accessor_read_uint(joints_accessor, k, joints, 4);
                     vert.boneIDs = glm::ivec4(
                         static_cast<int>(joints[0]),
                         static_cast<int>(joints[1]),
@@ -383,6 +417,8 @@ Mesh ResourceManager::loadMesh(const std::string& path, VulkanRenderer& renderer
                     cgltf_accessor_read_float(weights_accessor, k, weights, 4);
                     vert.boneWeights = glm::vec4(weights[0], weights[1], weights[2], weights[3]);
                 }
+
+
 
                 mesh.vertices.push_back(vert);
             }
@@ -401,6 +437,55 @@ Mesh ResourceManager::loadMesh(const std::string& path, VulkanRenderer& renderer
         }
     }
 
+    for (cgltf_size i = 0; i < node->children_count; ++i) {
+        traverseNodes(data, node->children[i], global, mesh, targetPrimIndex, currentPrimIndex);
+    }
+}
+
+Mesh ResourceManager::loadMesh(const std::string& path, VulkanRenderer& renderer, int primitiveIndex) {
+    std::string cacheKey = path;
+    if (primitiveIndex >= 0) {
+        cacheKey = path + "#" + std::to_string(primitiveIndex);
+    }
+
+    auto it = meshCache.find(cacheKey);
+    if (it != meshCache.end()) {
+        return it->second;
+    }
+
+    Mesh mesh{};
+    mesh.gltfPath = path;
+    mesh.primitiveIndex = primitiveIndex;
+
+    cgltf_options options{};
+    cgltf_data* data = nullptr;
+    cgltf_result result = cgltf_parse_file(&options, path.c_str(), &data);
+    if (result != cgltf_result_success) {
+        throw std::runtime_error("Failed to parse glTF file: " + path);
+    }
+
+    result = cgltf_load_buffers(&options, data, path.c_str());
+    if (result != cgltf_result_success) {
+        cgltf_free(data);
+        throw std::runtime_error("Failed to load glTF buffers: " + path);
+    }
+
+    int currentPrimIndex = 0;
+
+    // Traverse scenes and nodes hierarchically
+    if (data->scene) {
+        for (cgltf_size i = 0; i < data->scene->nodes_count; ++i) {
+            traverseNodes(data, data->scene->nodes[i], glm::mat4(1.0f), mesh, primitiveIndex, currentPrimIndex);
+        }
+    } else {
+        for (cgltf_size i = 0; i < data->scenes_count; ++i) {
+            cgltf_scene& scene = data->scenes[i];
+            for (cgltf_size j = 0; j < scene.nodes_count; ++j) {
+                traverseNodes(data, scene.nodes[j], glm::mat4(1.0f), mesh, primitiveIndex, currentPrimIndex);
+            }
+        }
+    }
+
     cgltf_free(data);
 
     // Upload loaded geometry to renderer
@@ -411,8 +496,37 @@ Mesh ResourceManager::loadMesh(const std::string& path, VulkanRenderer& renderer
     mesh.indexBuffer = renderer.meshSoA.indexBuffers[meshID].get();
     mesh.id = static_cast<uint32_t>(meshID);
 
-    meshCache[path] = mesh;
+    meshCache[cacheKey] = mesh;
     return mesh;
+}
+
+static void countPrimsRecursive(cgltf_node* node, int& count) {
+    if (node->mesh) {
+        count += static_cast<int>(node->mesh->primitives_count);
+    }
+    for (cgltf_size c = 0; c < node->children_count; ++c) {
+        countPrimsRecursive(node->children[c], count);
+    }
+}
+
+int ResourceManager::getMeshPrimitiveCount(const std::string& path) {
+    cgltf_options options{};
+    cgltf_data* data = nullptr;
+    cgltf_result result = cgltf_parse_file(&options, path.c_str(), &data);
+    if (result != cgltf_result_success) {
+        return 0;
+    }
+    
+    int count = 0;
+    for (cgltf_size i = 0; i < data->scenes_count; ++i) {
+        cgltf_scene& scene = data->scenes[i];
+        for (cgltf_size j = 0; j < scene.nodes_count; ++j) {
+            countPrimsRecursive(scene.nodes[j], count);
+        }
+    }
+    
+    cgltf_free(data);
+    return count;
 }
 
 void ResourceManager::cleanup(VkDevice device) {
@@ -493,25 +607,31 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
             joint.inverseBindMatrix = glm::mat4(1.0f);
         }
 
-        // Read Local Transform from TRS properties
-        glm::vec3 translation(0.0f);
-        glm::quat rotation(1.0f, 0.0f, 0.0f, 0.0f);
-        glm::vec3 scale(1.0f);
+        // Read Local Transform matrix using cgltf helper (handles both matrix and TRS)
+        glm::mat4 local(1.0f);
+        cgltf_node_transform_local(jointNode, &local[0][0]);
 
-        if (jointNode->has_translation) {
-            translation = glm::vec3(jointNode->translation[0], jointNode->translation[1], jointNode->translation[2]);
-        }
-        if (jointNode->has_rotation) {
-            rotation = glm::quat(jointNode->rotation[3], jointNode->rotation[0], jointNode->rotation[1], jointNode->rotation[2]);
-        }
-        if (jointNode->has_scale) {
-            scale = glm::vec3(jointNode->scale[0], jointNode->scale[1], jointNode->scale[2]);
+        // Accumulate transforms of any non-joint parent nodes (like "Armature" or "Root")
+        // up to the scene root or the first joint parent, and premultiply it.
+        glm::mat4 nonJointParentTransform(1.0f);
+        cgltf_node* parentNode = jointNode->parent;
+        while (parentNode) {
+            // Stop if the parent node is actually a joint in our skin
+            if (nodeToJointIndex.find(parentNode) != nodeToJointIndex.end()) {
+                break;
+            }
+            glm::mat4 parentLocal(1.0f);
+            cgltf_node_transform_local(parentNode, &parentLocal[0][0]);
+            nonJointParentTransform = parentLocal * nonJointParentTransform;
+            parentNode = parentNode->parent;
         }
 
-        glm::mat4 tMat = glm::translate(glm::mat4(1.0f), translation);
-        glm::mat4 rMat = glm::toMat4(rotation);
-        glm::mat4 sMat = glm::scale(glm::mat4(1.0f), scale);
-        joint.localTransform = tMat * rMat * sMat;
+        joint.localTransform = nonJointParentTransform * local;
+
+        // Decompose the compiled localTransform matrix to extract bind TRS values
+        glm::vec3 skew{};
+        glm::vec4 perspective{};
+        glm::decompose(joint.localTransform, joint.bindScale, joint.bindRotation, joint.bindTranslation, skew, perspective);
     }
 
     // Resolve Parent Indices
@@ -525,6 +645,8 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
         }
     }
 
+
+
     // 2. Load Animation Clips & Channels
     animator.animations.resize(data->animations_count);
     for (cgltf_size i = 0; i < data->animations_count; ++i) {
@@ -532,6 +654,9 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
         AnimationClip& clip = animator.animations[i];
         clip.name = gltfAnim.name ? gltfAnim.name : "Animation_" + std::to_string(i);
         clip.duration = 0.0f;
+
+        // Temporary map to group channels by jointIndex
+        std::unordered_map<int, AnimationChannel> jointChannels;
 
         for (cgltf_size j = 0; j < gltfAnim.channels_count; ++j) {
             cgltf_animation_channel& channel = gltfAnim.channels[j];
@@ -541,8 +666,9 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
             auto it = nodeToJointIndex.find(targetNode);
             if (it == nodeToJointIndex.end()) continue; // Channel targets a node outside our joint set
 
-            AnimationChannel animChannel{};
-            animChannel.jointIndex = it->second;
+            int jointIdx = it->second;
+            AnimationChannel& animChannel = jointChannels[jointIdx];
+            animChannel.jointIndex = jointIdx;
 
             cgltf_animation_sampler* sampler = channel.sampler;
             size_t keyframeCount = sampler->input->count;
@@ -564,9 +690,21 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
                     animChannel.scaleKeys.push_back({ time, glm::vec3(val[0], val[1], val[2]) });
                 }
             }
+        }
+
+        // Move the grouped channels to clip.channels
+        for (auto& [jointIdx, animChannel] : jointChannels) {
+            // Sort keyframes by time
+            std::sort(animChannel.translationKeys.begin(), animChannel.translationKeys.end(), [](const Keyframe& a, const Keyframe& b) { return a.time < b.time; });
+            std::sort(animChannel.rotationKeys.begin(), animChannel.rotationKeys.end(), [](const KeyframeRot& a, const KeyframeRot& b) { return a.time < b.time; });
+            std::sort(animChannel.scaleKeys.begin(), animChannel.scaleKeys.end(), [](const Keyframe& a, const Keyframe& b) { return a.time < b.time; });
+
+
 
             clip.channels.push_back(std::move(animChannel));
         }
+
+
     }
 
     if (!animator.animations.empty()) {

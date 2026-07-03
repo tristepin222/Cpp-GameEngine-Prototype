@@ -78,7 +78,7 @@ The vertex buffer is expanded to carry bone influence arrays:
 The calculated offset matrices are bound as a descriptor set:
 ```glsl
 layout(set = 2, binding = 0) uniform JointPalette {
-    mat4 joints[128]; // Supports up to 128 bones per skinned mesh
+    mat4 joints[256]; // Supports up to 256 bones per skinned mesh (16 KB limit compliant)
 } palette;
 ```
 
@@ -91,3 +91,10 @@ While Forward Kinematics (FK) moves joints from parent to child, **Inverse Kinem
 We plan to implement two standard solvers:
 1.  **Analytical Solver (2-Bone IK)**: Closed-form mathematical solution utilizing the Law of Cosines to solve simple joint chains like elbows and knees.
 2.  **Iterative Solver (FABRIK / CCD)**: *Forward And Backward Reaching Inverse Kinematics*. An extremely fast, iterative algorithm that projects joint chains back and forth along straight lines until the target is reached, ideal for procedural spine bending or hand grabbing.
+
+---
+
+## 📄 Case Study & Engineering Post-Mortem
+
+To read about the real-world bugs, rendering constraints, and architectural challenges solved during the development of this Stage 3 system, please refer to:
+*   **[Skinned Animation Case Study (Post-Mortem)](file:///f:/GitHub/Cpp-GameEngine-Prototype/docs/skinned_animation_postmortem.md)**

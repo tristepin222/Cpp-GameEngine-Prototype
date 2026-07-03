@@ -3,8 +3,10 @@
 #include "ecs/EntityFactory.hpp"
 #include "ecs/EntityCloner.hpp"
 #include "ecs/components/Name.hpp"
+#include "ecs/components/Hierarchy.hpp"
 #include "renderer/VulkanRenderer.hpp"
 #include <algorithm>
+#include <filesystem>
 
 /**
  * @brief Construct a new Scene:: Scene object.
@@ -38,7 +40,25 @@ void Scene::unload() {
  */
 bool Scene::saveToFile(const std::string& path) {
     SceneSerializer serializer(registry, renderer);
-    return serializer.serialize(path, ownedEntities);
+    bool ok = serializer.serialize(path, ownedEntities);
+    if (ok) {
+        std::filesystem::path p(path);
+        std::string pathStr = p.generic_string();
+        
+        if (pathStr.rfind("./", 0) == 0) {
+            pathStr = pathStr.substr(2);
+        }
+        
+        if (pathStr.rfind("assets/", 0) == 0) {
+            std::string sourcePath = "../../../sandbox_game/" + pathStr;
+            std::filesystem::path sourceDirPath = std::filesystem::path(sourcePath).parent_path();
+            if (std::filesystem::exists("../../../sandbox_game/assets")) {
+                std::filesystem::create_directories(sourceDirPath);
+                serializer.serialize(sourcePath, ownedEntities);
+            }
+        }
+    }
+    return ok;
 }
 
 /**
@@ -153,8 +173,30 @@ bool Scene::deleteEntity(Entity entity) {
     if (entity.getId() == Entity::INVALID_ENTITY) {
         return false;
     }
-    untrackEntity(entity);
-    registry.destroy(entity);
+    
+    // Find all children recursively
+    std::vector<Entity> toDelete;
+    toDelete.push_back(entity);
+    
+    size_t cursor = 0;
+    while (cursor < toDelete.size()) {
+        Entity current = toDelete[cursor];
+        for (auto [childEntity, hierarchy] : registry.view<HierarchyComponent>()) {
+            if (hierarchy.parent == current) {
+                if (std::find(toDelete.begin(), toDelete.end(), childEntity) == toDelete.end()) {
+                    toDelete.push_back(childEntity);
+                }
+            }
+        }
+        cursor++;
+    }
+    
+    // Destroy all of them
+    for (Entity e : toDelete) {
+        untrackEntity(e);
+        registry.destroy(e);
+    }
+    
     return true;
 }
 
