@@ -30,6 +30,7 @@
 #include "renderer/VulkanRenderer.hpp"
 #include "scenes/Scene.hpp"
 #include "scenes/SceneManager.hpp"
+#include "scenes/SceneSerializer.hpp"
 #include "renderer/ResourceManager.hpp"
 #include <filesystem>
 #include "ImGuizmo.h"
@@ -78,7 +79,77 @@ void EditorUI::initialize(GLFWwindow* window) {
 
     IMGUI_CHECKVERSION();
     CreateContext();
-    StyleColorsDark();
+
+    // --- Setup Custom Engine Theme (Charcoal Dark Theme) ---
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.WindowRounding = 6.0f;
+    style.ChildRounding = 4.0f;
+    style.FrameRounding = 4.0f;
+    style.PopupRounding = 4.0f;
+    style.ScrollbarRounding = 9.0f;
+    style.GrabRounding = 4.0f;
+    style.TabRounding = 4.0f;
+    style.WindowBorderSize = 1.0f;
+    style.FrameBorderSize = 0.0f;
+    style.PopupBorderSize = 1.0f;
+    style.ItemSpacing = ImVec2(8.0f, 6.0f);
+    style.ItemInnerSpacing = ImVec2(6.0f, 6.0f);
+    
+    // Color Palette
+    ImVec4* colors = style.Colors;
+    colors[ImGuiCol_Text]                   = ImVec4(0.85f, 0.85f, 0.87f, 1.00f);
+    colors[ImGuiCol_TextDisabled]           = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+    colors[ImGuiCol_WindowBg]               = ImVec4(0.12f, 0.12f, 0.14f, 1.00f); // Unreal Charcoal
+    colors[ImGuiCol_ChildBg]                = ImVec4(0.10f, 0.10f, 0.12f, 0.00f);
+    colors[ImGuiCol_PopupBg]                = ImVec4(0.14f, 0.14f, 0.16f, 0.94f);
+    colors[ImGuiCol_Border]                 = ImVec4(0.20f, 0.20f, 0.22f, 1.00f);
+    colors[ImGuiCol_BorderShadow]           = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_FrameBg]                = ImVec4(0.18f, 0.18f, 0.20f, 1.00f);
+    colors[ImGuiCol_FrameBgHovered]         = ImVec4(0.24f, 0.24f, 0.28f, 1.00f);
+    colors[ImGuiCol_FrameBgActive]          = ImVec4(0.20f, 0.20f, 0.22f, 1.00f);
+    colors[ImGuiCol_TitleBg]                = ImVec4(0.08f, 0.08f, 0.10f, 1.00f);
+    colors[ImGuiCol_TitleBgActive]          = ImVec4(0.10f, 0.10f, 0.12f, 1.00f);
+    colors[ImGuiCol_TitleBgCollapsed]       = ImVec4(0.08f, 0.08f, 0.10f, 1.00f);
+    colors[ImGuiCol_MenuBarBg]              = ImVec4(0.08f, 0.08f, 0.10f, 1.00f);
+    colors[ImGuiCol_ScrollbarBg]            = ImVec4(0.10f, 0.10f, 0.12f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrab]          = ImVec4(0.24f, 0.24f, 0.28f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabHovered]   = ImVec4(0.30f, 0.30f, 0.34f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabActive]    = ImVec4(0.36f, 0.36f, 0.40f, 1.00f);
+    colors[ImGuiCol_CheckMark]              = ImVec4(0.00f, 0.48f, 0.80f, 1.00f); // Sleek Accent Blue
+    colors[ImGuiCol_SliderGrab]             = ImVec4(0.00f, 0.48f, 0.80f, 1.00f);
+    colors[ImGuiCol_SliderGrabActive]        = ImVec4(0.00f, 0.58f, 0.90f, 1.00f);
+    colors[ImGuiCol_Button]                 = ImVec4(0.22f, 0.22f, 0.26f, 1.00f);
+    colors[ImGuiCol_ButtonHovered]          = ImVec4(0.00f, 0.48f, 0.80f, 1.00f);
+    colors[ImGuiCol_ButtonActive]           = ImVec4(0.00f, 0.38f, 0.70f, 1.00f);
+    colors[ImGuiCol_Header]                 = ImVec4(0.20f, 0.20f, 0.24f, 1.00f);
+    colors[ImGuiCol_HeaderHovered]          = ImVec4(0.26f, 0.26f, 0.30f, 1.00f);
+    colors[ImGuiCol_HeaderActive]           = ImVec4(0.22f, 0.22f, 0.26f, 1.00f);
+    colors[ImGuiCol_Separator]              = ImVec4(0.20f, 0.20f, 0.22f, 1.00f);
+    colors[ImGuiCol_SeparatorHovered]       = ImVec4(0.00f, 0.48f, 0.80f, 1.00f);
+    colors[ImGuiCol_SeparatorActive]        = ImVec4(0.00f, 0.38f, 0.70f, 1.00f);
+    colors[ImGuiCol_ResizeGrip]             = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_ResizeGripHovered]      = ImVec4(0.00f, 0.48f, 0.80f, 1.00f);
+    colors[ImGuiCol_ResizeGripActive]       = ImVec4(0.00f, 0.38f, 0.70f, 1.00f);
+    colors[ImGuiCol_Tab]                    = ImVec4(0.14f, 0.14f, 0.16f, 1.00f);
+    colors[ImGuiCol_TabHovered]             = ImVec4(0.22f, 0.22f, 0.26f, 1.00f);
+    colors[ImGuiCol_TabActive]              = ImVec4(0.20f, 0.20f, 0.24f, 1.00f);
+    colors[ImGuiCol_TabUnfocused]           = ImVec4(0.10f, 0.10f, 0.12f, 1.00f);
+    colors[ImGuiCol_TabUnfocusedActive]     = ImVec4(0.14f, 0.14f, 0.16f, 1.00f);
+    colors[ImGuiCol_PlotLines]              = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
+    colors[ImGuiCol_PlotLinesHovered]       = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
+    colors[ImGuiCol_PlotHistogram]          = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
+    colors[ImGuiCol_PlotHistogramHovered]   = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
+    colors[ImGuiCol_TableHeaderBg]          = ImVec4(0.19f, 0.19f, 0.20f, 1.00f);
+    colors[ImGuiCol_TableBorderStrong]      = ImVec4(0.31f, 0.31f, 0.35f, 1.00f);
+    colors[ImGuiCol_TableBorderLight]       = ImVec4(0.23f, 0.23f, 0.25f, 1.00f);
+    colors[ImGuiCol_TableRowBg]             = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_TableRowBgAlt]          = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
+    colors[ImGuiCol_TextSelectedBg]         = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
+    colors[ImGuiCol_DragDropTarget]         = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
+    colors[ImGuiCol_NavHighlight]           = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    colors[ImGuiCol_NavWindowingHighlight]  = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
+    colors[ImGuiCol_NavWindowingDimBg]      = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
+    colors[ImGuiCol_ModalWindowDimBg]       = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
 
     createDescriptorPool();
 
@@ -148,15 +219,78 @@ void EditorUI::drawPanels() {
         return;
     }
 
+    ImGuiIO& io = ImGui::GetIO();
+    float width = io.DisplaySize.x;
+    float height = io.DisplaySize.y;
 
+    // 1. Top Menu Bar (Main Menu Bar)
+    float topY = 0.0f;
+    if (ImGui::BeginMainMenuBar()) {
+        topY = ImGui::GetWindowSize().y; // dynamic height of the menu bar
+        if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("Save Scene", "Ctrl+S")) {
+                if (Scene* currentScene = sceneManager.getCurrentScene()) {
+                    currentScene->saveToFile("sandbox_game/assets/scenes/test_scene.json");
+                    statusMessage = "Scene saved successfully.";
+                }
+            }
+            if (ImGui::MenuItem("Load Scene", "Ctrl+L")) {
+                if (Scene* currentScene = sceneManager.getCurrentScene()) {
+                    SceneSerializer serializer(registry, renderer);
+                    std::vector<Entity> loadedEntities;
+                    if (serializer.deserialize("sandbox_game/assets/scenes/test_scene.json", loadedEntities)) {
+                        statusMessage = "Scene loaded successfully.";
+                    } else {
+                        statusMessage = "Failed to load scene.";
+                    }
+                }
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Exit", "Alt+F4")) {
+                glfwSetWindowShouldClose(glfwGetCurrentContext(), GLFW_TRUE);
+            }
+            ImGui::EndMenu();
+        }
+        ImGui::EndMainMenuBar();
+    }
+
+    // Fallback if MainMenuBar is not showing
+    if (topY == 0.0f) {
+        topY = 22.0f; 
+    }
+
+    float workHeight = height - topY;
+
+    // Sidebar dimensions (snapped layout)
+    float leftWidth = glm::clamp(width * 0.20f, 260.0f, 400.0f);
+    float rightWidth = glm::clamp(width * 0.22f, 320.0f, 460.0f);
+    float centerWidth = width - leftWidth - rightWidth;
+    float bottomHeight = workHeight * 0.32f;
+    float topPanelHeight = workHeight - bottomHeight;
+
+    // 2. Hierarchy Panel (Left - Top)
+    ImGui::SetNextWindowPos(ImVec2(0.0f, topY));
+    ImGui::SetNextWindowSize(ImVec2(leftWidth, topPanelHeight));
     drawHierarchyPanel();
-    drawInspectorPanel();
+
+    // 3. Debug Panel (Left - Bottom)
+    ImGui::SetNextWindowPos(ImVec2(0.0f, topY + topPanelHeight));
+    ImGui::SetNextWindowSize(ImVec2(leftWidth, bottomHeight));
+    drawDebugPanel();
+
+    // 4. Asset Browser (Center - Bottom)
+    ImGui::SetNextWindowPos(ImVec2(leftWidth, topY + topPanelHeight));
+    ImGui::SetNextWindowSize(ImVec2(centerWidth, bottomHeight));
     drawAssetBrowser();
 
+    // 5. Inspector Panel (Right)
+    ImGui::SetNextWindowPos(ImVec2(width - rightWidth, topY));
+    ImGui::SetNextWindowSize(ImVec2(rightWidth, workHeight));
+    drawInspectorPanel();
+
+    // 6. Draw Gizmo and Viewport overlay controls (drawn on top of clear center area)
     drawGizmo();
     handleViewportPicking();
-
-    drawDebugPanel();
 }
 
 /**
@@ -289,109 +423,58 @@ void EditorUI::drawSceneControls() {
  * @brief Renders hierarchy list of all names active in ECS.
  */
 void EditorUI::drawHierarchyPanel() {
-    Begin("Hierarchy");
-    TextUnformatted("Scene Entities");
-    Separator();
+    Begin("Hierarchy", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
 
     Scene* currentScene = sceneManager.getCurrentScene();
-    if (Button("Add Cube")) {
-        if (currentScene) {
-            Entity created = currentScene->createPrimitiveEntity("Cube");
-            if (created.getId() != Entity::INVALID_ENTITY) {
-                selectedEntity = created;
-                hasSelection = true;
-                if (Name* createdName = registry.get<Name>(created)) {
-                    renameBuffer = createdName->value;
-                }
-                statusMessage = "Created cube entity.";
-            } else {
-                statusMessage = "Failed to create cube entity.";
-            }
-        }
+
+    // ---- Top Toolbar ----
+    float panelWidth = ImGui::GetContentRegionAvail().x;
+
+    // [+ Create] button as a popup
+    if (ImGui::Button("+ Create", ImVec2(panelWidth * 0.48f, 0))) {
+        ImGui::OpenPopup("CreateEntityPopup");
     }
-    SameLine();
-    if (Button("Add Triangle")) {
-        if (currentScene) {
-            Entity created = currentScene->createPrimitiveEntity("Triangle");
-            if (created.getId() != Entity::INVALID_ENTITY) {
-                selectedEntity = created;
-                hasSelection = true;
-                if (Name* createdName = registry.get<Name>(created)) {
-                    renameBuffer = createdName->value;
-                }
-                statusMessage = "Created triangle entity.";
-            } else {
-                statusMessage = "Failed to create triangle entity.";
-            }
-        }
+
+    if (ImGui::BeginPopup("CreateEntityPopup")) {
+        ImGui::TextDisabled("Primitives");
+        ImGui::Separator();
+        if (ImGui::MenuItem("Cube"))          { if (currentScene) { auto e = currentScene->createPrimitiveEntity("Cube");     selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+        if (ImGui::MenuItem("Triangle"))      { if (currentScene) { auto e = currentScene->createPrimitiveEntity("Triangle"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+        ImGui::Separator();
+        ImGui::TextDisabled("Entities");
+        ImGui::Separator();
+        if (ImGui::MenuItem("Camera"))        { if (currentScene) { auto e = currentScene->createEntityOfType("Camera"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+        if (ImGui::MenuItem("Grid"))          { if (currentScene) { auto e = currentScene->createEntityOfType("Grid");   selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+        ImGui::EndPopup();
     }
-    SameLine();
-    if (Button("Add Camera")) {
-        if (currentScene) {
-            Entity created = currentScene->createEntityOfType("Camera");
-            if (created.getId() != Entity::INVALID_ENTITY) {
-                selectedEntity = created;
-                hasSelection = true;
-                if (Name* createdName = registry.get<Name>(created)) {
-                    renameBuffer = createdName->value;
-                }
-                statusMessage = "Created camera entity.";
-            } else {
-                statusMessage = "Failed to create camera entity.";
-            }
-        }
-    }
-    SameLine();
-    if (Button("Add Grid")) {
-        if (currentScene) {
-            Entity created = currentScene->createEntityOfType("Grid");
-            if (created.getId() != Entity::INVALID_ENTITY) {
-                selectedEntity = created;
-                hasSelection = true;
-                if (Name* createdName = registry.get<Name>(created)) {
-                    renameBuffer = createdName->value;
-                }
-                statusMessage = "Created grid entity.";
-            } else {
-                statusMessage = "Failed to create grid entity.";
-            }
-        }
-    }
-    SameLine();
-    bool canDuplicate = hasSelection && currentScene != nullptr;
-    BeginDisabled(!canDuplicate);
-    if (Button("Duplicate Selected")) {
+
+    ImGui::SameLine();
+
+    // [Duplicate] button — only enabled when something is selected
+    BeginDisabled(!hasSelection || !currentScene);
+    if (ImGui::Button("Duplicate", ImVec2(panelWidth * 0.48f, 0))) {
         Entity duplicated = currentScene->duplicateEntity(selectedEntity);
         if (duplicated.getId() != Entity::INVALID_ENTITY) {
             selectedEntity = duplicated;
             hasSelection = true;
-            if (Name* duplicatedName = registry.get<Name>(duplicated)) {
-                renameBuffer = duplicatedName->value;
-            }
+            if (auto* n = registry.get<Name>(duplicated)) renameBuffer = n->value;
             statusMessage = "Duplicated selected entity.";
-        } else {
-            statusMessage = "Failed to duplicate selected entity.";
-        }
-    }
-    EndDisabled();
-    SameLine();
-    bool canDelete = hasSelection && currentScene != nullptr;
-    BeginDisabled(!canDelete);
-    if (Button("Delete Selected")) {
-        if (currentScene->deleteEntity(selectedEntity)) {
-            statusMessage = "Deleted selected entity.";
-            hasSelection = false;
-            selectedEntity = Entity();
-            renameBuffer.clear();
-        } else {
-            statusMessage = "Failed to delete selected entity.";
         }
     }
     EndDisabled();
 
     Separator();
 
-    PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 2));
+    // ---- Entity Tree ----
+    PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 3));
+
+    // Scrollable child window for the entity tree list
+    // Height is negative to leave space for the bottom delete button footer (approx 42px)
+    ImGui::BeginChild("HierarchyTreeChild", ImVec2(0, -42.0f), false, ImGuiWindowFlags_HorizontalScrollbar);
+
+    // Entity to delete deferred (can't destroy during iteration)
+    Entity pendingDelete;
+    bool hasPendingDelete = false;
 
     std::function<void(Entity, int)> drawEntityNode = [&](Entity entity, int depth) {
         if (depth > 10) return;
@@ -399,9 +482,13 @@ void EditorUI::drawHierarchyPanel() {
         if (!nameComp) return;
 
         bool selected = (hasSelection && entity == selectedEntity);
-        
-        if (depth > 0) {
-            ImGui::Indent(depth * 15.0f);
+
+        if (depth > 0) ImGui::Indent(depth * 16.0f);
+
+        // Highlight selected row with accent color
+        if (selected) {
+            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.00f, 0.40f, 0.70f, 0.60f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.00f, 0.48f, 0.80f, 0.80f));
         }
 
         std::string label = nameComp->value + "##" + std::to_string(entity.getId());
@@ -410,10 +497,42 @@ void EditorUI::drawHierarchyPanel() {
             hasSelection = true;
             renameBuffer = nameComp->value;
         }
-        
-        if (depth > 0) {
-            ImGui::Unindent(depth * 15.0f);
+
+        if (selected) ImGui::PopStyleColor(2);
+
+        // Right-click context menu on any entity node
+        std::string ctxId = "EntityCtx##" + std::to_string(entity.getId());
+        if (ImGui::BeginPopupContextItem(ctxId.c_str())) {
+            selectedEntity = entity;
+            hasSelection = true;
+            renameBuffer = nameComp->value;
+
+            ImGui::TextDisabled("%s", nameComp->value.c_str());
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("Duplicate")) {
+                if (currentScene) {
+                    Entity dup = currentScene->duplicateEntity(entity);
+                    if (dup.getId() != Entity::INVALID_ENTITY) {
+                        selectedEntity = dup;
+                        hasSelection = true;
+                        if (auto* n = registry.get<Name>(dup)) renameBuffer = n->value;
+                        statusMessage = "Duplicated entity.";
+                    }
+                }
+            }
+
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+            if (ImGui::MenuItem("Delete")) {
+                pendingDelete = entity;
+                hasPendingDelete = true;
+            }
+            ImGui::PopStyleColor();
+
+            ImGui::EndPopup();
         }
+
+        if (depth > 0) ImGui::Unindent(depth * 16.0f);
 
         // Draw children recursively
         for (auto [childEntity, hierarchy] : registry.view<HierarchyComponent>()) {
@@ -423,7 +542,7 @@ void EditorUI::drawHierarchyPanel() {
         }
     };
 
-    // Draw all root entities (no HierarchyComponent, or parent is invalid)
+    // Draw all root entities (those with no valid parent)
     for (auto [entity, name] : registry.view<Name>()) {
         bool hasParent = false;
         if (auto* hierarchy = registry.get<HierarchyComponent>(entity)) {
@@ -431,13 +550,45 @@ void EditorUI::drawHierarchyPanel() {
                 hasParent = true;
             }
         }
-        
         if (!hasParent) {
             drawEntityNode(entity, 0);
         }
     }
 
+    ImGui::EndChild(); // End of HierarchyTreeChild scrolling area
+
     PopStyleVar();
+
+    // ---- Delete button (bottom of panel, red, always visible) ----
+    Separator();
+
+    bool canDelete = hasSelection && currentScene != nullptr;
+    BeginDisabled(!canDelete);
+    ImGui::PushStyleColor(ImGuiCol_Button,        canDelete ? ImVec4(0.65f, 0.10f, 0.10f, 1.0f) : ImVec4(0.30f, 0.18f, 0.18f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.85f, 0.15f, 0.15f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.50f, 0.08f, 0.08f, 1.0f));
+    if (ImGui::Button("Delete Selected", ImVec2(-1, 0))) {
+        if (currentScene->deleteEntity(selectedEntity)) {
+            statusMessage = "Deleted selected entity.";
+            hasSelection = false;
+            selectedEntity = Entity();
+            renameBuffer.clear();
+        }
+    }
+    ImGui::PopStyleColor(3);
+    EndDisabled();
+
+    // Process deferred deletion from context menu
+    if (hasPendingDelete && currentScene) {
+        if (currentScene->deleteEntity(pendingDelete)) {
+            statusMessage = "Deleted entity.";
+            if (selectedEntity == pendingDelete) {
+                hasSelection = false;
+                selectedEntity = Entity();
+                renameBuffer.clear();
+            }
+        }
+    }
 
     End();
 }
@@ -446,7 +597,7 @@ void EditorUI::drawHierarchyPanel() {
  * @brief Inspector panel routing control fields based on components.
  */
 void EditorUI::drawInspectorPanel() {
-    Begin("Inspector");
+    Begin("Inspector", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
     TextUnformatted("Runtime ECS Editor");
     drawSceneControls();
 
@@ -483,6 +634,20 @@ void EditorUI::drawInspectorPanel() {
             statusMessage = "Name cannot be empty.";
         }
     }
+    SameLine();
+    if (Button("Save as Prefab")) {
+        std::string prefabDir = "assets/prefabs";
+        if (!std::filesystem::exists(prefabDir)) {
+            std::filesystem::create_directories(prefabDir);
+        }
+        std::string prefabPath = prefabDir + "/" + name->value + ".prefab";
+        SceneSerializer serializer(registry, renderer);
+        if (serializer.serializePrefab(prefabPath, selectedEntity)) {
+            statusMessage = "Saved prefab to " + prefabPath;
+        } else {
+            statusMessage = "Failed to save prefab.";
+        }
+    }
 
     PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 6));
     PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 6));
@@ -494,10 +659,53 @@ void EditorUI::drawInspectorPanel() {
     drawMaterialEditor();
     drawSkeletonEditor();
     drawAnimatorEditor();
+    drawHierarchyEditor();
+    drawIKSolverEditor();
+    drawAnimationControllerEditor();
     drawGridEditor();
     drawCameraEditor();
 
+    ImGui::Separator();
+    if (ImGui::Button("+ Add Component", ImVec2(-1, 30))) {
+        ImGui::OpenPopup("AddComponentPopup");
+    }
 
+    if (ImGui::BeginPopup("AddComponentPopup")) {
+        if (!registry.has<Material>(selectedEntity) && ImGui::MenuItem("Material")) {
+            glm::vec4 color(1.0f);
+            registry.emplace<Material>(selectedEntity, Material{ color });
+            statusMessage = "Added Material component.";
+        }
+        if (!registry.has<Camera>(selectedEntity) && ImGui::MenuItem("Camera")) {
+            registry.emplace<Camera>(selectedEntity, Camera{});
+            statusMessage = "Added Camera component.";
+        }
+        if (!registry.has<Grid>(selectedEntity) && ImGui::MenuItem("Grid")) {
+            registry.emplace<Grid>(selectedEntity, Grid{});
+            statusMessage = "Added Grid component.";
+        }
+        if (!registry.has<SkeletonComponent>(selectedEntity) && ImGui::MenuItem("Skeleton")) {
+            registry.emplace<SkeletonComponent>(selectedEntity, SkeletonComponent{});
+            statusMessage = "Added Skeleton component.";
+        }
+        if (!registry.has<AnimatorComponent>(selectedEntity) && ImGui::MenuItem("Animator")) {
+            registry.emplace<AnimatorComponent>(selectedEntity, AnimatorComponent{});
+            statusMessage = "Added Animator component.";
+        }
+        if (!registry.has<AnimationControllerComponent>(selectedEntity) && ImGui::MenuItem("Animation Controller")) {
+            registry.emplace<AnimationControllerComponent>(selectedEntity, AnimationControllerComponent{});
+            statusMessage = "Added Animation Controller component.";
+        }
+        if (!registry.has<IKSolverComponent>(selectedEntity) && ImGui::MenuItem("IK Solver")) {
+            registry.emplace<IKSolverComponent>(selectedEntity, IKSolverComponent{});
+            statusMessage = "Added IK Solver component.";
+        }
+        if (!registry.has<HierarchyComponent>(selectedEntity) && ImGui::MenuItem("Hierarchy Link")) {
+            registry.emplace<HierarchyComponent>(selectedEntity, HierarchyComponent{});
+            statusMessage = "Added Hierarchy Component.";
+        }
+        ImGui::EndPopup();
+    }
 
     PopStyleVar(2);
 
@@ -508,8 +716,7 @@ void EditorUI::drawInspectorPanel() {
  * @brief Renders details panel of raycasts, metrics, and picking.
  */
 void EditorUI::drawDebugPanel() {
-    Begin("Debug", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-
+    Begin("Debug", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
     TextUnformatted("Picking Debug");
     Separator();
 
@@ -614,7 +821,23 @@ void EditorUI::drawTransformEditor() {
  */
 void EditorUI::drawMaterialEditor() {
     Material* material = registry.get<Material>(selectedEntity);
-    if (!material || !CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (!material) {
+        return;
+    }
+
+    bool open = CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen);
+    SameLine(ImGui::GetWindowWidth() - 40.0f);
+    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
+    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
+    if (Button("X##Material", ImVec2(24, 20))) {
+        registry.remove<Material>(selectedEntity);
+        statusMessage = "Removed Material component.";
+        PopStyleColor(2);
+        return;
+    }
+    PopStyleColor(2);
+
+    if (!open) {
         return;
     }
 
@@ -642,7 +865,23 @@ void EditorUI::drawMaterialEditor() {
  */
 void EditorUI::drawMeshEditor() {
     Mesh* mesh = registry.get<Mesh>(selectedEntity);
-    if (!mesh || registry.has<Grid>(selectedEntity) || !CollapsingHeader("Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (!mesh || registry.has<Grid>(selectedEntity)) {
+        return;
+    }
+
+    bool open = CollapsingHeader("Mesh", ImGuiTreeNodeFlags_DefaultOpen);
+    SameLine(ImGui::GetWindowWidth() - 40.0f);
+    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
+    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
+    if (Button("X##Mesh", ImVec2(24, 20))) {
+        registry.remove<Mesh>(selectedEntity);
+        statusMessage = "Removed Mesh component.";
+        PopStyleColor(2);
+        return;
+    }
+    PopStyleColor(2);
+
+    if (!open) {
         return;
     }
 
@@ -695,12 +934,13 @@ void EditorUI::drawMeshEditor() {
  * @brief Renders the asset browser panel.
  */
 void EditorUI::drawAssetBrowser() {
-    Begin("Asset Browser");
+    Begin("Asset Browser", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
 
     if (!std::filesystem::exists("assets")) {
         std::filesystem::create_directories("assets");
         std::filesystem::create_directories("assets/models");
         std::filesystem::create_directories("assets/textures");
+        std::filesystem::create_directories("assets/prefabs");
     }
 
     if (TreeNodeEx("Models", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -884,6 +1124,48 @@ void EditorUI::drawAssetBrowser() {
         TreePop();
     }
 
+    Separator();
+
+    if (TreeNodeEx("Prefabs", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (std::filesystem::exists("assets/prefabs")) {
+            for (const auto& entry : std::filesystem::recursive_directory_iterator("assets/prefabs")) {
+                if (entry.is_regular_file()) {
+                    auto ext = entry.path().extension().string();
+                    if (ext == ".prefab") {
+                        std::string pathStr = entry.path().generic_string();
+                        BulletText("%s", entry.path().filename().string().c_str());
+                        SameLine();
+                        PushID(pathStr.c_str());
+                        if (Button("Instantiate")) {
+                            Scene* currentScene = sceneManager.getCurrentScene();
+                            if (currentScene) {
+                                SceneSerializer serializer(registry, renderer);
+                                std::vector<Entity> loadedEntities;
+                                Entity parent = hasSelection ? selectedEntity : Entity();
+                                Entity root = serializer.deserializePrefab(pathStr, loadedEntities, parent);
+                                if (root.getId() != Entity::INVALID_ENTITY) {
+                                    for (Entity e : loadedEntities) {
+                                        currentScene->trackEntity(e);
+                                    }
+                                    selectedEntity = root;
+                                    hasSelection = true;
+                                    if (auto* n = registry.get<Name>(root)) {
+                                        renameBuffer = n->value;
+                                    }
+                                    statusMessage = "Instantiated prefab: " + entry.path().filename().string();
+                                } else {
+                                    statusMessage = "Failed to instantiate prefab.";
+                                }
+                            }
+                        }
+                        PopID();
+                    }
+                }
+            }
+        }
+        TreePop();
+    }
+
     End();
 }
 
@@ -892,7 +1174,23 @@ void EditorUI::drawAssetBrowser() {
  */
 void EditorUI::drawGridEditor() {
     Grid* grid = registry.get<Grid>(selectedEntity);
-    if (!grid || !CollapsingHeader("Grid", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (!grid) {
+        return;
+    }
+
+    bool open = CollapsingHeader("Grid", ImGuiTreeNodeFlags_DefaultOpen);
+    SameLine(ImGui::GetWindowWidth() - 40.0f);
+    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
+    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
+    if (Button("X##Grid", ImVec2(24, 20))) {
+        registry.remove<Grid>(selectedEntity);
+        statusMessage = "Removed Grid component.";
+        PopStyleColor(2);
+        return;
+    }
+    PopStyleColor(2);
+
+    if (!open) {
         return;
     }
 
@@ -906,7 +1204,23 @@ void EditorUI::drawGridEditor() {
 void EditorUI::drawCameraEditor() {
     Camera* camera = registry.get<Camera>(selectedEntity);
     Transform* transform = registry.get<Transform>(selectedEntity);
-    if (!camera || !CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (!camera) {
+        return;
+    }
+
+    bool open = CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen);
+    SameLine(ImGui::GetWindowWidth() - 40.0f);
+    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
+    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
+    if (Button("X##Camera", ImVec2(24, 20))) {
+        registry.remove<Camera>(selectedEntity);
+        statusMessage = "Removed Camera component.";
+        PopStyleColor(2);
+        return;
+    }
+    PopStyleColor(2);
+
+    if (!open) {
         return;
     }
 
@@ -1191,7 +1505,23 @@ void EditorUI::applyInputMode() {
 
 void EditorUI::drawSkeletonEditor() {
     SkeletonComponent* skeleton = registry.get<SkeletonComponent>(selectedEntity);
-    if (!skeleton || !CollapsingHeader("Skeleton", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (!skeleton) {
+        return;
+    }
+
+    bool open = CollapsingHeader("Skeleton", ImGuiTreeNodeFlags_DefaultOpen);
+    SameLine(ImGui::GetWindowWidth() - 40.0f);
+    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
+    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
+    if (Button("X##Skeleton", ImVec2(24, 20))) {
+        registry.remove<SkeletonComponent>(selectedEntity);
+        statusMessage = "Removed Skeleton component.";
+        PopStyleColor(2);
+        return;
+    }
+    PopStyleColor(2);
+
+    if (!open) {
         return;
     }
     
@@ -1206,18 +1536,32 @@ void EditorUI::drawSkeletonEditor() {
 }
 
 void EditorUI::drawAnimatorEditor() {
-    if (auto* hierarchy = registry.get<HierarchyComponent>(selectedEntity)) {
-        if (hierarchy->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hierarchy->parent) && registry.has<AnimatorComponent>(hierarchy->parent)) {
-            if (CollapsingHeader("Animator", ImGuiTreeNodeFlags_DefaultOpen)) {
-                TextUnformatted("Animation is driven by parent entity.");
-            }
-            return;
-        }
+    AnimatorComponent* animator = registry.get<AnimatorComponent>(selectedEntity);
+    if (!animator) {
+        return;
     }
 
-    AnimatorComponent* animator = registry.get<AnimatorComponent>(selectedEntity);
-    if (!animator || !CollapsingHeader("Animator", ImGuiTreeNodeFlags_DefaultOpen)) {
+    bool open = CollapsingHeader("Animator", ImGuiTreeNodeFlags_DefaultOpen);
+    SameLine(ImGui::GetWindowWidth() - 40.0f);
+    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
+    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
+    if (Button("X##Animator", ImVec2(24, 20))) {
+        registry.remove<AnimatorComponent>(selectedEntity);
+        statusMessage = "Removed Animator component.";
+        PopStyleColor(2);
         return;
+    }
+    PopStyleColor(2);
+
+    if (!open) {
+        return;
+    }
+
+    if (auto* hierarchy = registry.get<HierarchyComponent>(selectedEntity)) {
+        if (hierarchy->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hierarchy->parent) && registry.has<AnimatorComponent>(hierarchy->parent)) {
+            TextUnformatted("Animation is driven by parent entity.");
+            return;
+        }
     }
     
     if (animator->animations.empty()) {
@@ -1256,184 +1600,284 @@ void EditorUI::drawAnimatorEditor() {
             animator->currentTime = 0.0f;
         }
     }
+}
 
-    // --- Animation Controller Section ---
-    Separator();
-    if (auto* controller = registry.get<AnimationControllerComponent>(selectedEntity)) {
-        if (CollapsingHeader("Animation Controller", ImGuiTreeNodeFlags_DefaultOpen)) {
-            Text("Current State: %s", controller->currentState.empty() ? "None" : controller->currentState.c_str());
-            if (controller->isCrossfading) {
-                Text("Crossfading to %s (%.2f / %.2fs)", controller->targetState.c_str(), controller->crossfadeProgress, controller->crossfadeDuration);
-                ProgressBar(controller->crossfadeProgress / controller->crossfadeDuration);
-            }
+void EditorUI::drawHierarchyEditor() {
+    HierarchyComponent* hierarchy = registry.get<HierarchyComponent>(selectedEntity);
+    if (!hierarchy) {
+        return;
+    }
 
-            // Parameters management
-            if (TreeNode("Parameters")) {
-                for (auto& [paramName, paramVal] : controller->parameters) {
-                    SliderFloat(paramName.c_str(), &paramVal, 0.0f, 1.0f);
-                }
-                TreePop();
-            }
+    bool open = CollapsingHeader("Hierarchy Link", ImGuiTreeNodeFlags_DefaultOpen);
+    SameLine(ImGui::GetWindowWidth() - 40.0f);
+    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
+    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
+    if (Button("X##Hierarchy", ImVec2(24, 20))) {
+        registry.remove<HierarchyComponent>(selectedEntity);
+        statusMessage = "Removed Hierarchy component.";
+        PopStyleColor(2);
+        return;
+    }
+    PopStyleColor(2);
 
-            // Quick State Setup Demo buttons
-            if (Button("Setup Idle/Walk State Machine")) {
-                controller->states.clear();
-                
-                AnimationState idleState;
-                idleState.name = "Idle";
-                idleState.clipName = "idle";
-                idleState.isBlendTree = false;
-                if (!animator->animations.empty()) idleState.clipName = animator->animations[0].name;
-                
-                AnimationState moveState;
-                moveState.name = "Movement";
-                moveState.isBlendTree = true;
-                moveState.blendTree.parameterName = "speed";
-                
-                if (animator->animations.size() >= 2) {
-                    BlendNode nodeWalk{ animator->animations[0].name, 0.0f };
-                    BlendNode nodeRun{ animator->animations[1].name, 1.0f };
-                    moveState.blendTree.nodes = { nodeWalk, nodeRun };
-                } else if (!animator->animations.empty()) {
-                    BlendNode nodeWalk{ animator->animations[0].name, 0.0f };
-                    moveState.blendTree.nodes = { nodeWalk };
-                }
-                
-                controller->states = { idleState, moveState };
+    if (!open) {
+        return;
+    }
 
-                controller->transitions.clear();
-                
-                AnimationTransition toMove;
-                toMove.fromState = "Idle";
-                toMove.toState = "Movement";
-                toMove.crossfadeDuration = 0.3f;
-                TransitionCondition condMove{ "speed", ">", 0.1f };
-                toMove.conditions = { condMove };
-                
-                AnimationTransition toIdle;
-                toIdle.fromState = "Movement";
-                toIdle.toState = "Idle";
-                toIdle.crossfadeDuration = 0.3f;
-                TransitionCondition condIdle2{ "speed", "<", 0.1f };
-                toIdle.conditions = { condIdle2 };
-                
-                controller->transitions = { toMove, toIdle };
-                controller->parameters["speed"] = 0.0f;
-                controller->currentState = "Idle";
-                controller->currentStateTime = 0.0f;
-                controller->isCrossfading = false;
-            }
+    std::string parentNameStr = "None";
+    if (hierarchy->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hierarchy->parent)) {
+        if (auto* parentNameComp = registry.get<Name>(hierarchy->parent)) {
+            parentNameStr = parentNameComp->value + " (" + std::to_string(hierarchy->parent.getId()) + ")";
+        } else {
+            parentNameStr = "Entity " + std::to_string(hierarchy->parent.getId());
         }
-    } else {
-        if (Button("Create Animation Controller")) {
-            registry.emplace<AnimationControllerComponent>(selectedEntity, AnimationControllerComponent{});
+    }
+    Text("Parent: %s", parentNameStr.c_str());
+
+    // Option to clear parent
+    if (hierarchy->parent.getId() != Entity::INVALID_ENTITY) {
+        if (Button("Clear Parent")) {
+            hierarchy->parent = Entity();
+            statusMessage = "Cleared parent entity link.";
         }
     }
 
-    // --- IK Solver Section ---
-    Separator();
-    if (auto* ik = registry.get<IKSolverComponent>(selectedEntity)) {
-        if (CollapsingHeader("IK Solver", ImGuiTreeNodeFlags_DefaultOpen)) {
-            Checkbox("Enable IK Solver", &ik->enabled);
+    // List other entities to set as parent
+    if (TreeNode("Choose Parent")) {
+        for (auto [otherEntity, nameComp] : registry.view<Name>()) {
+            if (otherEntity == selectedEntity) continue;
             
-            const char* solverTypes[] = { "2-Bone (Analytical)", "FABRIK (Iterative)" };
-            int currentType = static_cast<int>(ik->solverType);
-            if (Combo("Solver Type", &currentType, solverTypes, 2)) {
-                ik->solverType = static_cast<IKSolverType>(currentType);
-            }
-
-            if (ik->solverType == IKSolverType::TwoBone) {
-                char startJointBuf[64]{};
-                char midJointBuf[64]{};
-                char endJointBuf[64]{};
-                strncpy_s(startJointBuf, ik->startJointName.c_str(), sizeof(startJointBuf) - 1);
-                strncpy_s(midJointBuf, ik->middleJointName.c_str(), sizeof(midJointBuf) - 1);
-                strncpy_s(endJointBuf, ik->endJointName.c_str(), sizeof(endJointBuf) - 1);
-                
-                if (InputText("Start Joint (e.g. thigh)", startJointBuf, sizeof(startJointBuf))) {
-                    ik->startJointName = startJointBuf;
-                }
-                if (InputText("Middle Joint (e.g. shin)", midJointBuf, sizeof(midJointBuf))) {
-                    ik->middleJointName = midJointBuf;
-                }
-                if (InputText("End Joint (e.g. foot)", endJointBuf, sizeof(endJointBuf))) {
-                    ik->endJointName = endJointBuf;
-                }
-                
-                if (Button("Auto Setup Left Leg Joints")) {
-                    if (auto* skeleton = registry.get<SkeletonComponent>(selectedEntity)) {
-                        for (const auto& joint : skeleton->joints) {
-                            if (joint.name.find("thigh.L") != std::string::npos || joint.name.find("Thigh.L") != std::string::npos || joint.name.find("UpperLeg_L") != std::string::npos) {
-                                ik->startJointName = joint.name;
-                            }
-                            if (joint.name.find("shin.L") != std::string::npos || joint.name.find("Shin.L") != std::string::npos || joint.name.find("LowerLeg_L") != std::string::npos) {
-                                ik->middleJointName = joint.name;
-                            }
-                            if (joint.name.find("foot.L") != std::string::npos || joint.name.find("Foot.L") != std::string::npos || joint.name.find("Foot_L") != std::string::npos) {
-                                ik->endJointName = joint.name;
-                            }
-                        }
-                        ik->polePosition = glm::vec3(0.0f, 0.0f, 1.0f);
-                    }
-                }
-            } else {
-                SliderInt("Max Iterations", &ik->maxIterations, 1, 50);
-                SliderFloat("Tolerance", &ik->tolerance, 0.0001f, 0.01f, "%.4f");
-                
-                TextUnformatted("Bone Chain Joints (Base to Tip):");
-                for (size_t i = 0; i < ik->jointChainNames.size(); ++i) {
-                    char jointBuf[64]{};
-                    strncpy_s(jointBuf, ik->jointChainNames[i].c_str(), sizeof(jointBuf) - 1);
-                    PushID(static_cast<int>(i));
-                    if (InputText("##joint", jointBuf, sizeof(jointBuf))) {
-                        ik->jointChainNames[i] = jointBuf;
-                    }
-                    SameLine();
-                    if (Button("Remove")) {
-                        ik->jointChainNames.erase(ik->jointChainNames.begin() + i);
-                        PopID();
+            // Prevent cyclic parenting
+            bool isDescendant = false;
+            Entity check = otherEntity;
+            while (check.getId() != Entity::INVALID_ENTITY && registry.isValid(check)) {
+                if (auto* checkHierarchy = registry.get<HierarchyComponent>(check)) {
+                    if (checkHierarchy->parent == selectedEntity) {
+                        isDescendant = true;
                         break;
                     }
-                    PopID();
+                    check = checkHierarchy->parent;
+                } else {
+                    break;
                 }
-                if (Button("Add Bone to Chain")) {
-                    ik->jointChainNames.push_back("");
+            }
+            if (isDescendant) continue;
+
+            if (Selectable((nameComp.value + "##parentChoice" + std::to_string(otherEntity.getId())).c_str())) {
+                hierarchy->parent = otherEntity;
+                statusMessage = "Linked parent entity.";
+            }
+        }
+        TreePop();
+    }
+}
+
+void EditorUI::drawIKSolverEditor() {
+    IKSolverComponent* ik = registry.get<IKSolverComponent>(selectedEntity);
+    if (!ik) {
+        return;
+    }
+
+    bool open = CollapsingHeader("IK Solver", ImGuiTreeNodeFlags_DefaultOpen);
+    SameLine(ImGui::GetWindowWidth() - 40.0f);
+    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
+    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
+    if (Button("X##IKSolver", ImVec2(24, 20))) {
+        registry.remove<IKSolverComponent>(selectedEntity);
+        statusMessage = "Removed IK Solver component.";
+        PopStyleColor(2);
+        return;
+    }
+    PopStyleColor(2);
+
+    if (!open) {
+        return;
+    }
+
+    Checkbox("Enable IK Solver", &ik->enabled);
+    
+    const char* solverTypes[] = { "2-Bone (Analytical)", "FABRIK (Iterative)" };
+    int currentType = static_cast<int>(ik->solverType);
+    if (Combo("Solver Type", &currentType, solverTypes, 2)) {
+        ik->solverType = static_cast<IKSolverType>(currentType);
+    }
+
+    if (ik->solverType == IKSolverType::TwoBone) {
+        char startJointBuf[64]{};
+        char midJointBuf[64]{};
+        char endJointBuf[64]{};
+        strncpy_s(startJointBuf, ik->startJointName.c_str(), sizeof(startJointBuf) - 1);
+        strncpy_s(midJointBuf, ik->middleJointName.c_str(), sizeof(midJointBuf) - 1);
+        strncpy_s(endJointBuf, ik->endJointName.c_str(), sizeof(endJointBuf) - 1);
+        
+        if (InputText("Start Joint (e.g. thigh)", startJointBuf, sizeof(startJointBuf))) {
+            ik->startJointName = startJointBuf;
+        }
+        if (InputText("Middle Joint (e.g. shin)", midJointBuf, sizeof(midJointBuf))) {
+            ik->middleJointName = midJointBuf;
+        }
+        if (InputText("End Joint (e.g. foot)", endJointBuf, sizeof(endJointBuf))) {
+            ik->endJointName = endJointBuf;
+        }
+        
+        if (Button("Auto Setup Left Leg Joints")) {
+            if (auto* skeleton = registry.get<SkeletonComponent>(selectedEntity)) {
+                for (const auto& joint : skeleton->joints) {
+                    if (joint.name.find("thigh.L") != std::string::npos || joint.name.find("Thigh.L") != std::string::npos || joint.name.find("UpperLeg_L") != std::string::npos) {
+                        ik->startJointName = joint.name;
+                    }
+                    if (joint.name.find("shin.L") != std::string::npos || joint.name.find("Shin.L") != std::string::npos || joint.name.find("LowerLeg_L") != std::string::npos) {
+                        ik->middleJointName = joint.name;
+                    }
+                    if (joint.name.find("foot.L") != std::string::npos || joint.name.find("Foot.L") != std::string::npos || joint.name.find("Foot_L") != std::string::npos) {
+                        ik->endJointName = joint.name;
+                    }
                 }
-                SameLine();
-                if (Button("Auto Setup Left Arm Chain")) {
-                    if (auto* skeleton = registry.get<SkeletonComponent>(selectedEntity)) {
-                        ik->jointChainNames.clear();
-                        for (const auto& joint : skeleton->joints) {
-                            if (joint.name.find("shoulder.L") != std::string::npos || joint.name.find("Shoulder.L") != std::string::npos || joint.name.find("Clavicle_L") != std::string::npos) {
-                                ik->jointChainNames.push_back(joint.name);
-                            }
-                        }
-                        for (const auto& joint : skeleton->joints) {
-                            if (joint.name.find("upper_arm.L") != std::string::npos || joint.name.find("UpperArm.L") != std::string::npos || joint.name.find("UpperArm_L") != std::string::npos) {
-                                ik->jointChainNames.push_back(joint.name);
-                            }
-                        }
-                        for (const auto& joint : skeleton->joints) {
-                            if (joint.name.find("forearm.L") != std::string::npos || joint.name.find("Forearm.L") != std::string::npos || joint.name.find("Forearm_L") != std::string::npos) {
-                                ik->jointChainNames.push_back(joint.name);
-                            }
-                        }
-                        for (const auto& joint : skeleton->joints) {
-                            if (joint.name.find("hand.L") != std::string::npos || joint.name.find("Hand.L") != std::string::npos || joint.name.find("Hand_L") != std::string::npos) {
-                                ik->jointChainNames.push_back(joint.name);
-                            }
-                        }
+                ik->polePosition = glm::vec3(0.0f, 0.0f, 1.0f);
+            }
+        }
+    } else {
+        SliderInt("Max Iterations", &ik->maxIterations, 1, 50);
+        SliderFloat("Tolerance", &ik->tolerance, 0.0001f, 0.01f, "%.4f");
+        
+        TextUnformatted("Bone Chain Joints (Base to Tip):");
+        for (size_t i = 0; i < ik->jointChainNames.size(); ++i) {
+            char jointBuf[64]{};
+            strncpy_s(jointBuf, ik->jointChainNames[i].c_str(), sizeof(jointBuf) - 1);
+            PushID(static_cast<int>(i));
+            if (InputText("##joint", jointBuf, sizeof(jointBuf))) {
+                ik->jointChainNames[i] = jointBuf;
+            }
+            SameLine();
+            if (Button("Remove")) {
+                ik->jointChainNames.erase(ik->jointChainNames.begin() + i);
+                PopID();
+                break;
+            }
+            PopID();
+        }
+        if (Button("Add Bone to Chain")) {
+            ik->jointChainNames.push_back("");
+        }
+        SameLine();
+        if (Button("Auto Setup Left Arm Chain")) {
+            if (auto* skeleton = registry.get<SkeletonComponent>(selectedEntity)) {
+                ik->jointChainNames.clear();
+                for (const auto& joint : skeleton->joints) {
+                    if (joint.name.find("shoulder.L") != std::string::npos || joint.name.find("Shoulder.L") != std::string::npos || joint.name.find("Clavicle_L") != std::string::npos) {
+                        ik->jointChainNames.push_back(joint.name);
+                    }
+                }
+                for (const auto& joint : skeleton->joints) {
+                    if (joint.name.find("upper_arm.L") != std::string::npos || joint.name.find("UpperArm.L") != std::string::npos || joint.name.find("UpperArm_L") != std::string::npos) {
+                        ik->jointChainNames.push_back(joint.name);
+                    }
+                }
+                for (const auto& joint : skeleton->joints) {
+                    if (joint.name.find("forearm.L") != std::string::npos || joint.name.find("Forearm.L") != std::string::npos || joint.name.find("Forearm_L") != std::string::npos) {
+                        ik->jointChainNames.push_back(joint.name);
+                    }
+                }
+                for (const auto& joint : skeleton->joints) {
+                    if (joint.name.find("hand.L") != std::string::npos || joint.name.find("Hand.L") != std::string::npos || joint.name.find("Hand_L") != std::string::npos) {
+                        ik->jointChainNames.push_back(joint.name);
                     }
                 }
             }
+        }
+    }
 
-            DragFloat3("IK Target Position", &ik->targetPosition.x, 0.05f);
-            DragFloat3("IK Pole Position", &ik->polePosition.x, 0.05f);
-            SliderFloat("IK Target Weight", &ik->targetWeight, 0.0f, 1.0f);
+    DragFloat3("IK Target Position", &ik->targetPosition.x, 0.05f);
+    DragFloat3("IK Pole Position", &ik->polePosition.x, 0.05f);
+    SliderFloat("IK Target Weight", &ik->targetWeight, 0.0f, 1.0f);
+}
+
+void EditorUI::drawAnimationControllerEditor() {
+    AnimationControllerComponent* controller = registry.get<AnimationControllerComponent>(selectedEntity);
+    if (!controller) {
+        return;
+    }
+
+    bool open = CollapsingHeader("Animation Controller", ImGuiTreeNodeFlags_DefaultOpen);
+    SameLine(ImGui::GetWindowWidth() - 40.0f);
+    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
+    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
+    if (Button("X##AnimController", ImVec2(24, 20))) {
+        registry.remove<AnimationControllerComponent>(selectedEntity);
+        statusMessage = "Removed Animation Controller component.";
+        PopStyleColor(2);
+        return;
+    }
+    PopStyleColor(2);
+
+    if (!open) {
+        return;
+    }
+
+    Text("Current State: %s", controller->currentState.empty() ? "None" : controller->currentState.c_str());
+    if (controller->isCrossfading) {
+        Text("Crossfading to %s (%.2f / %.2fs)", controller->targetState.c_str(), controller->crossfadeProgress, controller->crossfadeDuration);
+        ProgressBar(controller->crossfadeProgress / controller->crossfadeDuration);
+    }
+
+    // Parameters management
+    if (TreeNode("Parameters")) {
+        for (auto& [paramName, paramVal] : controller->parameters) {
+            SliderFloat(paramName.c_str(), &paramVal, 0.0f, 1.0f);
+        }
+        TreePop();
+    }
+
+    // Quick State Setup Demo buttons
+    if (auto* animator = registry.get<AnimatorComponent>(selectedEntity)) {
+        if (Button("Setup Idle/Walk State Machine")) {
+            controller->states.clear();
+            
+            AnimationState idleState;
+            idleState.name = "Idle";
+            idleState.clipName = "idle";
+            idleState.isBlendTree = false;
+            if (!animator->animations.empty()) idleState.clipName = animator->animations[0].name;
+            
+            AnimationState moveState;
+            moveState.name = "Movement";
+            moveState.isBlendTree = true;
+            moveState.blendTree.parameterName = "speed";
+            
+            if (animator->animations.size() >= 2) {
+                BlendNode nodeWalk{ animator->animations[0].name, 0.0f };
+                BlendNode nodeRun{ animator->animations[1].name, 1.0f };
+                moveState.blendTree.nodes = { nodeWalk, nodeRun };
+            } else if (!animator->animations.empty()) {
+                BlendNode nodeWalk{ animator->animations[0].name, 0.0f };
+                moveState.blendTree.nodes = { nodeWalk };
+            }
+            
+            controller->states = { idleState, moveState };
+
+            controller->transitions.clear();
+            
+            AnimationTransition toMove;
+            toMove.fromState = "Idle";
+            toMove.toState = "Movement";
+            toMove.crossfadeDuration = 0.3f;
+            TransitionCondition condMove{ "speed", ">", 0.1f };
+            toMove.conditions = { condMove };
+            
+            AnimationTransition toIdle;
+            toIdle.fromState = "Movement";
+            toIdle.toState = "Idle";
+            toIdle.crossfadeDuration = 0.3f;
+            TransitionCondition condIdle2{ "speed", "<", 0.1f };
+            toIdle.conditions = { condIdle2 };
+            
+            controller->transitions = { toMove, toIdle };
+            controller->parameters["speed"] = 0.0f;
+            controller->currentState = "Idle";
+            controller->currentStateTime = 0.0f;
+            controller->isCrossfading = false;
         }
     } else {
-        if (Button("Add IK Solver Component")) {
-            registry.emplace<IKSolverComponent>(selectedEntity, IKSolverComponent{});
-        }
+        TextDisabled("Add an Animator component to load state machines.");
     }
 }

@@ -117,6 +117,18 @@ private:
      */
     void drawAnimatorEditor();
     /**
+     * @brief Renders inline controls for Hierarchy component fields.
+     */
+    void drawHierarchyEditor();
+    /**
+     * @brief Renders inline controls for IK Solver component fields.
+     */
+    void drawIKSolverEditor();
+    /**
+     * @brief Renders inline controls for Animation Controller component fields.
+     */
+    void drawAnimationControllerEditor();
+    /**
      * @brief Draws a styled banner title inside component panels.
      * @param title Header title text.
      */

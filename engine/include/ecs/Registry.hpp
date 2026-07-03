@@ -196,7 +196,7 @@ public:
 
     /**
      * @class View
-     * @brief Filtered view over entities containing a specific set of components.
+     * @brief Zero-allocation filtered view over entities containing a specific set of components.
      * @tparam Components Component filter list.
      */
     template<typename... Components>
@@ -205,43 +205,67 @@ public:
         /**
          * @brief Construct a new View object.
          * @param reg Registry creating this view.
+         * @param sm Smallest storage containing entities to filter.
          */
-        View(Registry& reg) : registry(reg) {}
+        View(Registry& reg, IStorage* sm) : registry(reg), smallest(sm) {}
 
         /**
          * @struct Iterator
          * @brief Iterator over the entities matching the View filters.
          */
         struct Iterator {
-            /** @brief Reference to the Registry. */
             Registry& registry;
-            /** @brief Iterator inside result entity vector. */
-            std::vector<Entity>::iterator it;
+            const std::vector<Entity>& entities;
+            size_t index;
+
+            /** @brief Helper to advance iterator to next matching entity. */
+            void advance() {
+                while (index < entities.size()) {
+                    Entity e = entities[index];
+                    if (e.getId() != Entity::INVALID_ENTITY && (registry.has<Components>(e) && ...)) {
+                        break;
+                    }
+                    index++;
+                }
+            }
 
             /** @brief Check iterator inequality. */
-            bool operator!=(const Iterator& other) const { return it != other.it; }
+            bool operator!=(const Iterator& other) const { return index != other.index; }
+            
             /** @brief Move iterator forward. */
-            void operator++() { ++it; }
+            void operator++() {
+                index++;
+                advance();
+            }
 
             /**
              * @brief Dereferences the iterator to a tuple containing the entity and its component references.
              * @return A tuple of (Entity, T&...).
              */
             auto operator*() const {
-                Entity e = *it;
+                Entity e = entities[index];
                 return std::tuple_cat(std::make_tuple(e), std::forward_as_tuple(*registry.get<Components>(e)...));
             }
         };
 
         /** @brief Returns beginning view iterator. */
-        Iterator begin() { return Iterator{ registry, entities.begin() }; }
-        /** @brief Returns ending view iterator. */
-        Iterator end() { return Iterator{ registry, entities.end() }; }
+        Iterator begin() {
+            if (!smallest) return end();
+            Iterator it{ registry, smallest->getEntities(), 0 };
+            it.advance();
+            return it;
+        }
 
-        /** @brief Entities that match component criteria. */
-        std::vector<Entity> entities;
-        /** @brief Reference to registry. */
+        /** @brief Returns ending view iterator. */
+        Iterator end() {
+            static const std::vector<Entity> empty;
+            const std::vector<Entity>& ents = smallest ? smallest->getEntities() : empty;
+            return Iterator{ registry, ents, ents.size() };
+        }
+
+    private:
         Registry& registry;
+        IStorage* smallest;
     };
 
     /**
@@ -252,20 +276,8 @@ public:
     template<typename... Components>
     auto view() {
         ensureStorages<Components...>();
-
-        // pick the smallest storage to iterate
         IStorage* smallest = getSmallestStorage<Components...>();
-        std::vector<Entity> result;
-
-        if (smallest) {
-            for (Entity e : smallest->getEntities()) {
-                if ((has<Components>(e) && ...)) result.push_back(e);
-            }
-        }
-
-        View<Components...> v(*this);
-        v.entities = std::move(result);
-        return v;
+        return View<Components...>(*this, smallest);
     }
 
 private:

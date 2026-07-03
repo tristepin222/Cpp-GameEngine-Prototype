@@ -33,6 +33,23 @@ public:
      * @return True if loading was successful, false otherwise.
      */
     bool deserialize(const std::string& path, std::vector<Entity>& outEntities);
+    
+    /**
+     * @brief Serializes a single entity and all its hierarchy children to a JSON prefab file.
+     * @param path Target filepath.
+     * @param rootEntity The root entity of the prefab hierarchy.
+     * @return True if successful, false otherwise.
+     */
+    bool serializePrefab(const std::string& path, Entity rootEntity);
+
+    /**
+     * @brief Deserializes a prefab file, instantiates entities, and remaps hierarchical parent-child references.
+     * @param path Source prefab filepath.
+     * @param loadedEntities Target list to fill with the newly spawned entities.
+     * @param parentEntity Optional parent entity to attach the newly created root under.
+     * @return The newly spawned root entity, or invalid entity if failed.
+     */
+    Entity deserializePrefab(const std::string& path, std::vector<Entity>& loadedEntities, Entity parentEntity = Entity());
 
 private:
     /** @brief Reference to registry. */

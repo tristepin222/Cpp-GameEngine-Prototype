@@ -620,3 +620,224 @@ bool SceneSerializer::deserialize(const std::string& path, std::vector<Entity>& 
 
     return !outEntities.empty();
 }
+
+bool SceneSerializer::serializePrefab(const std::string& path, Entity rootEntity) {
+    if (rootEntity.getId() == Entity::INVALID_ENTITY || !registry.isValid(rootEntity)) {
+        return false;
+    }
+
+    std::filesystem::path outputPath(path);
+    if (outputPath.has_parent_path()) {
+        std::filesystem::create_directories(outputPath.parent_path());
+    }
+
+    std::ofstream out(path, std::ios::trunc);
+    if (!out.is_open()) {
+        return false;
+    }
+
+    // 1. Traverse and gather all entities in the hierarchy recursively
+    std::vector<Entity> entities;
+    entities.push_back(rootEntity);
+    size_t cursor = 0;
+    while (cursor < entities.size()) {
+        Entity current = entities[cursor];
+        for (auto [childEntity, hierarchy] : registry.view<HierarchyComponent>()) {
+            if (hierarchy.parent == current) {
+                if (std::find(entities.begin(), entities.end(), childEntity) == entities.end()) {
+                    entities.push_back(childEntity);
+                }
+            }
+        }
+        cursor++;
+    }
+
+    out << "{\n";
+    out << JSONUtils::indent(1) << "\"prefabType\": " << JSONUtils::quote("EntityPrefab") << ",\n";
+    out << JSONUtils::indent(1) << "\"entities\": [\n";
+
+    bool first = true;
+    for (Entity entity : entities) {
+        Name* name = registry.get<Name>(entity);
+        Transform* transform = registry.get<Transform>(entity);
+        if (!name || !transform) {
+            continue;
+        }
+
+        if (!first) {
+            out << ",\n";
+        }
+        first = false;
+
+        out << JSONUtils::indent(2) << "{\n";
+        out << JSONUtils::indent(3) << "\"id\": " << entity.getId() << ",\n";
+        
+        // Find if this entity has a parent in the prefab list
+        auto* hierarchy = registry.get<HierarchyComponent>(entity);
+        if (hierarchy && hierarchy->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hierarchy->parent)) {
+            if (std::find(entities.begin(), entities.end(), hierarchy->parent) != entities.end()) {
+                out << JSONUtils::indent(3) << "\"parentId\": " << hierarchy->parent.getId() << ",\n";
+            }
+        }
+
+        out << JSONUtils::indent(3) << "\"name\": " << JSONUtils::quote(name->value) << ",\n";
+        out << JSONUtils::indent(3) << "\"position\": " << JSONUtils::vec3ToJson(transform->position) << ",\n";
+        out << JSONUtils::indent(3) << "\"rotation\": " << JSONUtils::vec3ToJson(transform->rotation) << ",\n";
+        out << JSONUtils::indent(3) << "\"scale\": " << JSONUtils::vec3ToJson(transform->scale);
+
+        // Dynamically invoke all registered component serializers to append custom properties
+        for (const auto& reg : ComponentSerializerRegistry::getInstance().getRegistrations()) {
+            if (reg.componentName == "Hierarchy") {
+                continue; // Skip the default Hierarchy component serialization to avoid parentName collisions
+            }
+            reg.serialize(registry, entity, out, 3);
+        }
+
+        out << "\n" << JSONUtils::indent(2) << "}";
+    }
+
+    out << "\n" << JSONUtils::indent(1) << "]\n";
+    out << "}\n";
+    return true;
+}
+
+Entity SceneSerializer::deserializePrefab(const std::string& path, std::vector<Entity>& loadedEntities, Entity parentEntity) {
+    std::ifstream in(path);
+    if (!in.is_open()) {
+        return Entity();
+    }
+
+    std::ostringstream buffer;
+    buffer << in.rdbuf();
+    const std::string source = buffer.str();
+
+    std::vector<std::string> entityObjects = JSONUtils::extractEntityObjects(source);
+    if (entityObjects.empty()) {
+        return Entity();
+    }
+
+    // Temporary mappings to reconstruct the hierarchy relative to newly spawned entities
+    std::unordered_map<int, Entity> originalIdToNewEntity;
+    std::unordered_map<Entity, int> newEntityToParentId;
+    Entity rootNewEntity;
+
+    for (const std::string& entityJson : entityObjects) {
+        std::string name = JSONUtils::extractStringValue(entityJson, "name");
+        if (name.empty()) {
+            continue;
+        }
+
+        // Extract the original serialized ID
+        int originalId = -1;
+        size_t idPos = entityJson.find("\"id\"");
+        if (idPos != std::string::npos) {
+            size_t colonPos = entityJson.find(":", idPos);
+            if (colonPos != std::string::npos) {
+                std::string valStr;
+                for (size_t i = colonPos + 1; i < entityJson.size(); ++i) {
+                    char c = entityJson[i];
+                    if (std::isdigit(c) || c == '-') {
+                        valStr += c;
+                    } else if (!valStr.empty()) {
+                        break;
+                    }
+                }
+                if (!valStr.empty()) {
+                    originalId = std::stoi(valStr);
+                }
+            }
+        }
+
+        // Extract the parent ID if present
+        int parentId = -1;
+        size_t parentIdPos = entityJson.find("\"parentId\"");
+        if (parentIdPos != std::string::npos) {
+            size_t colonPos = entityJson.find(":", parentIdPos);
+            if (colonPos != std::string::npos) {
+                std::string valStr;
+                for (size_t i = colonPos + 1; i < entityJson.size(); ++i) {
+                    char c = entityJson[i];
+                    if (std::isdigit(c) || c == '-') {
+                        valStr += c;
+                    } else if (!valStr.empty()) {
+                        break;
+                    }
+                }
+                if (!valStr.empty()) {
+                    parentId = std::stoi(valStr);
+                }
+            }
+        }
+
+        Entity entity = registry.create();
+        if (entity.getId() == Entity::INVALID_ENTITY) {
+            continue;
+        }
+
+        // Track the root node (first entity created in the prefab that has no parent ID, or parentId is not in the list)
+        if (rootNewEntity.getId() == Entity::INVALID_ENTITY && parentId == -1) {
+            rootNewEntity = entity;
+        }
+
+        // Store mappings
+        if (originalId != -1) {
+            originalIdToNewEntity[originalId] = entity;
+        }
+        if (parentId != -1) {
+            newEntityToParentId[entity] = parentId;
+        }
+
+        // Initialize core components
+        registry.emplace<Name>(entity, Name{ name });
+        registry.emplace<Transform>(entity, Transform{});
+        
+        Transform* transform = registry.get<Transform>(entity);
+        if (transform) {
+            float position[3]{};
+            float rotation[3]{};
+            float scale[3]{1.0f, 1.0f, 1.0f};
+
+            if (JSONUtils::extractFloatArray(entityJson, "position", position, 3)) {
+                transform->position = glm::vec3(position[0], position[1], position[2]);
+            }
+            if (JSONUtils::extractFloatArray(entityJson, "rotation", rotation, 3)) {
+                transform->rotation = glm::vec3(rotation[0], rotation[1], rotation[2]);
+            }
+            if (JSONUtils::extractFloatArray(entityJson, "scale", scale, 3)) {
+                transform->scale = glm::vec3(scale[0], scale[1], scale[2]);
+            }
+        }
+
+        // Invoke other registered component deserializers
+        for (const auto& reg : ComponentSerializerRegistry::getInstance().getRegistrations()) {
+            if (reg.componentName == "Hierarchy") {
+                continue; // Skip Hierarchy resolving here, we do it in a custom step below
+            }
+            reg.deserialize(registry, renderer, entity, entityJson);
+        }
+
+        loadedEntities.push_back(entity);
+    }
+
+    // Fallback: If no entity was identified as root, pick the first one
+    if (rootNewEntity.getId() == Entity::INVALID_ENTITY && !loadedEntities.empty()) {
+        rootNewEntity = loadedEntities[0];
+    }
+
+    // 2. Resolve hierarchical parent links using our ID mappings
+    for (auto& [entity, parentId] : newEntityToParentId) {
+        auto it = originalIdToNewEntity.find(parentId);
+        if (it != originalIdToNewEntity.end()) {
+            registry.emplace<HierarchyComponent>(entity, HierarchyComponent{ it->second });
+        }
+    }
+
+    // 3. If a parentEntity was provided, attach the root of the prefab under it
+    if (parentEntity.getId() != Entity::INVALID_ENTITY && registry.isValid(parentEntity)) {
+        if (rootNewEntity.getId() != Entity::INVALID_ENTITY) {
+            registry.emplace<HierarchyComponent>(rootNewEntity, HierarchyComponent{ parentEntity });
+        }
+    }
+
+    return rootNewEntity;
+}
