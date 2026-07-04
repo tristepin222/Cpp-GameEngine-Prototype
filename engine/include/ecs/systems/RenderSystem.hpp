@@ -14,6 +14,7 @@
 #include "../components/Hierarchy.hpp"
 #include <functional>
 #include <fstream>
+#include "core/JobSystem.hpp"
 
 /**
  * @class RenderSystem
@@ -92,6 +93,8 @@ private:
     std::vector<Entity> entities;
     /** @brief Mapping from entity to its instance index in CPU buffers. */
     std::unordered_map<Entity, size_t> entityToInstanceIndex;
+    /** @brief Vector to track renderable entities to avoid allocation. */
+    std::vector<Entity> renderableEntities;
 
     /**
      * @brief Verifies if an entity meets requirements for rendering and adds it to the tracked list.
@@ -185,21 +188,32 @@ private:
         renderer.instanceDataCPU.clear();
         entityToInstanceIndex.clear();
 
-        // --- Mesh + Material instances (excluding grids) ---
+        renderableEntities.clear();
         for (auto [entity, mesh, transform, material] :
             registry.view<Mesh, Transform, Material>()) {
-
-            // Skip entities that have Grid component (they're drawn separately)
             if (registry.get<Grid>(entity)) continue;
+            renderableEntities.push_back(entity);
+        }
+
+        std::vector<InstanceData> tempInstances(renderableEntities.size());
+
+        Engine::JobSystem::getInstance().parallelFor(static_cast<int>(renderableEntities.size()), [&](int idx) {
+            Entity entity = renderableEntities[idx];
+            auto* mesh = registry.get<Mesh>(entity);
+            auto* material = registry.get<Material>(entity);
 
             InstanceData inst{};
             inst.model = getWorldMatrix(entity);
-            inst.materialID = material.id;
-            inst.meshID = mesh.id;
-            inst.color = material.color;
+            inst.materialID = material ? material->id : 0;
+            inst.meshID = mesh ? mesh->id : 0;
+            inst.color = material ? material->color : glm::vec4(1.0f);
 
-            size_t idx = renderer.instanceDataCPU.push(inst);
-            entityToInstanceIndex[entity] = idx;
+            tempInstances[idx] = inst;
+        });
+
+        for (size_t i = 0; i < renderableEntities.size(); ++i) {
+            size_t instanceIdx = renderer.instanceDataCPU.push(tempInstances[i]);
+            entityToInstanceIndex[renderableEntities[i]] = instanceIdx;
         }
     }
 

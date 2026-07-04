@@ -11,6 +11,7 @@
 #include "scenes/Scene.hpp"
 #include "scenes/JSONUtils.hpp"
 #include "scenes/DefaultScene.hpp"
+#include "core/JobSystem.hpp"
 
 namespace Engine {
 
@@ -53,6 +54,8 @@ namespace Engine {
     }
 
     void Application::initEngine() {
+        JobSystem::getInstance().initialize(); // Initialize Job System thread pool
+
         if (!glfwInit()) {
             throw std::runtime_error("Failed to initialize GLFW");
         }
@@ -96,6 +99,8 @@ namespace Engine {
     }
 
     void Application::cleanupEngine() {
+        JobSystem::getInstance().shutdown(); // Shutdown Job System thread pool
+
         if (editorUI) {
             editorUI->shutdown();
             editorUI.reset();

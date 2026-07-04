@@ -38,6 +38,7 @@ set(ENGINE_SOURCES
     src/VulkanRenderer.cpp
     src/core/Application.cpp
     src/core/FrameManager.cpp
+    src/core/JobSystem.cpp
     src/core/PipelineBuilder.cpp
     src/core/SwapchainManager.cpp
     src/core/VulkanBuffer.cpp

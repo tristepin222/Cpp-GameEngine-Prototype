@@ -5,7 +5,9 @@
 #include "ecs/components/Animator.hpp"
 #include "ecs/components/AnimationController.hpp"
 #include "ecs/components/IKSolver.hpp"
+#include "ecs/components/Hierarchy.hpp"
 #include "renderer/VulkanRenderer.hpp"
+#include "core/JobSystem.hpp"
 #include "core/VulkanBuffer.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -66,15 +68,35 @@ public:
                 }
             }
 
-            // 1. First Pass: Update all active Animation Controllers (State Machines, transitions)
+            // 1. First Pass: Update all active Animation Controllers in parallel
+            controllerEntities.clear();
             for (auto [entity, controller, animator] : registry.view<AnimationControllerComponent, AnimatorComponent>()) {
-                updateController(controller, animator, dt);
+                controllerEntities.push_back(entity);
             }
 
-            // 2. Second Pass: Process skeletal transforms, blending, and IK adjustments
+            Engine::JobSystem::getInstance().parallelFor(static_cast<int>(controllerEntities.size()), [&](int idx) {
+                Entity entity = controllerEntities[idx];
+                auto* controller = registry.get<AnimationControllerComponent>(entity);
+                auto* animator = registry.get<AnimatorComponent>(entity);
+                if (controller && animator) {
+                    updateController(*controller, *animator, dt);
+                }
+            });
+
+            // 2. Second Pass: Process skeletal transforms, blending, and IK adjustments in parallel
+            animatedEntities.clear();
             for (auto [entity, skeleton, animator] : registry.view<SkeletonComponent, AnimatorComponent>()) {
-                updateEntityAnimation(entity, skeleton, animator, dt);
+                animatedEntities.push_back(entity);
             }
+
+            Engine::JobSystem::getInstance().parallelFor(static_cast<int>(animatedEntities.size()), [&](int idx) {
+                Entity entity = animatedEntities[idx];
+                auto* skeleton = registry.get<SkeletonComponent>(entity);
+                auto* animator = registry.get<AnimatorComponent>(entity);
+                if (skeleton && animator) {
+                    updateEntityAnimation(entity, *skeleton, *animator, dt);
+                }
+            });
         }
 
     private:
@@ -709,5 +731,7 @@ public:
 
         Registry& registry;
         VulkanRenderer& renderer;
+        std::vector<Entity> controllerEntities;
+        std::vector<Entity> animatedEntities;
     };
 
