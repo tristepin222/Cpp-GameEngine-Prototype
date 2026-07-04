@@ -858,6 +858,24 @@ void EditorUI::drawMaterialEditor() {
             material->descriptorSet = VK_NULL_HANDLE;
         }
     }
+
+    if (BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+            const char* droppedPath = (const char*)payload->Data;
+            std::string pathStr(droppedPath);
+            auto ext = std::filesystem::path(pathStr).extension().string();
+            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga") {
+                material->texturePath = pathStr;
+                if (auto* tex = renderer.resourceManager->loadTexture(pathStr, renderer)) {
+                    material->descriptorSet = tex->descriptorSet;
+                    statusMessage = "Assigned texture via drag-and-drop: " + pathStr;
+                }
+            } else {
+                statusMessage = "Error: Dropped asset is not a valid texture file.";
+            }
+        }
+        EndDragDropTarget();
+    }
 }
 
 /**
@@ -889,6 +907,133 @@ void EditorUI::drawMeshEditor() {
     snprintf(gltfBuf, sizeof(gltfBuf), "%s", mesh->gltfPath.c_str());
     if (InputText("glTF Path", gltfBuf, sizeof(gltfBuf))) {
         mesh->gltfPath = gltfBuf;
+    }
+
+    if (BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+            const char* droppedPath = (const char*)payload->Data;
+            std::string pathStr(droppedPath);
+            auto ext = std::filesystem::path(pathStr).extension().string();
+            if (ext == ".gltf" || ext == ".glb") {
+                try {
+                    int primCount = renderer.resourceManager->getMeshPrimitiveCount(pathStr);
+                    if (primCount > 1) {
+                        std::string baseName = "Model";
+                        if (auto* nameComp = registry.get<Name>(selectedEntity)) {
+                            baseName = nameComp->value;
+                        }
+                        
+                        mesh->gltfPath = pathStr;
+                        mesh->primitiveIndex = 0;
+                        Mesh loaded = renderer.resourceManager->loadMesh(pathStr, renderer, 0);
+                        mesh->vertices = loaded.vertices;
+                        mesh->indices = loaded.indices;
+                        mesh->vertexBuffer = loaded.vertexBuffer;
+                        mesh->indexBuffer = loaded.indexBuffer;
+                        mesh->id = loaded.id;
+                        
+                        if (auto* nameComp = registry.get<Name>(selectedEntity)) {
+                            nameComp->value = loaded.nodeName.empty() ? (baseName + "_part0") : loaded.nodeName;
+                            renameBuffer = nameComp->value;
+                        }
+
+                        registry.remove<SkeletonComponent>(selectedEntity);
+                        registry.remove<AnimatorComponent>(selectedEntity);
+                        SkeletonComponent skeleton{};
+                        AnimatorComponent animator{};
+                        if (renderer.resourceManager->loadSkeletonAndAnimations(pathStr, skeleton, animator)) {
+                            registry.emplace<SkeletonComponent>(selectedEntity, std::move(skeleton));
+                            registry.emplace<AnimatorComponent>(selectedEntity, std::move(animator));
+                        }
+
+                        if (auto* material = registry.get<Material>(selectedEntity)) {
+                            bool hasSkin = entityHasSkin(registry, selectedEntity);
+                            PipelineHandle pipeline = renderer.createPipelineForShaders(
+                                hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
+                                "build/shaders/unlit.frag.spv"
+                            );
+                            material->pipeline = pipeline.pipeline;
+                            material->pipelineLayout = pipeline.layout;
+                        }
+
+                        Scene* currentScene = sceneManager.getCurrentScene();
+                        for (int i = 1; i < primCount; ++i) {
+                            Entity child = registry.create();
+                            if (child.getId() != Entity::INVALID_ENTITY) {
+                                registry.emplace<Transform>(child, Transform{});
+                                registry.emplace<PrimitiveType>(child, PrimitiveType{ PrimitiveKind::Cube });
+                                registry.emplace<HierarchyComponent>(child, HierarchyComponent{ selectedEntity });
+                                
+                                Mesh childMesh{};
+                                childMesh.gltfPath = pathStr;
+                                childMesh.primitiveIndex = i;
+                                Mesh loadedChild = renderer.resourceManager->loadMesh(pathStr, renderer, i);
+                                childMesh.vertices = loadedChild.vertices;
+                                childMesh.indices = loadedChild.indices;
+                                childMesh.vertexBuffer = loadedChild.vertexBuffer;
+                                childMesh.indexBuffer = loadedChild.indexBuffer;
+                                childMesh.id = loadedChild.id;
+                                childMesh.nodeName = loadedChild.nodeName;
+
+                                std::string childName = loadedChild.nodeName.empty() ? (baseName + "_part" + std::to_string(i)) : loadedChild.nodeName;
+                                registry.emplace<Name>(child, Name{ childName });
+                                registry.emplace<Mesh>(child, std::move(childMesh));
+                                
+                                glm::vec4 color(1.0f);
+                                Material material{ color };
+                                bool hasSkin = entityHasSkin(registry, child);
+                                PipelineHandle pipeline = renderer.createPipelineForShaders(
+                                    hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
+                                    "build/shaders/unlit.frag.spv"
+                                );
+                                material.pipeline = pipeline.pipeline;
+                                material.pipelineLayout = pipeline.layout;
+                                registry.emplace<Material>(child, std::move(material));
+                                
+                                if (currentScene) {
+                                    currentScene->trackEntity(child);
+                                }
+                            }
+                        }
+                        statusMessage = "Dropped & loaded split glTF: " + pathStr;
+                    } else {
+                        mesh->gltfPath = pathStr;
+                        mesh->primitiveIndex = -1;
+                        Mesh loaded = renderer.resourceManager->loadMesh(pathStr, renderer);
+                        mesh->vertices = loaded.vertices;
+                        mesh->indices = loaded.indices;
+                        mesh->vertexBuffer = loaded.vertexBuffer;
+                        mesh->indexBuffer = loaded.indexBuffer;
+                        mesh->id = loaded.id;
+
+                        registry.remove<SkeletonComponent>(selectedEntity);
+                        registry.remove<AnimatorComponent>(selectedEntity);
+                        SkeletonComponent skeleton{};
+                        AnimatorComponent animator{};
+                        if (renderer.resourceManager->loadSkeletonAndAnimations(pathStr, skeleton, animator)) {
+                            registry.emplace<SkeletonComponent>(selectedEntity, std::move(skeleton));
+                            registry.emplace<AnimatorComponent>(selectedEntity, std::move(animator));
+                        }
+
+                        if (auto* material = registry.get<Material>(selectedEntity)) {
+                            bool hasSkin = entityHasSkin(registry, selectedEntity);
+                            PipelineHandle pipeline = renderer.createPipelineForShaders(
+                                hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
+                                "build/shaders/unlit.frag.spv"
+                            );
+                            material->pipeline = pipeline.pipeline;
+                            material->pipelineLayout = pipeline.layout;
+                        }
+                        statusMessage = "Dropped & loaded glTF: " + pathStr;
+                    }
+                } catch (const std::exception& e) {
+                    statusMessage = std::string("Failed to load dropped model: ") + e.what();
+                }
+            } else {
+                statusMessage = "Error: Dropped asset is not a glTF model.";
+            }
+        }
+        EndDragDropTarget();
     }
     SameLine();
     if (Button("Load glTF")) {
@@ -943,13 +1088,95 @@ void EditorUI::drawAssetBrowser() {
         std::filesystem::create_directories("assets/prefabs");
     }
 
-    if (TreeNodeEx("Models", ImGuiTreeNodeFlags_DefaultOpen)) {
-        for (const auto& entry : std::filesystem::recursive_directory_iterator("assets")) {
-            if (entry.is_regular_file()) {
+    // Static variables to maintain state for rename and create popups between frames
+    static std::filesystem::path s_renameTargetPath;
+    static char s_renameBuffer[256] = "";
+    static std::filesystem::path s_createFolderParentPath;
+    static char s_createFolderBuffer[256] = "";
+
+    // ---- Toolbar ----
+    if (Button("+ New Folder")) {
+        s_createFolderParentPath = "assets";
+        s_createFolderBuffer[0] = '\0';
+        OpenPopup("CreateFolderPopup");
+    }
+    SameLine();
+    if (Button("Refresh")) {
+        statusMessage = "Refreshed asset directories.";
+    }
+    Separator();
+
+    // ---- Recursive Directory Tree drawing lambda ----
+    std::function<void(const std::filesystem::path&)> drawDirectoryNode = [&](const std::filesystem::path& dirPath) {
+        if (!std::filesystem::exists(dirPath)) return;
+
+        for (const auto& entry : std::filesystem::directory_iterator(dirPath)) {
+            std::string name = entry.path().filename().string();
+            // Skip hidden items
+            if (name.empty() || name[0] == '.') {
+                continue;
+            }
+
+            std::string pathStr = entry.path().generic_string();
+
+            if (entry.is_directory()) {
+                ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow;
+                std::string label = "[] " + name + "##" + pathStr;
+                bool open = TreeNodeEx(label.c_str(), flags);
+
+                // Right click context menu on folders
+                if (BeginPopupContextItem(pathStr.c_str())) {
+                    TextDisabled("Folder: %s", name.c_str());
+                    Separator();
+                    if (MenuItem("Create Subfolder")) {
+                        s_createFolderParentPath = entry.path();
+                        s_createFolderBuffer[0] = '\0';
+                        OpenPopup("CreateFolderPopup");
+                    }
+                    if (MenuItem("Rename")) {
+                        s_renameTargetPath = entry.path();
+                        strncpy_s(s_renameBuffer, name.c_str(), sizeof(s_renameBuffer) - 1);
+                        OpenPopup("RenameAssetPopup");
+                    }
+                    PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+                    if (MenuItem("Delete Folder")) {
+                        try {
+                            std::filesystem::remove_all(entry.path());
+                            statusMessage = "Deleted folder: " + name;
+                        } catch (const std::exception& e) {
+                            statusMessage = std::string("Failed to delete: ") + e.what();
+                        }
+                    }
+                    PopStyleColor();
+                    EndPopup();
+                }
+
+                if (open) {
+                    drawDirectoryNode(entry.path());
+                    TreePop();
+                }
+            } else if (entry.is_regular_file()) {
                 auto ext = entry.path().extension().string();
-                if (ext == ".gltf" || ext == ".glb") {
-                    std::string pathStr = entry.path().generic_string();
-                    BulletText("%s", entry.path().filename().string().c_str());
+                bool isModel = (ext == ".gltf" || ext == ".glb");
+                bool isTexture = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga");
+                bool isPrefab = (ext == ".prefab");
+
+                std::string prefix = "  ";
+                if (isModel) prefix = "[] ";
+                else if (isTexture) prefix = "[] ";
+                else if (isPrefab) prefix = "[] ";
+
+                std::string labelStr = prefix + name + "##" + pathStr;
+                Selectable(labelStr.c_str(), false, ImGuiSelectableFlags_AllowOverlap);
+
+                if (BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                    SetDragDropPayload("DND_PAYLOAD_ASSET_PATH", pathStr.c_str(), pathStr.size() + 1);
+                    Text("Dragging %s", name.c_str());
+                    EndDragDropSource();
+                }
+
+                // Use/Instantiate buttons next to files
+                if (isModel) {
                     if (hasSelection) {
                         SameLine();
                         PushID(pathStr.c_str());
@@ -1006,7 +1233,6 @@ void EditorUI::drawAssetBrowser() {
                                     for (int i = 1; i < primCount; ++i) {
                                         Entity child = registry.create();
                                         if (child.getId() != Entity::INVALID_ENTITY) {
-                                            // Child transforms are identity local to the parent root part
                                             registry.emplace<Transform>(child, Transform{});
                                             registry.emplace<PrimitiveType>(child, PrimitiveType{ PrimitiveKind::Cube });
                                             registry.emplace<HierarchyComponent>(child, HierarchyComponent{ selectedEntity });
@@ -1050,7 +1276,6 @@ void EditorUI::drawAssetBrowser() {
                                     }
                                     statusMessage = "Assigned glTF model: " + pathStr + " (split into " + std::to_string(primCount) + " parented parts)";
                                 } else {
-                                    // Single-primitive model: standard behavior
                                     mesh->gltfPath = pathStr;
                                     mesh->primitiveIndex = -1;
                                     try {
@@ -1089,21 +1314,7 @@ void EditorUI::drawAssetBrowser() {
                         }
                         PopID();
                     }
-                }
-            }
-        }
-        TreePop();
-    }
-
-    Separator();
-
-    if (TreeNodeEx("Textures", ImGuiTreeNodeFlags_DefaultOpen)) {
-        for (const auto& entry : std::filesystem::recursive_directory_iterator("assets")) {
-            if (entry.is_regular_file()) {
-                auto ext = entry.path().extension().string();
-                if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga") {
-                    std::string pathStr = entry.path().generic_string();
-                    BulletText("%s", entry.path().filename().string().c_str());
+                } else if (isTexture) {
                     if (hasSelection) {
                         SameLine();
                         PushID(pathStr.c_str());
@@ -1118,52 +1329,107 @@ void EditorUI::drawAssetBrowser() {
                         }
                         PopID();
                     }
-                }
-            }
-        }
-        TreePop();
-    }
-
-    Separator();
-
-    if (TreeNodeEx("Prefabs", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (std::filesystem::exists("assets/prefabs")) {
-            for (const auto& entry : std::filesystem::recursive_directory_iterator("assets/prefabs")) {
-                if (entry.is_regular_file()) {
-                    auto ext = entry.path().extension().string();
-                    if (ext == ".prefab") {
-                        std::string pathStr = entry.path().generic_string();
-                        BulletText("%s", entry.path().filename().string().c_str());
-                        SameLine();
-                        PushID(pathStr.c_str());
-                        if (Button("Instantiate")) {
-                            Scene* currentScene = sceneManager.getCurrentScene();
-                            if (currentScene) {
-                                SceneSerializer serializer(registry, renderer);
-                                std::vector<Entity> loadedEntities;
-                                Entity parent = hasSelection ? selectedEntity : Entity();
-                                Entity root = serializer.deserializePrefab(pathStr, loadedEntities, parent);
-                                if (root.getId() != Entity::INVALID_ENTITY) {
-                                    for (Entity e : loadedEntities) {
-                                        currentScene->trackEntity(e);
-                                    }
-                                    selectedEntity = root;
-                                    hasSelection = true;
-                                    if (auto* n = registry.get<Name>(root)) {
-                                        renameBuffer = n->value;
-                                    }
-                                    statusMessage = "Instantiated prefab: " + entry.path().filename().string();
-                                } else {
-                                    statusMessage = "Failed to instantiate prefab.";
+                } else if (isPrefab) {
+                    SameLine();
+                    PushID(pathStr.c_str());
+                    if (Button("Instantiate")) {
+                        Scene* currentScene = sceneManager.getCurrentScene();
+                        if (currentScene) {
+                            SceneSerializer serializer(registry, renderer);
+                            std::vector<Entity> loadedEntities;
+                            Entity parent = hasSelection ? selectedEntity : Entity();
+                            Entity root = serializer.deserializePrefab(pathStr, loadedEntities, parent);
+                            if (root.getId() != Entity::INVALID_ENTITY) {
+                                for (Entity e : loadedEntities) {
+                                    currentScene->trackEntity(e);
                                 }
+                                selectedEntity = root;
+                                hasSelection = true;
+                                if (auto* n = registry.get<Name>(root)) {
+                                    renameBuffer = n->value;
+                                }
+                                statusMessage = "Instantiated prefab: " + entry.path().filename().string();
+                            } else {
+                                statusMessage = "Failed to instantiate prefab.";
                             }
                         }
-                        PopID();
                     }
+                    PopID();
+                }
+
+                // Right click context menu on files
+                if (BeginPopupContextItem(pathStr.c_str())) {
+                    TextDisabled("File: %s", name.c_str());
+                    Separator();
+                    if (MenuItem("Rename")) {
+                        s_renameTargetPath = entry.path();
+                        strncpy_s(s_renameBuffer, name.c_str(), sizeof(s_renameBuffer) - 1);
+                        OpenPopup("RenameAssetPopup");
+                    }
+                    PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+                    if (MenuItem("Delete File")) {
+                        try {
+                            std::filesystem::remove(entry.path());
+                            statusMessage = "Deleted file: " + name;
+                        } catch (const std::exception& e) {
+                            statusMessage = std::string("Failed to delete: ") + e.what();
+                        }
+                    }
+                    PopStyleColor();
+                    EndPopup();
                 }
             }
         }
-        TreePop();
+    };
+
+    // Draw the asset directory tree recursively starting at "assets"
+    ImGui::BeginChild("AssetTreeChild", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+    drawDirectoryNode("assets");
+    ImGui::EndChild();
+
+    // ---- Popups ----
+    if (BeginPopup("RenameAssetPopup")) {
+        Text("Rename: %s", s_renameTargetPath.filename().string().c_str());
+        InputText("New Name", s_renameBuffer, sizeof(s_renameBuffer));
+        if (Button("OK", ImVec2(120, 0))) {
+            if (strlen(s_renameBuffer) > 0) {
+                auto newPath = s_renameTargetPath.parent_path() / s_renameBuffer;
+                try {
+                    std::filesystem::rename(s_renameTargetPath, newPath);
+                    statusMessage = "Renamed asset successfully.";
+                    CloseCurrentPopup();
+                } catch (const std::exception& e) {
+                    statusMessage = std::string("Failed to rename: ") + e.what();
+                }
+            }
+        }
+        SameLine();
+        if (Button("Cancel", ImVec2(120, 0))) {
+            CloseCurrentPopup();
+        }
+        EndPopup();
+    }
+
+    if (BeginPopup("CreateFolderPopup")) {
+        Text("Create Folder under: %s", s_createFolderParentPath.generic_string().c_str());
+        InputText("Folder Name", s_createFolderBuffer, sizeof(s_createFolderBuffer));
+        if (Button("Create", ImVec2(120, 0))) {
+            if (strlen(s_createFolderBuffer) > 0) {
+                auto newDir = s_createFolderParentPath / s_createFolderBuffer;
+                try {
+                    std::filesystem::create_directories(newDir);
+                    statusMessage = "Folder created successfully.";
+                    CloseCurrentPopup();
+                } catch (const std::exception& e) {
+                    statusMessage = std::string("Failed to create folder: ") + e.what();
+                }
+            }
+        }
+        SameLine();
+        if (Button("Cancel", ImVec2(120, 0))) {
+            CloseCurrentPopup();
+        }
+        EndPopup();
     }
 
     End();
