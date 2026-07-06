@@ -65,10 +65,10 @@ Finds the closest point on the AABB boundary to the sphere center by clamping co
 
 $$\vec{P}_{\text{closest}} = \text{clamp}(\vec{C}_{\text{sphere}}, \vec{C}_{\text{aabb}} - \vec{e}, \vec{C}_{\text{aabb}} + \vec{e})$$
 
-If the distance between $\vec{C}_{\text{sphere}}$ and $\vec{P}_{\text{closest}}$ is less than the sphere's radius, a collision has occurred.
+If the distance between $\vec{C} _ {\text{sphere}}$ and $\vec{P} _ {\text{closest}}$ is less than the sphere's radius, a collision has occurred.
 
 ### 3. OBB-Sphere
-Translates the sphere center $\vec{C}_{s}$ into the OBB's local coordinate space. In local space, the problem reduces to a Sphere-AABB check against local extents:
+Translates the sphere center $\vec{C} _ {s}$ into the OBB's local coordinate space. In local space, the problem reduces to a Sphere-AABB check against local extents:
 
 $$\vec{C}_{s,\text{local}} = \mathbf{R}^T \left(\vec{C}_{s} - \vec{C}_{\text{obb}}\right)$$
 
@@ -76,15 +76,15 @@ We clamp $\vec{C}_{s,\text{local}}$ to local extents, transform the point back t
 
 ### 4. OBB-OBB (Separating Axis Theorem)
 Applies the **Separating Axis Theorem (SAT)**. Two oriented boxes do not overlap if there exists a projection axis along which their 1D projections do not overlap. We project the boxes onto 15 candidate axes:
-* 3 local axes of Box A ($\vec{u}\_{A0}, \vec{u}\_{A1}, \vec{u}\_{A2}$)
-* 3 local axes of Box B ($\vec{u}\_{B0}, \vec{u}\_{B1}, \vec{u}\_{B2}$)
-* 9 cross products of their axes ($\vec{u}\_{Ai} \times \vec{u}\_{Bj}$)
+* 3 local axes of Box A ($\vec{u} _ {A0}, \vec{u} _ {A1}, \vec{u} _ {A2}$)
+* 3 local axes of Box B ($\vec{u} _ {B0}, \vec{u} _ {B1}, \vec{u} _ {B2}$)
+* 9 cross products of their axes ($\vec{u} _ {Ai} \times \vec{u} _ {Bj}$)
 
 For each axis $\vec{L}$, we calculate the projected half-extents radii:
 
 $$r_{A} = \sum_{i=0}^2 e_{A,i} \cdot |\vec{u}_{A,i} \cdot \vec{L}|, \quad r_{B} = \sum_{j=0}^2 e_{B,j} \cdot |\vec{u}_{B,j} \cdot \vec{L}|$$
 
-If the center-to-center distance projected onto $\vec{L}$ satisfies $d = |(\vec{C}_{B} - \vec{C}_{A}) \cdot \vec{L}| \ge r_{A} + r_{B}$, the boxes are separated. If no separating axis is found, they are colliding along the axis of minimum penetration.
+If the center-to-center distance projected onto $\vec{L}$ satisfies $d = |(\vec{C} _ {B} - \vec{C} _ {A}) \cdot \vec{L}| \ge r _ {A} + r _ {B}$, the boxes are separated. If no separating axis is found, they are colliding along the axis of minimum penetration.
 
 ---
 
@@ -126,7 +126,7 @@ The relative contact velocity at the contact point $\vec{P}$ is:
 
 $$\vec{v}_{\text{rel}} = \left( \vec{v}_{B} + \vec{\omega}_{B} \times \vec{r}_{B} \right) - \left( \vec{v}_{A} + \vec{\omega}_{A} \times \vec{r}_{A} \right)$$
 
-Where $\vec{r}\_{A} = \vec{P} - \vec{C}\_{A}$ and $\vec{r}\_{B} = \vec{P} - \vec{C}\_{B}$.
+Where $\vec{r} _ {A} = \vec{P} - \vec{C} _ {A}$ and $\vec{r} _ {B} = \vec{P} - \vec{C} _ {B}$.
 
 If the bodies are moving towards each other ($\vec{v}_{\text{rel}} \cdot \vec{N} < 0$), the impulse scalar $j$ is calculated:
 
