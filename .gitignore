@@ -374,4 +374,7 @@ game/game.exe
 game/game
 
 # Allow generated documentation diagrams
-!docs/diagrams/out/
+!docs/diagrams/out/
+
+# Self-documentation interview prep folder
+/selfdoc/
