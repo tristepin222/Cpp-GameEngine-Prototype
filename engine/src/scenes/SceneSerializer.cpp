@@ -16,6 +16,8 @@
 #include "ecs/components/Hierarchy.hpp"
 #include "ecs/components/AnimationController.hpp"
 #include "ecs/components/IKSolver.hpp"
+#include "ecs/components/RigidBody.hpp"
+#include "ecs/components/Collider.hpp"
 
 struct ParentNameComponent {
     std::string name;
@@ -462,6 +464,78 @@ static bool registerBuiltinComponents() {
                 }
                 
                 registry.emplace<IKSolverComponent>(entity, std::move(ik));
+            }
+        }
+    );
+
+    // 8. RigidBody Component
+    reg.registerComponent(
+        "RigidBody",
+        [](Registry& registry, Entity entity, std::ostream& out, int indent) {
+            if (auto* rb = registry.get<RigidBodyComponent>(entity)) {
+                std::string typeStr = (rb->type == RigidBodyType::Static) ? "Static" : "Dynamic";
+                out << ",\n" << JSONUtils::indent(indent) << "\"hasRigidBody\": true";
+                out << ",\n" << JSONUtils::indent(indent) << "\"rbType\": " << JSONUtils::quote(typeStr);
+                out << ",\n" << JSONUtils::indent(indent) << "\"rbMass\": " << rb->mass;
+                out << ",\n" << JSONUtils::indent(indent) << "\"rbVelX\": " << rb->velocity.x;
+                out << ",\n" << JSONUtils::indent(indent) << "\"rbVelY\": " << rb->velocity.y;
+                out << ",\n" << JSONUtils::indent(indent) << "\"rbVelZ\": " << rb->velocity.z;
+                out << ",\n" << JSONUtils::indent(indent) << "\"rbGravityScale\": " << rb->gravityScale;
+                out << ",\n" << JSONUtils::indent(indent) << "\"rbRestitution\": " << rb->restitution;
+            }
+        },
+        [](Registry& registry, VulkanRenderer& renderer, Entity entity, const std::string& json) {
+            float dummyVal = 0.0f;
+            if (JSONUtils::extractFloatValue(json, "rbMass", dummyVal) || json.find("\"hasRigidBody\": true") != std::string::npos || json.find("\"hasRigidBody\":true") != std::string::npos) {
+                RigidBodyComponent rb{};
+                std::string typeStr = JSONUtils::extractStringValue(json, "rbType");
+                rb.type = (typeStr == "Static") ? RigidBodyType::Static : RigidBodyType::Dynamic;
+                JSONUtils::extractFloatValue(json, "rbMass", rb.mass);
+                JSONUtils::extractFloatValue(json, "rbVelX", rb.velocity.x);
+                JSONUtils::extractFloatValue(json, "rbVelY", rb.velocity.y);
+                JSONUtils::extractFloatValue(json, "rbVelZ", rb.velocity.z);
+                JSONUtils::extractFloatValue(json, "rbGravityScale", rb.gravityScale);
+                JSONUtils::extractFloatValue(json, "rbRestitution", rb.restitution);
+                registry.emplace<RigidBodyComponent>(entity, std::move(rb));
+            }
+        }
+    );
+
+    // 9. Collider Component
+    reg.registerComponent(
+        "Collider",
+        [](Registry& registry, Entity entity, std::ostream& out, int indent) {
+            if (auto* col = registry.get<ColliderComponent>(entity)) {
+                std::string shapeStr = "AABB";
+                if (col->shape == ColliderShape::Sphere) shapeStr = "Sphere";
+                else if (col->shape == ColliderShape::OBB) shapeStr = "OBB";
+                out << ",\n" << JSONUtils::indent(indent) << "\"hasCollider\": true";
+                out << ",\n" << JSONUtils::indent(indent) << "\"colShape\": " << JSONUtils::quote(shapeStr);
+                out << ",\n" << JSONUtils::indent(indent) << "\"colRadius\": " << col->radius;
+                out << ",\n" << JSONUtils::indent(indent) << "\"colExtX\": " << col->extents.x;
+                out << ",\n" << JSONUtils::indent(indent) << "\"colExtY\": " << col->extents.y;
+                out << ",\n" << JSONUtils::indent(indent) << "\"colExtZ\": " << col->extents.z;
+                out << ",\n" << JSONUtils::indent(indent) << "\"colOffsetX\": " << col->offset.x;
+                out << ",\n" << JSONUtils::indent(indent) << "\"colOffsetY\": " << col->offset.y;
+                out << ",\n" << JSONUtils::indent(indent) << "\"colOffsetZ\": " << col->offset.z;
+            }
+        },
+        [](Registry& registry, VulkanRenderer& renderer, Entity entity, const std::string& json) {
+            float dummyVal = 0.0f;
+            if (JSONUtils::extractFloatValue(json, "colRadius", dummyVal) || json.find("\"hasCollider\": true") != std::string::npos || json.find("\"hasCollider\":true") != std::string::npos) {
+                ColliderComponent col{};
+                std::string shapeStr = JSONUtils::extractStringValue(json, "colShape");
+                if (shapeStr == "Sphere") col.shape = ColliderShape::Sphere;
+                else if (shapeStr == "OBB") col.shape = ColliderShape::OBB;
+                else col.shape = ColliderShape::AABB;
+                JSONUtils::extractFloatValue(json, "colRadius", col.radius);
+                JSONUtils::extractFloatValue(json, "colExtX", col.extents.x);
+                JSONUtils::extractFloatValue(json, "colExtY", col.extents.y);
+                JSONUtils::extractFloatValue(json, "colExtZ", col.extents.z);
+                JSONUtils::extractFloatValue(json, "colOffsetX", col.offset.x);
+                JSONUtils::extractFloatValue(json, "colOffsetY", col.offset.y);
+                JSONUtils::extractFloatValue(json, "colOffsetZ", col.offset.z);
+                registry.emplace<ColliderComponent>(entity, std::move(col));
             }
         }
     );

@@ -132,6 +132,7 @@ public:
      * @param offset Transfer offset.
      */
     void upload(const void* srcData, VkDeviceSize dataSize, VkDeviceSize offset = 0) {
+        if (dataSize == 0) return;
         if (!memory) throw std::runtime_error("Buffer memory not allocated!");
         void* dst;
         vkMapMemory(device, memory, offset, dataSize, 0, &dst);
@@ -145,6 +146,9 @@ public:
      */
     void destroy() {
         if (buffer) {
+            if (device) {
+                vkDeviceWaitIdle(device);
+            }
             vkDestroyBuffer(device, buffer, nullptr);
             buffer = VK_NULL_HANDLE;
         }

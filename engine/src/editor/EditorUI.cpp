@@ -26,6 +26,8 @@
 #include "ecs/components/Hierarchy.hpp"
 #include "ecs/components/AnimationController.hpp"
 #include "ecs/components/IKSolver.hpp"
+#include "ecs/components/RigidBody.hpp"
+#include "ecs/components/Collider.hpp"
 #include <functional>
 #include "renderer/VulkanRenderer.hpp"
 #include "scenes/Scene.hpp"
@@ -298,7 +300,7 @@ void EditorUI::drawPanels() {
  */
 void EditorUI::drawGizmo()
 {
-    if (!hasSelection)
+    if (!hasSelection || editorMode.flyMode)
         return;
 
     Transform* transform = registry.get<Transform>(selectedEntity);
@@ -326,18 +328,88 @@ void EditorUI::drawGizmo()
 
     proj[1][1] *= -1.0f; // Vulkan
 
-    glm::mat4 model = transform->matrix();
+    glm::mat4 parentWorldMatrix = glm::mat4(1.0f);
+    bool hasParent = false;
+    if (auto* hierarchy = registry.get<HierarchyComponent>(selectedEntity)) {
+        if (hierarchy->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hierarchy->parent)) {
+            auto getParentWorldMatrix = [&](Entity parentEntity, auto& self, int depth) -> glm::mat4 {
+                if (depth > 100) return glm::mat4(1.0f); // Safety depth limit to prevent infinite recursion
+                glm::mat4 m = glm::mat4(1.0f);
+                if (auto* t = registry.get<Transform>(parentEntity)) {
+                    m = t->matrix();
+                }
+                if (auto* h = registry.get<HierarchyComponent>(parentEntity)) {
+                    if (h->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(h->parent)) {
+                        m = self(h->parent, self, depth + 1) * m;
+                    }
+                }
+                return m;
+            };
+            parentWorldMatrix = getParentWorldMatrix(hierarchy->parent, getParentWorldMatrix, 0);
+            hasParent = true;
+        }
+    }
+
+    glm::mat4 worldMatrix = parentWorldMatrix * transform->matrix();
+
+    // Safety guard: do not invoke ImGuizmo if worldMatrix contains NaNs/Infs
+    bool hasNaN = false;
+    for (int col = 0; col < 4; ++col) {
+        for (int row = 0; row < 4; ++row) {
+            float val = worldMatrix[col][row];
+            if (std::isnan(val) || std::isinf(val)) {
+                hasNaN = true;
+                break;
+            }
+        }
+        if (hasNaN) break;
+    }
+
+    if (hasNaN) {
+        // Reset transform components to clean states to recover from NaN
+        transform->position = glm::vec3(0.0f);
+        transform->rotation = glm::vec3(0.0f);
+        transform->scale = glm::vec3(1.0f);
+        worldMatrix = parentWorldMatrix * transform->matrix();
+    }
 
     ImGuizmo::Manipulate(
         &view[0][0],
         &proj[0][0],
         ImGuizmo::TRANSLATE,
         ImGuizmo::LOCAL,
-        &model[0][0]
+        &worldMatrix[0][0]
     );
 
-    if (ImGuizmo::IsUsing())
-        decomposeMatrixToTransform(model, *transform);
+    if (ImGuizmo::IsUsing()) {
+        bool worldNaN = false;
+        for (int col = 0; col < 4; ++col) {
+            for (int row = 0; row < 4; ++row) {
+                float val = worldMatrix[col][row];
+                if (std::isnan(val) || std::isinf(val)) {
+                    worldNaN = true;
+                    break;
+                }
+            }
+            if (worldNaN) break;
+        }
+
+        if (!worldNaN) {
+            glm::mat4 newLocalMatrix = worldMatrix;
+            if (hasParent) {
+                float det = glm::determinant(parentWorldMatrix);
+                if (std::abs(det) > 1e-5f) {
+                    newLocalMatrix = glm::inverse(parentWorldMatrix) * worldMatrix;
+                }
+            }
+            decomposeMatrixToTransform(newLocalMatrix, *transform);
+        }
+
+        if (auto* rb = registry.get<RigidBodyComponent>(selectedEntity)) {
+            rb->velocity = glm::vec3(0.0f);
+            rb->force = glm::vec3(0.0f);
+        }
+    }
 }
 
 /**
@@ -347,6 +419,26 @@ void EditorUI::drawGizmo()
  */
 void EditorUI::decomposeMatrixToTransform(const glm::mat4& mat, Transform& t)
 {
+    // Safety check BEFORE calling ImGuizmo decomposition to prevent infinite loops in ImGuizmo
+    bool hasNaNOrInf = false;
+    for (int col = 0; col < 4; ++col) {
+        for (int row = 0; row < 4; ++row) {
+            float val = mat[col][row];
+            if (std::isnan(val) || std::isinf(val)) {
+                hasNaNOrInf = true;
+                break;
+            }
+        }
+        if (hasNaNOrInf) break;
+    }
+
+    if (hasNaNOrInf) {
+        t.position = glm::vec3(0.0f);
+        t.rotation = glm::vec3(0.0f);
+        t.scale = glm::vec3(1.0f);
+        return;
+    }
+
     float matrixTranslation[3];
     float matrixRotation[3];
     float matrixScale[3];
@@ -375,6 +467,23 @@ void EditorUI::decomposeMatrixToTransform(const glm::mat4& mat, Transform& t)
         matrixScale[1],
         matrixScale[2]
     );
+
+    // Safety guards to prevent NaN/Inf propagation to the C++ transform state
+    if (std::isnan(t.position.x) || std::isinf(t.position.x) ||
+        std::isnan(t.position.y) || std::isinf(t.position.y) ||
+        std::isnan(t.position.z) || std::isinf(t.position.z)) {
+        t.position = glm::vec3(0.0f);
+    }
+    if (std::isnan(t.rotation.x) || std::isinf(t.rotation.x) ||
+        std::isnan(t.rotation.y) || std::isinf(t.rotation.y) ||
+        std::isnan(t.rotation.z) || std::isinf(t.rotation.z)) {
+        t.rotation = glm::vec3(0.0f);
+    }
+    if (std::isnan(t.scale.x) || std::isinf(t.scale.x) || t.scale.x < 1e-4f ||
+        std::isnan(t.scale.y) || std::isinf(t.scale.y) || t.scale.y < 1e-4f ||
+        std::isnan(t.scale.z) || std::isinf(t.scale.z) || t.scale.z < 1e-4f) {
+        t.scale = glm::vec3(1.0f);
+    }
 }
 
 
@@ -662,6 +771,8 @@ void EditorUI::drawInspectorPanel() {
     drawHierarchyEditor();
     drawIKSolverEditor();
     drawAnimationControllerEditor();
+    drawRigidBodyEditor();
+    drawColliderEditor();
     drawGridEditor();
     drawCameraEditor();
 
@@ -703,6 +814,14 @@ void EditorUI::drawInspectorPanel() {
         if (!registry.has<HierarchyComponent>(selectedEntity) && ImGui::MenuItem("Hierarchy Link")) {
             registry.emplace<HierarchyComponent>(selectedEntity, HierarchyComponent{});
             statusMessage = "Added Hierarchy Component.";
+        }
+        if (!registry.has<RigidBodyComponent>(selectedEntity) && ImGui::MenuItem("RigidBody")) {
+            registry.emplace<RigidBodyComponent>(selectedEntity, RigidBodyComponent{});
+            statusMessage = "Added RigidBody component.";
+        }
+        if (!registry.has<ColliderComponent>(selectedEntity) && ImGui::MenuItem("Collider")) {
+            registry.emplace<ColliderComponent>(selectedEntity, ColliderComponent{});
+            statusMessage = "Added Collider component.";
         }
         ImGui::EndPopup();
     }
@@ -2146,4 +2265,86 @@ void EditorUI::drawAnimationControllerEditor() {
     } else {
         TextDisabled("Add an Animator component to load state machines.");
     }
+}
+
+void EditorUI::drawRigidBodyEditor() {
+    RigidBodyComponent* rb = registry.get<RigidBodyComponent>(selectedEntity);
+    if (!rb) return;
+
+    bool open = CollapsingHeader("RigidBody", ImGuiTreeNodeFlags_DefaultOpen);
+    SameLine(ImGui::GetWindowWidth() - 40.0f);
+    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
+    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
+    if (Button("X##RigidBody", ImVec2(24, 20))) {
+        registry.remove<RigidBodyComponent>(selectedEntity);
+        statusMessage = "Removed RigidBody component.";
+        PopStyleColor(2);
+        return;
+    }
+    PopStyleColor(2);
+
+    if (!open) return;
+
+    // Type selection
+    const char* types[] = { "Dynamic", "Static" };
+    int currentType = (rb->type == RigidBodyType::Static) ? 1 : 0;
+    if (Combo("Body Type", &currentType, types, 2)) {
+        rb->type = (currentType == 1) ? RigidBodyType::Static : RigidBodyType::Dynamic;
+    }
+
+    if (DragFloat("Mass", &rb->mass, 0.05f, 0.001f, 1000.0f)) {
+        if (rb->mass < 0.001f) rb->mass = 0.001f;
+    }
+    DragFloat3("Velocity", &rb->velocity[0], 0.05f);
+    DragFloat3("Force Accumulator", &rb->force[0], 0.05f);
+    DragFloat("Gravity Scale", &rb->gravityScale, 0.05f, -10.0f, 10.0f);
+    if (SliderFloat("Restitution", &rb->restitution, 0.0f, 1.0f)) {
+        if (rb->restitution < 0.0f) rb->restitution = 0.0f;
+        if (rb->restitution > 1.0f) rb->restitution = 1.0f;
+    }
+}
+
+void EditorUI::drawColliderEditor() {
+    ColliderComponent* col = registry.get<ColliderComponent>(selectedEntity);
+    if (!col) return;
+
+    bool open = CollapsingHeader("Collider", ImGuiTreeNodeFlags_DefaultOpen);
+    SameLine(ImGui::GetWindowWidth() - 40.0f);
+    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
+    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
+    if (Button("X##Collider", ImVec2(24, 20))) {
+        registry.remove<ColliderComponent>(selectedEntity);
+        statusMessage = "Removed Collider component.";
+        PopStyleColor(2);
+        return;
+    }
+    PopStyleColor(2);
+
+    if (!open) return;
+
+    // Shape Selection
+    const char* shapes[] = { "Sphere", "AABB", "OBB" };
+    int currentShape = 1;
+    if (col->shape == ColliderShape::Sphere) currentShape = 0;
+    else if (col->shape == ColliderShape::OBB) currentShape = 2;
+
+    if (Combo("Shape", &currentShape, shapes, 3)) {
+        if (currentShape == 0) col->shape = ColliderShape::Sphere;
+        else if (currentShape == 2) col->shape = ColliderShape::OBB;
+        else col->shape = ColliderShape::AABB;
+    }
+
+    if (col->shape == ColliderShape::Sphere) {
+        if (DragFloat("Radius", &col->radius, 0.05f, 0.001f, 100.0f)) {
+            if (col->radius < 0.001f) col->radius = 0.001f;
+        }
+    } else {
+        if (DragFloat3("Half-Extents", &col->extents[0], 0.05f, 0.001f, 100.0f)) {
+            if (col->extents.x < 0.001f) col->extents.x = 0.001f;
+            if (col->extents.y < 0.001f) col->extents.y = 0.001f;
+            if (col->extents.z < 0.001f) col->extents.z = 0.001f;
+        }
+    }
+
+    DragFloat3("Center Offset", &col->offset[0], 0.05f);
 }

@@ -45,12 +45,21 @@ public:
             forward.x = cos(glm::radians(transform.rotation.x)) * cos(glm::radians(transform.rotation.y));
             forward.y = sin(glm::radians(transform.rotation.x));
             forward.z = cos(glm::radians(transform.rotation.x)) * sin(glm::radians(transform.rotation.y));
-            forward = glm::normalize(forward);
+            
+            float forwardLen = glm::length(forward);
+            forward = (forwardLen > 1e-4f) ? glm::normalize(forward) : glm::vec3(0.0f, 0.0f, -1.0f);
 
-            glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0, 1, 0)));
-            glm::vec3 up = glm::normalize(glm::cross(right, forward));
+            glm::vec3 crossProduct = glm::cross(forward, glm::vec3(0, 1, 0));
+            glm::vec3 right = glm::vec3(1, 0, 0);
+            if (glm::length(crossProduct) > 1e-4f) {
+                right = glm::normalize(crossProduct);
+            }
 
-			
+            glm::vec3 upCross = glm::cross(right, forward);
+            glm::vec3 up = glm::vec3(0, 1, 0);
+            if (glm::length(upCross) > 1e-4f) {
+                up = glm::normalize(upCross);
+            }
 
             glm::vec3 move =
                 forward * input.movement.z +

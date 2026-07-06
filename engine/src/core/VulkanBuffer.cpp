@@ -78,6 +78,9 @@ void VulkanBuffer::create(VkDevice dev, VkPhysicalDevice phys,
  */
 void VulkanBuffer::destroy() {
     if (buffer != VK_NULL_HANDLE) {
+        if (device != VK_NULL_HANDLE) {
+            vkDeviceWaitIdle(device);
+        }
         vkDestroyBuffer(device, buffer, nullptr);
         buffer = VK_NULL_HANDLE;
     }
@@ -93,6 +96,8 @@ void VulkanBuffer::destroy() {
  * @param dataSize Transfer size.
  */
 void VulkanBuffer::uploadData(const void* srcData, VkDeviceSize dataSize) {
+    if (dataSize == 0) return;
+
     if (dataSize > bufferSize)
         throw std::runtime_error("uploadData() size exceeds buffer capacity");
 

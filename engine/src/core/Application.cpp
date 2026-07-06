@@ -8,6 +8,7 @@
 #include "ecs/systems/CameraSystem.hpp"
 #include "ecs/systems/InputSystem.hpp"
 #include "ecs/systems/AnimationSystem.hpp"
+#include "ecs/systems/PhysicsSystem.hpp"
 #include "scenes/Scene.hpp"
 #include "scenes/JSONUtils.hpp"
 #include "scenes/DefaultScene.hpp"
@@ -73,9 +74,11 @@ namespace Engine {
         auto cameraSystem = std::make_shared<CameraSystem>(registry, *renderer);
         auto inputSystem = std::make_shared<InputSystem>(registry, *renderer, editorMode);
         auto animationSystem = std::make_shared<AnimationSystem>(registry, *renderer);
+        auto physicsSystem = std::make_shared<PhysicsSystem>(registry);
 
         systemManager.addSystem(inputSystem);
         systemManager.addSystem(cameraSystem);
+        systemManager.addSystem(physicsSystem);
         systemManager.addSystem(animationSystem);
         systemManager.addSystem(renderSystem);
 

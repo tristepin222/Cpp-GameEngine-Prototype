@@ -119,7 +119,8 @@ private:
     /**
      * @brief Computes the absolute world matrix of an entity by traversing the hierarchy.
      */
-    glm::mat4 getWorldMatrix(Entity entity) {
+    glm::mat4 getWorldMatrix(Entity entity, int depth = 0) {
+        if (depth > 100) return glm::mat4(1.0f); // Safety depth limit to prevent infinite recursion
         glm::mat4 model = glm::mat4(1.0f);
         if (auto* transform = registry.get<Transform>(entity)) {
             model = transform->matrix();
@@ -169,13 +170,13 @@ private:
                                 }
                                 
                                 if (jointIdx != -1 && jointIdx < static_cast<int>(parentSkeleton->jointMatrices.size())) {
-                                    return getWorldMatrix(hierarchy->parent) * parentSkeleton->jointMatrices[jointIdx];
+                                    return getWorldMatrix(hierarchy->parent, depth + 1) * parentSkeleton->jointMatrices[jointIdx];
                                 }
                             }
                         }
                     }
                 }
-                model = getWorldMatrix(hierarchy->parent) * model;
+                model = getWorldMatrix(hierarchy->parent, depth + 1) * model;
             }
         }
         return model;
@@ -254,7 +255,7 @@ private:
             Mesh* mesh = key.first;
             Material* mat = key.second;
 
-            if (!mesh || !mat || batch.empty()) continue;
+            if (!mesh || !mat || batch.empty() || mesh->vertexBuffer == VK_NULL_HANDLE || mesh->indexBuffer == VK_NULL_HANDLE) continue;
 
             // --- Bind pipeline
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mat->pipeline);
@@ -349,6 +350,15 @@ private:
 
             // Bind grid pipeline
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mat->pipeline);
+
+            // Bind grid quad vertex buffer to satisfy pipeline input requirements
+            if (auto* mesh = registry.get<Mesh>(e)) {
+                if (mesh->vertexBuffer != VK_NULL_HANDLE) {
+                    VkBuffer vertexBuffers[] = { mesh->vertexBuffer };
+                    VkDeviceSize vertexOffsets[] = { 0 };
+                    vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, vertexOffsets);
+                }
+            }
 
             // Bind descriptor sets (camera)
             vkCmdBindDescriptorSets(cmd,

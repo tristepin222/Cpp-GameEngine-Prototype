@@ -129,6 +129,14 @@ private:
      */
     void drawAnimationControllerEditor();
     /**
+     * @brief Renders inline controls for RigidBody component fields.
+     */
+    void drawRigidBodyEditor();
+    /**
+     * @brief Renders inline controls for Collider component fields.
+     */
+    void drawColliderEditor();
+    /**
      * @brief Draws a styled banner title inside component panels.
      * @param title Header title text.
      */

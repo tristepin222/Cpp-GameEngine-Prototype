@@ -78,8 +78,6 @@ namespace Engine {
 
         unsigned int numChunks = std::min(numThreads, static_cast<unsigned int>(count));
         std::atomic<int> chunksRemaining(numChunks);
-        std::mutex waitMutex;
-        std::condition_variable waitCv;
 
         int chunkSize = (count + numChunks - 1) / numChunks;
 
@@ -87,18 +85,18 @@ namespace Engine {
             int start = c * chunkSize;
             int end = std::min(start + chunkSize, count);
 
-            pushJob([&func, start, end, &chunksRemaining, &waitCv]() {
+            pushJob([&func, start, end, &chunksRemaining]() {
                 for (int i = start; i < end; ++i) {
                     func(i);
                 }
-                if (--chunksRemaining == 0) {
-                    waitCv.notify_all();
-                }
+                --chunksRemaining;
             });
         }
 
-        std::unique_lock<std::mutex> lock(waitMutex);
-        waitCv.wait(lock, [&chunksRemaining]() { return chunksRemaining == 0; });
+        // Spin-wait and yield thread slices until all background chunks have completed execution
+        while (chunksRemaining.load(std::memory_order_relaxed) > 0) {
+            std::this_thread::yield();
+        }
     }
 
     void JobSystem::workerThreadLoop() {
