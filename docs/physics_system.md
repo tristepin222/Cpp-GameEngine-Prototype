@@ -58,7 +58,7 @@ The system routes collision queries inside **[PhysicsSystem.hpp](../engine/inclu
 ### 1. Sphere-Sphere
 Checks if the distance between the world positions of the sphere centers is less than the sum of their radii:
 
-$$\text{distance}(\vec{C}_A, \vec{C}_B) < r_A + r_B$$
+$$\text{distance}(\vec{C}_{A}, \vec{C}_{B}) < r_{A} + r_{B}$$
 
 ### 2. Sphere-AABB
 Finds the closest point on the AABB boundary to the sphere center by clamping coordinates to AABB bounds:
@@ -68,9 +68,9 @@ $$\vec{P}_{\text{closest}} = \text{clamp}(\vec{C}_{\text{sphere}}, \vec{C}_{\tex
 If the distance between $\vec{C}_{\text{sphere}}$ and $\vec{P}_{\text{closest}}$ is less than the sphere's radius, a collision has occurred.
 
 ### 3. OBB-Sphere
-Translates the sphere center $\vec{C}_s$ into the OBB's local coordinate space. In local space, the problem reduces to a Sphere-AABB check against local extents:
+Translates the sphere center $\vec{C}_{s}$ into the OBB's local coordinate space. In local space, the problem reduces to a Sphere-AABB check against local extents:
 
-$$\vec{C}_{s,\text{local}} = \mathbf{R}^T \left(\vec{C}_s - \vec{C}_{\text{obb}}\right)$$
+$$\vec{C}_{s,\text{local}} = \mathbf{R}^T \left(\vec{C}_{s} - \vec{C}_{\text{obb}}\right)$$
 
 We clamp $\vec{C}_{s,\text{local}}$ to local extents, transform the point back to world space to obtain the contact point, and evaluate the distance check.
 
@@ -82,9 +82,9 @@ Applies the **Separating Axis Theorem (SAT)**. Two oriented boxes do not overlap
 
 For each axis $\vec{L}$, we calculate the projected half-extents radii:
 
-$$r_A = \sum_{i=0}^2 e_{A,i} \cdot |\vec{u}_{A,i} \cdot \vec{L}|, \quad r_B = \sum_{j=0}^2 e_{B,j} \cdot |\vec{u}_{B,j} \cdot \vec{L}|$$
+$$r_{A} = \sum_{i=0}^2 e_{A,i} \cdot |\vec{u}_{A,i} \cdot \vec{L}|, \quad r_{B} = \sum_{j=0}^2 e_{B,j} \cdot |\vec{u}_{B,j} \cdot \vec{L}|$$
 
-If the center-to-center distance projected onto $\vec{L}$ satisfies $d = |(\vec{C}_B - \vec{C}_A) \cdot \vec{L}| \ge r_A + r_B$, the boxes are separated. If no separating axis is found, they are colliding along the axis of minimum penetration.
+If the center-to-center distance projected onto $\vec{L}$ satisfies $d = |(\vec{C}_{B} - \vec{C}_{A}) \cdot \vec{L}| \ge r_{A} + r_{B}$, the boxes are separated. If no separating axis is found, they are colliding along the axis of minimum penetration.
 
 ---
 
@@ -96,11 +96,11 @@ For velocity resolution and rotational impulse calculations, the contact point i
 * **Sphere-AABB / OBB-Sphere**: The closest point clamped on the box surface.
 * **OBB-OBB**: The midpoint between the deepest support points of the two boxes along the contact normal:
   
-  $$\vec{S}_A = \vec{C}_A + \sum_{i=0}^2 \text{sign}(\vec{u}_{A,i} \cdot \vec{N}) \cdot e_{A,i} \cdot \vec{u}_{A,i}$$
+  $$\vec{S}_{A} = \vec{C}_{A} + \sum_{i=0}^2 \text{sign}(\vec{u}_{A,i} \cdot \vec{N}) \cdot e_{A,i} \cdot \vec{u}_{A,i}$$
   
-  $$\vec{S}_B = \vec{C}_B - \sum_{j=0}^2 \text{sign}(\vec{u}_{B,j} \cdot \vec{N}) \cdot e_{B,j} \cdot \vec{u}_{B,j}$$
+  $$\vec{S}_{B} = \vec{C}_{B} - \sum_{j=0}^2 \text{sign}(\vec{u}_{B,j} \cdot \vec{N}) \cdot e_{B,j} \cdot \vec{u}_{B,j}$$
   
-  $$\vec{P}_{\text{contact}} = \frac{\vec{S}_A + \vec{S}_B}{2}$$
+  $$\vec{P}_{\text{contact}} = \frac{\vec{S}_{A} + \vec{S}_{B}}{2}$$
 
 ---
 
@@ -124,18 +124,18 @@ $$\mathbf{I}_{\text{world}}^{-1} = \mathbf{R} \cdot \mathbf{I}_{\text{local}}^{-
 ### 2. Rotational Impulse Solver
 The relative contact velocity at the contact point $\vec{P}$ is:
 
-$$\vec{v}_{\text{rel}} = \left( \vec{v}_B + \vec{\omega}_B \times \vec{r}_B \right) - \left( \vec{v}_A + \vec{\omega}_A \times \vec{r}_A \right)$$
+$$\vec{v}_{\text{rel}} = \left( \vec{v}_{B} + \vec{\omega}_{B} \times \vec{r}_{B} \right) - \left( \vec{v}_{A} + \vec{\omega}_{A} \times \vec{r}_{A} \right)$$
 
-Where $\vec{r}_A = \vec{P} - \vec{C}_A$ and $\vec{r}_B = \vec{P} - \vec{C}_B$.
+Where $\vec{r}_{A} = \vec{P} - \vec{C}_{A}$ and $\vec{r}_{B} = \vec{P} - \vec{C}_{B}$.
 
 If the bodies are moving towards each other ($\vec{v}_{\text{rel}} \cdot \vec{N} < 0$), the impulse scalar $j$ is calculated:
 
-$$j = \frac{-(1 + e)(\vec{v}_{\text{rel}} \cdot \vec{N})}{\frac{1}{m_A} + \frac{1}{m_B} + \left( \left[ \mathbf{I}_{A,\text{world}}^{-1} (\vec{r}_A \times \vec{N}) \right] \times \vec{r}_A \right) \cdot \vec{N} + \left( \left[ \mathbf{I}_{B,\text{world}}^{-1} (\vec{r}_B \times \vec{N}) \right] \times \vec{r}_B \right) \cdot \vec{N}}$$
+$$j = \frac{-(1 + e)(\vec{v}_{\text{rel}} \cdot \vec{N})}{\frac{1}{m_{A}} + \frac{1}{m_{B}} + \left( \left[ \mathbf{I}_{A,\text{world}}^{-1} (\vec{r}_{A} \times \vec{N}) \right] \times \vec{r}_{A} \right) \cdot \vec{N} + \left( \left[ \mathbf{I}_{B,\text{world}}^{-1} (\vec{r}_{B} \times \vec{N}) \right] \times \vec{r}_{B} \right) \cdot \vec{N}}$$
 
 Where $e$ is the bounciness restitution. The resulting impulse vector $\vec{J} = j \vec{N}$ is applied to update linear and angular velocities:
 
-$$\vec{v}_A \leftarrow \vec{v}_A - \frac{\vec{J}}{m_A}, \quad \vec{\omega}_A \leftarrow \vec{\omega}_A - \mathbf{I}_{A,\text{world}}^{-1} (\vec{r}_A \times \vec{J})$$
+$$\vec{v}_{A} \leftarrow \vec{v}_{A} - \frac{\vec{J}}{m_{A}}, \quad \vec{\omega}_{A} \leftarrow \vec{\omega}_{A} - \mathbf{I}_{A,\text{world}}^{-1} (\vec{r}_{A} \times \vec{J})$$
 
-$$\vec{v}_B \leftarrow \vec{v}_B + \frac{\vec{J}}{m_B}, \quad \vec{\omega}_B \leftarrow \vec{\omega}_B + \mathbf{I}_{B,\text{world}}^{-1} (\vec{r}_B \times \vec{J})$$
+$$\vec{v}_{B} \leftarrow \vec{v}_{B} + \frac{\vec{J}}{m_{B}}, \quad \vec{\omega}_{B} \leftarrow \vec{\omega}_{B} + \mathbf{I}_{B,\text{world}}^{-1} (\vec{r}_{B} \times \vec{J})$$
 
 This impulse response ensures that boxes tilt, rotate, slide, and bounce realistically when hitting flat ground or inclined objects.
