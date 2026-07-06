@@ -1940,6 +1940,55 @@ void EditorUI::drawAnimatorEditor() {
             return;
         }
     }
+
+    // Binary anim loader/saver utility controls
+    static char animPathBuf[256] = "";
+    InputText("Anim Path", animPathBuf, sizeof(animPathBuf));
+    
+    if (Button("Load Anim")) {
+        std::string pathStr(animPathBuf);
+        SkeletonComponent* skeleton = registry.get<SkeletonComponent>(selectedEntity);
+        if (!skeleton) {
+            SkeletonComponent newSkel{};
+            registry.emplace<SkeletonComponent>(selectedEntity, std::move(newSkel));
+            skeleton = registry.get<SkeletonComponent>(selectedEntity);
+        }
+        if (renderer.resourceManager->loadSkeletonAndAnimations(pathStr, *skeleton, *animator)) {
+            if (auto* material = registry.get<Material>(selectedEntity)) {
+                bool hasSkin = entityHasSkin(registry, selectedEntity);
+                PipelineHandle pipeline = renderer.createPipelineForShaders(
+                    hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
+                    "build/shaders/unlit.frag.spv"
+                );
+                material->pipeline = pipeline.pipeline;
+                material->pipelineLayout = pipeline.layout;
+            }
+            statusMessage = "Loaded animation successfully.";
+        } else {
+            statusMessage = "Failed to load animation.";
+        }
+    }
+    
+    SameLine();
+    if (Button("Save Binary (.anim)")) {
+        SkeletonComponent* skeleton = registry.get<SkeletonComponent>(selectedEntity);
+        if (skeleton) {
+            std::filesystem::create_directories("sandbox_game/assets/animations");
+            std::string savePath = "sandbox_game/assets/animations/model.anim";
+            if (auto* nameComp = registry.get<Name>(selectedEntity)) {
+                savePath = "sandbox_game/assets/animations/" + nameComp->value + ".anim";
+            }
+            if (renderer.resourceManager->saveBinarySkeletonAndAnimations(savePath, *skeleton, *animator)) {
+                statusMessage = "Saved binary animation to " + savePath;
+            } else {
+                statusMessage = "Failed to save binary animation.";
+            }
+        } else {
+            statusMessage = "No skeleton to save.";
+        }
+    }
+    
+    Separator();
     
     if (animator->animations.empty()) {
         TextUnformatted("No animation clips loaded.");

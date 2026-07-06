@@ -81,6 +81,24 @@ public:
     bool loadSkeletonAndAnimations(const std::string& path, SkeletonComponent& skeleton, AnimatorComponent& animator);
 
     /**
+     * @brief Loads skeletal skin and animations from a custom binary animation file (.anim).
+     * @param path File path of the binary animation.
+     * @param skeleton Target SkeletonComponent to populate.
+     * @param animator Target AnimatorComponent to populate.
+     * @return True if loaded successfully.
+     */
+    bool loadBinarySkeletonAndAnimations(const std::string& path, SkeletonComponent& skeleton, AnimatorComponent& animator);
+
+    /**
+     * @brief Saves skeletal skin and animations to a custom binary animation file (.anim).
+     * @param path File path to save the binary animation.
+     * @param skeleton Source SkeletonComponent.
+     * @param animator Source AnimatorComponent.
+     * @return True if saved successfully.
+     */
+    bool saveBinarySkeletonAndAnimations(const std::string& path, const SkeletonComponent& skeleton, const AnimatorComponent& animator);
+
+    /**
      * @brief Initializes the default 1x1 white texture for untextured material fallbacks.
      * @param renderer Reference to active VulkanRenderer.
      */

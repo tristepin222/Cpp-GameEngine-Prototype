@@ -57,6 +57,7 @@ set(ENGINE_SOURCES
     src/scenes/SceneManager.cpp
     src/scenes/SceneSerializer.cpp
     src/renderer/ResourceManager.cpp
+    src/ufbx.cpp
 )
 
 add_library(engine STATIC ${ENGINE_SOURCES})

@@ -14,10 +14,10 @@ The engine is structured as a modular desktop application in C++20, utilizing GL
     The bootstrap/entry point. It reads runtime configurations, creates the window, instantiates the ECS Registry, binds standard systems, and dynamically loads the startup scene.
 2.  **Entity-Component System (ECS) Layer (`Registry`, `EntityManager`, `ComponentStorage`)**:
     A lightweight, custom ECS backend that manages entities, component allocations, and subscriptions. Component data is stored contiguously in memory pools (`ComponentStorage`) to maintain maximum cache locality.
-3.  **Systems Layer (`System`, `SystemManager`)**:
-    Encapsulates logical behaviours (rendering, user input, camera movement) by querying active components via ECS "Views" and executing updates once per frame.
+3.  **Systems Layer (`System`, `SystemManager`, `PhysicsSystem`)**:
+    Encapsulates logical behaviours like rendering, camera movement, and 3D rigid body dynamics. The **[PhysicsSystem](physics_system.md)** evaluates bounding volume collisions and integrates linear/angular velocities.
 4.  **Editor Layer (`EditorUI`, `EditorModeState`)**:
-    An interactive debug panel and WYSIWYG editor powered by ImGui and ImGuizmo. Enables real-time entity manipulation, scene hierarchy inspection, component modification, and scene load/save options. Can be disabled for standalone play.
+    An interactive debug panel and WYSIWYG editor powered by ImGui and ImGuizmo. Enables real-time entity manipulation, scene hierarchy inspection, component modification, collider wireframe toggles, and scene load/save options. Can be disabled for standalone play.
 5.  **Renderer Layer (`VulkanRenderer`, `core/` abstractions)**:
     Wraps Vulkan objects (devices, swapchains, buffers, descriptor pools, command managers, pipelines) in custom, safe RAII classes. Manages double-buffering, data upload to VRAM, depth buffers, and draw command recording.
 
@@ -114,9 +114,9 @@ The engine implements a lightweight asset manager (`ResourceManager`) to handle 
 
 ## Architectural Trade-Offs
 
-### Single-Threaded Game Loop
-* **Why**: The entire game loop operates on the main thread. This choice was made to simplify Vulkan command buffer recording and swapchain synchronization. Multi-threaded command submission in Vulkan requires complex layout barrier tracking and thread-local command pools, which can add significant overhead and synchronization bugs.
-* **Trade-off**: While this reduces pipeline complexity, it limits CPU throughput. In a production engine, long-running systems (like asset loading or physics calculation) would be offloaded to worker threads using a task scheduler.
+### Single-Threaded Main Loop & Job System
+* **Why**: The frame execution loop operates on the main thread to simplify Vulkan command buffer submission and swapchain synchronization. However, parallelizable loops are offloaded to our multi-threaded **[Job System](job_system.md)** via parallel-for chunking.
+* **Trade-off**: The Job System uses a lock-free yielding design to synchronize threads without locking the main game loop, keeping performance high and preventing deadlocks.
 
 ### Decoupled Scene / Engine Splitting
 * **Why**: The core engine is built as a static library, keeping it completely separated from the sandbox game executable. Game code only defines custom components, linking to the library.

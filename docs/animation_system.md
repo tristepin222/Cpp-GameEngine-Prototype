@@ -141,6 +141,55 @@ When destroying a parent entity via the editor hierarchy panel, `Scene::deleteEn
 
 ---
 
+## 8. Fast Binary Animation Pipeline (.anim)
+
+To bypass slow glTF parses and support FBX animations, the engine implements a custom, high-speed binary animation format (`.anim`). The layout corresponds directly to our CPU memory structs, allowing direct contiguous block-reads.
+
+### Binary File Layout (.anim)
+
+1. **Header**:
+   * Magic string: `b'ANIM'` (4 bytes)
+   * Version: `1` (uint32)
+2. **Skeleton Joints**:
+   * `jointCount` (uint32)
+   * For each joint:
+     * `nameLength` (uint32) + `name` (UTF-8 char array)
+     * `parentIndex` (int32)
+     * `inverseBindMatrix` (16 floats, column-major)
+     * `localTransform` (16 floats, column-major)
+     * `bindTranslation` (3 floats)
+     * `bindRotation` (4 floats: `x, y, z, w` matching GLM)
+     * `bindScale` (3 floats)
+3. **Clips & Keyframe Channels**:
+   * `clipCount` (uint32)
+   * For each clip:
+     * `nameLength` (uint32) + `name` (UTF-8 char array)
+     * `duration` (float)
+     * `channelCount` (uint32)
+     * For each channel:
+       * `jointIndex` (int32)
+       * `translationKeys`: `count` (uint32) + array of keyframes (`time` (float) + `value` (3 floats))
+       * `rotationKeys`: `count` (uint32) + array of keyframes (`time` (float) + `value` (4 floats: `x, y, z, w` matching GLM))
+       * `scaleKeys`: `count` (uint32) + array of keyframes (`time` (float) + `value` (3 floats))
+
+---
+
+## 9. Direct FBX Binary File Loading (ufbx)
+
+Instead of relying on external pre-conversion scripts, the engine integrates the **[ufbx](https://github.com/ufbx/ufbx)** library inside **[ResourceManager.cpp](../engine/src/renderer/ResourceManager.cpp)**. This enables direct, native parsing of **FBX Binary** and ASCII files at runtime:
+
+### Geometry Import
+* **Triangulation**: Polygons and N-gons in FBX files are automatically triangulated using `ufbx_triangulate_face`.
+* **Vertex Attribute Unrolling**: Resolves split-attribute mappings (where UVs or Normals are mapped per-index) and deduplicates them using a hash map before uploading to Vulkan.
+* **Static Transforms**: Pre-transforms non-skinned vertices by their global node transform matrices.
+* **Skin Weights & Indices**: Extracts up to 4 vertex bone influences from skin cluster weight maps and normalizes them.
+
+### Animation Evaluation & Baking
+* **Skeletal Joint Mapping**: Collects the FBX node hierarchy tree and matches bone indices. If a bone is referenced in a skin cluster, its bind pose is configured using the cluster's `geometry_to_bone` matrix; otherwise, it defaults to the inverse of the node's global bind pose.
+* **Animation Baking**: Rather than manually parsing complex, layered FBX animation curves (Bezier, Hermite, Linear, Step), the engine queries `ufbx_evaluate_transform` at a constant 30 FPS rate across each anim stack. This automatically bakes the correct interpolated local translations, rotations, and scales.
+
+---
+
 ## Case Study & Engineering Post-Mortem
 
 To read about the real-world bugs, rendering constraints, and architectural challenges solved during the development of these systems, please refer to:

@@ -4,6 +4,8 @@
 #define CGLTF_IMPLEMENTATION
 #include "cgltf.h"
 
+#include "ufbx.h"
+
 #include "renderer/ResourceManager.hpp"
 #include "renderer/VulkanRenderer.hpp"
 #include "core/VulkanBuffer.hpp"
@@ -442,6 +444,203 @@ static void traverseNodes(cgltf_data* data, cgltf_node* node, const glm::mat4& p
     }
 }
 
+static glm::mat4 toGlmMatrix(const ufbx_matrix& m) {
+    glm::mat4 out(1.0f);
+    out[0] = glm::vec4(m.cols[0].x, m.cols[0].y, m.cols[0].z, 0.0f);
+    out[1] = glm::vec4(m.cols[1].x, m.cols[1].y, m.cols[1].z, 0.0f);
+    out[2] = glm::vec4(m.cols[2].x, m.cols[2].y, m.cols[2].z, 0.0f);
+    out[3] = glm::vec4(m.cols[3].x, m.cols[3].y, m.cols[3].z, 1.0f);
+    return out;
+}
+
+static Mesh loadFBXMesh(const std::string& path, VulkanRenderer& renderer, int primitiveIndex, std::unordered_map<std::string, Mesh>& meshCache) {
+    Mesh mesh{};
+    mesh.gltfPath = path;
+    mesh.primitiveIndex = primitiveIndex;
+
+    ufbx_load_opts opts = { 0 };
+    opts.target_unit_meters = 1.0f;
+    opts.generate_missing_normals = true;
+    ufbx_error error;
+    ufbx_scene* scene = ufbx_load_file(path.c_str(), &opts, &error);
+    if (!scene) {
+        throw std::runtime_error("Failed to parse FBX file: " + path + " - " + error.description.data);
+    }
+
+    std::vector<ufbx_node*> fbxNodes;
+    auto collectNodes = [&](auto& self, ufbx_node* node) -> void {
+        if (!node) return;
+        fbxNodes.push_back(node);
+        for (size_t i = 0; i < node->children.count; ++i) {
+            self(self, node->children.data[i]);
+        }
+    };
+    collectNodes(collectNodes, scene->root_node);
+
+    ufbx_mesh* targetMesh = nullptr;
+    ufbx_node* targetNode = nullptr;
+    int currentPrimIndex = 0;
+
+    for (size_t i = 0; i < scene->nodes.count; ++i) {
+        ufbx_node* node = scene->nodes.data[i];
+        if (node->mesh) {
+            if (primitiveIndex == -1 || currentPrimIndex == primitiveIndex) {
+                targetMesh = node->mesh;
+                targetNode = node;
+                break;
+            }
+            currentPrimIndex++;
+        }
+    }
+
+    if (!targetMesh) {
+        ufbx_free_scene(scene);
+        throw std::runtime_error("Failed to find target mesh in FBX: " + path);
+    }
+
+    mesh.nodeName = targetNode->name.data ? targetNode->name.data : "MeshPart";
+    
+    ufbx_node* ancestor = targetNode->parent;
+    while (ancestor) {
+        if (ancestor->attrib_type == UFBX_ELEMENT_BONE && ancestor->name.data) {
+            mesh.parentBoneName = ancestor->name.data;
+            break;
+        }
+        ancestor = ancestor->parent;
+    }
+
+    ufbx_skin_deformer* skin = nullptr;
+    if (targetMesh->skin_deformers.count > 0) {
+        skin = targetMesh->skin_deformers.data[0];
+    }
+    mesh.isSkinned = (skin != nullptr);
+
+    std::vector<uint32_t> tempIndices;
+    tempIndices.reserve(targetMesh->max_face_triangles * 3 * targetMesh->faces.count);
+
+    for (size_t i = 0; i < targetMesh->faces.count; ++i) {
+        ufbx_face face = targetMesh->faces.data[i];
+        if (face.num_indices < 3) continue;
+
+        uint32_t num_tris = ufbx_triangulate_face(
+            tempIndices.data() + tempIndices.size(),
+            tempIndices.capacity() - tempIndices.size(),
+            targetMesh,
+            face
+        );
+        tempIndices.resize(tempIndices.size() + (num_tris * 3));
+    }
+
+    struct IndexTuple {
+        uint32_t pos_idx;
+        uint32_t norm_idx;
+        uint32_t uv_idx;
+        bool operator==(const IndexTuple& o) const {
+            return pos_idx == o.pos_idx && norm_idx == o.norm_idx && uv_idx == o.uv_idx;
+        }
+    };
+    struct IndexTupleHash {
+        size_t operator()(const IndexTuple& t) const {
+            return (t.pos_idx ^ (t.norm_idx << 8)) ^ (t.uv_idx << 16);
+        }
+    };
+
+    std::unordered_map<IndexTuple, uint32_t, IndexTupleHash> uniqueVertices;
+    
+    for (uint32_t index_idx : tempIndices) {
+        uint32_t pos_idx = (targetMesh->vertex_position.indices.count == 0) ? index_idx : targetMesh->vertex_position.indices.data[index_idx];
+        uint32_t norm_idx = (targetMesh->vertex_normal.indices.count == 0) ? index_idx : targetMesh->vertex_normal.indices.data[index_idx];
+        uint32_t uv_idx = (targetMesh->vertex_uv.indices.count == 0) ? index_idx : targetMesh->vertex_uv.indices.data[index_idx];
+
+        IndexTuple tuple{ pos_idx, norm_idx, uv_idx };
+        auto it = uniqueVertices.find(tuple);
+        if (it != uniqueVertices.end()) {
+            mesh.indices.push_back(it->second);
+        } else {
+            uint32_t newVertIdx = static_cast<uint32_t>(mesh.vertices.size());
+            uniqueVertices[tuple] = newVertIdx;
+            mesh.indices.push_back(newVertIdx);
+
+            Vertex vert{};
+            
+            ufbx_vec3 pos = targetMesh->vertex_position.values.data[pos_idx];
+            glm::vec3 position(pos.x, pos.y, pos.z);
+
+            glm::vec3 normal(0.0f);
+            if (targetMesh->vertex_normal.values.count > 0) {
+                ufbx_vec3 norm = targetMesh->vertex_normal.values.data[norm_idx];
+                normal = glm::vec3(norm.x, norm.y, norm.z);
+            }
+
+            if (!mesh.isSkinned) {
+                glm::mat4 global = toGlmMatrix(targetNode->node_to_world);
+                position = glm::vec3(global * glm::vec4(position, 1.0f));
+                normal = glm::normalize(glm::vec3(glm::transpose(glm::inverse(global)) * glm::vec4(normal, 0.0f)));
+            }
+
+            vert.position = position;
+            vert.normal = normal;
+
+            if (targetMesh->vertex_uv.values.count > 0) {
+                ufbx_vec2 uv = targetMesh->vertex_uv.values.data[uv_idx];
+                vert.uv = glm::vec2(uv.x, uv.y);
+            }
+
+            if (mesh.isSkinned && skin) {
+                uint32_t logical_vert_idx = targetMesh->vertex_indices.data[index_idx];
+                ufbx_skin_vertex skin_vert = skin->vertices.data[logical_vert_idx];
+
+                int boneIDs[4]{ 0, 0, 0, 0 };
+                float boneWeights[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+                uint32_t nWeights = std::min(4u, skin_vert.num_weights);
+                float totalWeight = 0.0f;
+                for (uint32_t w = 0; w < nWeights; ++w) {
+                    ufbx_skin_weight skin_weight = skin->weights.data[skin_vert.weight_begin + w];
+                    ufbx_node* boneNode = skin->clusters.data[skin_weight.cluster_index]->bone_node;
+                    
+                    auto bIt = std::find(fbxNodes.begin(), fbxNodes.end(), boneNode);
+                    int jointIndex = 0;
+                    if (bIt != fbxNodes.end()) {
+                        jointIndex = static_cast<int>(std::distance(fbxNodes.begin(), bIt));
+                    }
+
+                    boneIDs[w] = jointIndex;
+                    boneWeights[w] = static_cast<float>(skin_weight.weight);
+                    totalWeight += boneWeights[w];
+                }
+
+                if (totalWeight > 0.0f) {
+                    for (int w = 0; w < 4; ++w) {
+                        boneWeights[w] /= totalWeight;
+                    }
+                }
+
+                vert.boneIDs = glm::ivec4(boneIDs[0], boneIDs[1], boneIDs[2], boneIDs[3]);
+                vert.boneWeights = glm::vec4(boneWeights[0], boneWeights[1], boneWeights[2], boneWeights[3]);
+            }
+
+            mesh.vertices.push_back(vert);
+        }
+    }
+
+    ufbx_free_scene(scene);
+
+    const size_t meshID = renderer.meshSoA.push(mesh.vertices, mesh.indices);
+    renderer.uploadMesh(meshID);
+
+    mesh.vertexBuffer = renderer.meshSoA.vertexBuffers[meshID].get();
+    mesh.indexBuffer = renderer.meshSoA.indexBuffers[meshID].get();
+    mesh.id = static_cast<uint32_t>(meshID);
+
+    std::string cacheKey = path;
+    if (primitiveIndex >= 0) {
+        cacheKey = path + "#" + std::to_string(primitiveIndex);
+    }
+    meshCache[cacheKey] = mesh;
+    return mesh;
+}
+
 Mesh ResourceManager::loadMesh(const std::string& path, VulkanRenderer& renderer, int primitiveIndex) {
     std::string cacheKey = path;
     if (primitiveIndex >= 0) {
@@ -451,6 +650,10 @@ Mesh ResourceManager::loadMesh(const std::string& path, VulkanRenderer& renderer
     auto it = meshCache.find(cacheKey);
     if (it != meshCache.end()) {
         return it->second;
+    }
+
+    if (path.length() >= 4 && (path.substr(path.length() - 4) == ".fbx" || path.substr(path.length() - 4) == ".FBX")) {
+        return loadFBXMesh(path, renderer, primitiveIndex, meshCache);
     }
 
     Mesh mesh{};
@@ -510,6 +713,22 @@ static void countPrimsRecursive(cgltf_node* node, int& count) {
 }
 
 int ResourceManager::getMeshPrimitiveCount(const std::string& path) {
+    if (path.length() >= 4 && (path.substr(path.length() - 4) == ".fbx" || path.substr(path.length() - 4) == ".FBX")) {
+        ufbx_load_opts opts = { 0 };
+        opts.target_unit_meters = 1.0f;
+        ufbx_error error;
+        ufbx_scene* scene = ufbx_load_file(path.c_str(), &opts, &error);
+        if (!scene) return 0;
+        int count = 0;
+        for (size_t i = 0; i < scene->nodes.count; ++i) {
+            if (scene->nodes.data[i]->mesh) {
+                count++;
+            }
+        }
+        ufbx_free_scene(scene);
+        return count;
+    }
+
     cgltf_options options{};
     cgltf_data* data = nullptr;
     cgltf_result result = cgltf_parse_file(&options, path.c_str(), &data);
@@ -569,6 +788,122 @@ void ResourceManager::cleanup(VkDevice device) {
 #include <glm/gtx/quaternion.hpp>
 
 bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, SkeletonComponent& skeleton, AnimatorComponent& animator) {
+    if (path.length() >= 5 && path.substr(path.length() - 5) == ".anim") {
+        return loadBinarySkeletonAndAnimations(path, skeleton, animator);
+    }
+    
+    if (path.length() >= 4 && (path.substr(path.length() - 4) == ".fbx" || path.substr(path.length() - 4) == ".FBX")) {
+        ufbx_load_opts opts = { 0 };
+        opts.target_unit_meters = 1.0f;
+        ufbx_error error;
+        ufbx_scene* scene = ufbx_load_file(path.c_str(), &opts, &error);
+        if (!scene) {
+            std::cerr << "[ResourceManager] Failed to load FBX: " << error.description.data << std::endl;
+            return false;
+        }
+
+        std::vector<ufbx_node*> fbxNodes;
+        auto collectNodes = [&](auto& self, ufbx_node* node) -> void {
+            if (!node) return;
+            fbxNodes.push_back(node);
+            for (size_t i = 0; i < node->children.count; ++i) {
+                self(self, node->children.data[i]);
+            }
+        };
+        collectNodes(collectNodes, scene->root_node);
+
+        uint32_t jointCount = static_cast<uint32_t>(fbxNodes.size());
+        skeleton.joints.resize(jointCount);
+
+        for (uint32_t i = 0; i < jointCount; ++i) {
+            auto* node = fbxNodes[i];
+            auto& joint = skeleton.joints[i];
+
+            joint.name = node->name.data ? node->name.data : "Joint_" + std::to_string(i);
+            
+            joint.parentIndex = -1;
+            if (node->parent) {
+                auto pIt = std::find(fbxNodes.begin(), fbxNodes.end(), node->parent);
+                if (pIt != fbxNodes.end()) {
+                    joint.parentIndex = static_cast<int>(std::distance(fbxNodes.begin(), pIt));
+                }
+            }
+
+            joint.inverseBindMatrix = glm::inverse(toGlmMatrix(node->node_to_world));
+            joint.localTransform = toGlmMatrix(node->node_to_parent);
+
+            joint.bindTranslation = glm::vec3(node->local_transform.translation.x, node->local_transform.translation.y, node->local_transform.translation.z);
+            joint.bindRotation = glm::quat(node->local_transform.rotation.w, node->local_transform.rotation.x, node->local_transform.rotation.y, node->local_transform.rotation.z);
+            joint.bindScale = glm::vec3(node->local_transform.scale.x, node->local_transform.scale.y, node->local_transform.scale.z);
+        }
+
+        for (size_t s = 0; s < scene->skin_deformers.count; ++s) {
+            ufbx_skin_deformer* skin = scene->skin_deformers.data[s];
+            for (size_t c = 0; c < skin->clusters.count; ++c) {
+                ufbx_skin_cluster* cluster = skin->clusters.data[c];
+                if (cluster->bone_node) {
+                    auto bIt = std::find(fbxNodes.begin(), fbxNodes.end(), cluster->bone_node);
+                    if (bIt != fbxNodes.end()) {
+                        int idx = static_cast<int>(std::distance(fbxNodes.begin(), bIt));
+                        skeleton.joints[idx].inverseBindMatrix = toGlmMatrix(cluster->geometry_to_bone);
+                    }
+                }
+            }
+        }
+
+        skeleton.jointMatrices.assign(jointCount, glm::mat4(1.0f));
+
+        animator.animations.clear();
+        for (size_t a = 0; a < scene->anim_stacks.count; ++a) {
+            ufbx_anim_stack* stack = scene->anim_stacks.data[a];
+            AnimationClip clip{};
+            clip.name = stack->name.data ? stack->name.data : "AnimStack_" + std::to_string(a);
+            clip.duration = static_cast<float>(stack->time_end - stack->time_begin);
+            float duration = clip.duration;
+            if (duration <= 0.0f) duration = 1.0f;
+
+            int fps = 30;
+            int numFrames = std::max(2, static_cast<int>(duration * fps));
+
+            for (size_t n = 0; n < fbxNodes.size(); ++n) {
+                ufbx_node* node = fbxNodes[n];
+                AnimationChannel channel{};
+                channel.jointIndex = static_cast<int>(n);
+
+                for (int f = 0; f < numFrames; ++f) {
+                    float t = static_cast<float>(f) / (numFrames - 1) * duration;
+                    double evalTime = stack->time_begin + t;
+                    ufbx_transform xform = ufbx_evaluate_transform(stack->anim, node, evalTime);
+
+                    Keyframe tKey{};
+                    tKey.time = t;
+                    tKey.value = glm::vec3(xform.translation.x, xform.translation.y, xform.translation.z);
+                    channel.translationKeys.push_back(tKey);
+
+                    KeyframeRot rKey{};
+                    rKey.time = t;
+                    rKey.value = glm::quat(xform.rotation.w, xform.rotation.x, xform.rotation.y, xform.rotation.z);
+                    channel.rotationKeys.push_back(rKey);
+
+                    Keyframe sKey{};
+                    sKey.time = t;
+                    sKey.value = glm::vec3(xform.scale.x, xform.scale.y, xform.scale.z);
+                    channel.scaleKeys.push_back(sKey);
+                }
+
+                clip.channels.push_back(std::move(channel));
+            }
+
+            animator.animations.push_back(std::move(clip));
+        }
+
+        if (!animator.animations.empty()) {
+            animator.activeAnimationIndex = 0;
+        }
+
+        ufbx_free_scene(scene);
+        return true;
+    }
     cgltf_options options{};
     cgltf_data* data = nullptr;
     cgltf_result result = cgltf_parse_file(&options, path.c_str(), &data);
@@ -712,5 +1047,182 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
     }
 
     cgltf_free(data);
+    return true;
+}
+
+bool ResourceManager::saveBinarySkeletonAndAnimations(const std::string& path, const SkeletonComponent& skeleton, const AnimatorComponent& animator) {
+    std::ofstream out(path, std::ios::binary);
+    if (!out.is_open()) {
+        std::cerr << "[ResourceManager] Failed to open file for writing binary animation: " << path << std::endl;
+        return false;
+    }
+
+    char magic[4] = {'A', 'N', 'I', 'M'};
+    out.write(magic, 4);
+    uint32_t version = 1;
+    out.write(reinterpret_cast<const char*>(&version), sizeof(version));
+
+    uint32_t jointCount = static_cast<uint32_t>(skeleton.joints.size());
+    out.write(reinterpret_cast<const char*>(&jointCount), sizeof(jointCount));
+
+    for (const auto& joint : skeleton.joints) {
+        uint32_t nameLength = static_cast<uint32_t>(joint.name.size());
+        out.write(reinterpret_cast<const char*>(&nameLength), sizeof(nameLength));
+        if (nameLength > 0) {
+            out.write(joint.name.data(), nameLength);
+        }
+        out.write(reinterpret_cast<const char*>(&joint.parentIndex), sizeof(joint.parentIndex));
+        out.write(reinterpret_cast<const char*>(&joint.inverseBindMatrix[0][0]), sizeof(glm::mat4));
+        out.write(reinterpret_cast<const char*>(&joint.localTransform[0][0]), sizeof(glm::mat4));
+        out.write(reinterpret_cast<const char*>(&joint.bindTranslation[0]), sizeof(glm::vec3));
+        out.write(reinterpret_cast<const char*>(&joint.bindRotation[0]), sizeof(glm::quat));
+        out.write(reinterpret_cast<const char*>(&joint.bindScale[0]), sizeof(glm::vec3));
+    }
+
+    uint32_t animCount = static_cast<uint32_t>(animator.animations.size());
+    out.write(reinterpret_cast<const char*>(&animCount), sizeof(animCount));
+
+    for (const auto& clip : animator.animations) {
+        uint32_t nameLength = static_cast<uint32_t>(clip.name.size());
+        out.write(reinterpret_cast<const char*>(&nameLength), sizeof(nameLength));
+        if (nameLength > 0) {
+            out.write(clip.name.data(), nameLength);
+        }
+        out.write(reinterpret_cast<const char*>(&clip.duration), sizeof(clip.duration));
+
+        uint32_t channelCount = static_cast<uint32_t>(clip.channels.size());
+        out.write(reinterpret_cast<const char*>(&channelCount), sizeof(channelCount));
+
+        for (const auto& channel : clip.channels) {
+            out.write(reinterpret_cast<const char*>(&channel.jointIndex), sizeof(channel.jointIndex));
+
+            uint32_t translationKeyCount = static_cast<uint32_t>(channel.translationKeys.size());
+            out.write(reinterpret_cast<const char*>(&translationKeyCount), sizeof(translationKeyCount));
+            for (const auto& key : channel.translationKeys) {
+                out.write(reinterpret_cast<const char*>(&key.time), sizeof(key.time));
+                out.write(reinterpret_cast<const char*>(&key.value[0]), sizeof(glm::vec3));
+            }
+
+            uint32_t rotationKeyCount = static_cast<uint32_t>(channel.rotationKeys.size());
+            out.write(reinterpret_cast<const char*>(&rotationKeyCount), sizeof(rotationKeyCount));
+            for (const auto& key : channel.rotationKeys) {
+                out.write(reinterpret_cast<const char*>(&key.time), sizeof(key.time));
+                out.write(reinterpret_cast<const char*>(&key.value[0]), sizeof(glm::quat));
+            }
+
+            uint32_t scaleKeyCount = static_cast<uint32_t>(channel.scaleKeys.size());
+            out.write(reinterpret_cast<const char*>(&scaleKeyCount), sizeof(scaleKeyCount));
+            for (const auto& key : channel.scaleKeys) {
+                out.write(reinterpret_cast<const char*>(&key.time), sizeof(key.time));
+                out.write(reinterpret_cast<const char*>(&key.value[0]), sizeof(glm::vec3));
+            }
+        }
+    }
+
+    out.close();
+    std::cout << "[ResourceManager] Successfully saved binary animation file: " << path << std::endl;
+    return true;
+}
+
+bool ResourceManager::loadBinarySkeletonAndAnimations(const std::string& path, SkeletonComponent& skeleton, AnimatorComponent& animator) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in.is_open()) {
+        std::cerr << "[ResourceManager] Failed to open binary animation file: " << path << std::endl;
+        return false;
+    }
+
+    char magic[4];
+    in.read(magic, 4);
+    if (magic[0] != 'A' || magic[1] != 'N' || magic[2] != 'I' || magic[3] != 'M') {
+        std::cerr << "[ResourceManager] Invalid magic header in binary animation file: " << path << std::endl;
+        return false;
+    }
+
+    uint32_t version = 0;
+    in.read(reinterpret_cast<char*>(&version), sizeof(version));
+    if (version != 1) {
+        std::cerr << "[ResourceManager] Unsupported version in binary animation file: " << version << std::endl;
+        return false;
+    }
+
+    uint32_t jointCount = 0;
+    in.read(reinterpret_cast<char*>(&jointCount), sizeof(jointCount));
+    skeleton.joints.resize(jointCount);
+
+    for (uint32_t i = 0; i < jointCount; ++i) {
+        auto& joint = skeleton.joints[i];
+        uint32_t nameLength = 0;
+        in.read(reinterpret_cast<char*>(&nameLength), sizeof(nameLength));
+        if (nameLength > 0) {
+            joint.name.resize(nameLength);
+            in.read(&joint.name[0], nameLength);
+        }
+        in.read(reinterpret_cast<char*>(&joint.parentIndex), sizeof(joint.parentIndex));
+        in.read(reinterpret_cast<char*>(&joint.inverseBindMatrix[0][0]), sizeof(glm::mat4));
+        in.read(reinterpret_cast<char*>(&joint.localTransform[0][0]), sizeof(glm::mat4));
+        in.read(reinterpret_cast<char*>(&joint.bindTranslation[0]), sizeof(glm::vec3));
+        in.read(reinterpret_cast<char*>(&joint.bindRotation[0]), sizeof(glm::quat));
+        in.read(reinterpret_cast<char*>(&joint.bindScale[0]), sizeof(glm::vec3));
+    }
+
+    skeleton.jointMatrices.assign(jointCount, glm::mat4(1.0f));
+
+    uint32_t animCount = 0;
+    in.read(reinterpret_cast<char*>(&animCount), sizeof(animCount));
+    animator.animations.resize(animCount);
+
+    for (uint32_t c = 0; c < animCount; ++c) {
+        auto& clip = animator.animations[c];
+        uint32_t nameLength = 0;
+        in.read(reinterpret_cast<char*>(&nameLength), sizeof(nameLength));
+        if (nameLength > 0) {
+            clip.name.resize(nameLength);
+            in.read(&clip.name[0], nameLength);
+        }
+        in.read(reinterpret_cast<char*>(&clip.duration), sizeof(clip.duration));
+
+        uint32_t channelCount = 0;
+        in.read(reinterpret_cast<char*>(&channelCount), sizeof(channelCount));
+        clip.channels.resize(channelCount);
+
+        for (uint32_t ch = 0; ch < channelCount; ++ch) {
+            auto& channel = clip.channels[ch];
+            in.read(reinterpret_cast<char*>(&channel.jointIndex), sizeof(channel.jointIndex));
+
+            uint32_t translationKeyCount = 0;
+            in.read(reinterpret_cast<char*>(&translationKeyCount), sizeof(translationKeyCount));
+            channel.translationKeys.resize(translationKeyCount);
+            for (uint32_t k = 0; k < translationKeyCount; ++k) {
+                auto& key = channel.translationKeys[k];
+                in.read(reinterpret_cast<char*>(&key.time), sizeof(key.time));
+                in.read(reinterpret_cast<char*>(&key.value[0]), sizeof(glm::vec3));
+            }
+
+            uint32_t rotationKeyCount = 0;
+            in.read(reinterpret_cast<char*>(&rotationKeyCount), sizeof(rotationKeyCount));
+            channel.rotationKeys.resize(rotationKeyCount);
+            for (uint32_t k = 0; k < rotationKeyCount; ++k) {
+                auto& key = channel.rotationKeys[k];
+                in.read(reinterpret_cast<char*>(&key.time), sizeof(key.time));
+                in.read(reinterpret_cast<char*>(&key.value[0]), sizeof(glm::quat));
+            }
+
+            uint32_t scaleKeyCount = 0;
+            in.read(reinterpret_cast<char*>(&scaleKeyCount), sizeof(scaleKeyCount));
+            channel.scaleKeys.resize(scaleKeyCount);
+            for (uint32_t k = 0; k < scaleKeyCount; ++k) {
+                auto& key = channel.scaleKeys[k];
+                in.read(reinterpret_cast<char*>(&key.time), sizeof(key.time));
+                in.read(reinterpret_cast<char*>(&key.value[0]), sizeof(glm::vec3));
+            }
+        }
+    }
+
+    if (!animator.animations.empty()) {
+        animator.activeAnimationIndex = 0; // Default active clip
+    }
+
+    in.close();
+    std::cout << "[ResourceManager] Successfully loaded binary animation file: " << path << std::endl;
     return true;
 }
