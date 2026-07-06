@@ -18,4 +18,10 @@ struct RigidBodyComponent {
     glm::vec3 force = glm::vec3(0.0f);
     float gravityScale = 1.0f;
     float restitution = 0.5f; // Bounciness coefficient
+
+    // Rotational physics fields
+    glm::vec3 angularVelocity = glm::vec3(0.0f); // Rad/s
+    glm::vec3 torque = glm::vec3(0.0f);
+    float angularDrag = 0.5f; // Damping
+    float linearDrag = 0.0f; // Damping
 };

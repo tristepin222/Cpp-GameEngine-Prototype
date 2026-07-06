@@ -292,6 +292,7 @@ void EditorUI::drawPanels() {
 
     // 6. Draw Gizmo and Viewport overlay controls (drawn on top of clear center area)
     drawGizmo();
+    drawColliderDebugOverlay();
     handleViewportPicking();
 }
 
@@ -332,20 +333,7 @@ void EditorUI::drawGizmo()
     bool hasParent = false;
     if (auto* hierarchy = registry.get<HierarchyComponent>(selectedEntity)) {
         if (hierarchy->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hierarchy->parent)) {
-            auto getParentWorldMatrix = [&](Entity parentEntity, auto& self, int depth) -> glm::mat4 {
-                if (depth > 100) return glm::mat4(1.0f); // Safety depth limit to prevent infinite recursion
-                glm::mat4 m = glm::mat4(1.0f);
-                if (auto* t = registry.get<Transform>(parentEntity)) {
-                    m = t->matrix();
-                }
-                if (auto* h = registry.get<HierarchyComponent>(parentEntity)) {
-                    if (h->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(h->parent)) {
-                        m = self(h->parent, self, depth + 1) * m;
-                    }
-                }
-                return m;
-            };
-            parentWorldMatrix = getParentWorldMatrix(hierarchy->parent, getParentWorldMatrix, 0);
+            parentWorldMatrix = getEntityWorldMatrix(hierarchy->parent);
             hasParent = true;
         }
     }
@@ -866,6 +854,10 @@ void EditorUI::drawDebugPanel() {
     Spacing();
     Separator();
     TextUnformatted("Clip Depth Mode: OpenGL-style (-1..1)");
+    
+    Spacing();
+    Separator();
+    Checkbox("Show Colliders", &showColliders);
 
     End();
 }
@@ -2348,3 +2340,135 @@ void EditorUI::drawColliderEditor() {
 
     DragFloat3("Center Offset", &col->offset[0], 0.05f);
 }
+
+glm::mat4 EditorUI::getEntityWorldMatrix(Entity entity, int depth) {
+    if (depth > 100) return glm::mat4(1.0f);
+    glm::mat4 m = glm::mat4(1.0f);
+    if (auto* t = registry.get<Transform>(entity)) {
+        m = t->matrix();
+    }
+    if (auto* h = registry.get<HierarchyComponent>(entity)) {
+        if (h->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(h->parent)) {
+            m = getEntityWorldMatrix(h->parent, depth + 1) * m;
+        }
+    }
+    return m;
+}
+
+void EditorUI::drawColliderDebugOverlay() {
+    if (!showColliders) return;
+
+    ImGuiIO& io = ImGui::GetIO();
+    glm::mat4 viewProj = renderer.getActiveCameraViewProj();
+
+    auto projectToScreen = [&](const glm::vec3& worldPos, ImVec2& screenPos) -> bool {
+        glm::vec4 clipPos = viewProj * glm::vec4(worldPos, 1.0f);
+        if (clipPos.w < 0.0001f) return false;
+        glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
+        screenPos.x = (ndc.x + 1.0f) * 0.5f * io.DisplaySize.x;
+        screenPos.y = (ndc.y + 1.0f) * 0.5f * io.DisplaySize.y;
+        return true;
+    };
+
+    ImDrawList* drawList = ImGui::GetForegroundDrawList();
+
+    for (auto [entity, transform, col] : registry.view<Transform, ColliderComponent>()) {
+        glm::mat4 worldM = getEntityWorldMatrix(entity);
+        ImU32 color = (hasSelection && entity == selectedEntity) ? ImColor(0, 255, 0, 255) : ImColor(255, 120, 0, 200);
+
+        if (col.shape == ColliderShape::Sphere) {
+            const int segments = 24;
+            float radius = col.radius;
+            glm::vec3 center = glm::vec3(worldM * glm::vec4(col.offset, 1.0f));
+
+            auto drawRing = [&](const glm::vec3& u, const glm::vec3& v) {
+                ImVec2 prevScreen;
+                bool prevValid = false;
+                for (int step = 0; step <= segments; ++step) {
+                    float angle = (float)step / (float)segments * 2.0f * 3.14159265f;
+                    glm::vec3 offset = radius * (std::cos(angle) * u + std::sin(angle) * v);
+                    ImVec2 currScreen;
+                    if (projectToScreen(center + offset, currScreen)) {
+                        if (prevValid) {
+                            drawList->AddLine(prevScreen, currScreen, color, 1.5f);
+                        }
+                        prevScreen = currScreen;
+                        prevValid = true;
+                    } else {
+                        prevValid = false;
+                    }
+                }
+            };
+
+            glm::vec3 axisX(1.0f, 0.0f, 0.0f);
+            glm::vec3 axisY(0.0f, 1.0f, 0.0f);
+            glm::vec3 axisZ(0.0f, 0.0f, 1.0f);
+
+            drawRing(axisX, axisY);
+            drawRing(axisX, axisZ);
+            drawRing(axisY, axisZ);
+
+        } else if (col.shape == ColliderShape::AABB) {
+            glm::vec3 center = glm::vec3(worldM * glm::vec4(col.offset, 1.0f));
+            glm::vec3 worldCorners[8] = {
+                center + col.extents * glm::vec3(-1, -1, -1),
+                center + col.extents * glm::vec3(1, -1, -1),
+                center + col.extents * glm::vec3(1, 1, -1),
+                center + col.extents * glm::vec3(-1, 1, -1),
+                center + col.extents * glm::vec3(-1, -1, 1),
+                center + col.extents * glm::vec3(1, -1, 1),
+                center + col.extents * glm::vec3(1, 1, 1),
+                center + col.extents * glm::vec3(-1, 1, 1)
+            };
+
+            ImVec2 screenCorners[8];
+            bool valid[8];
+
+            for (int k = 0; k < 8; ++k) {
+                valid[k] = projectToScreen(worldCorners[k], screenCorners[k]);
+            }
+
+            auto drawEdge = [&](int i, int j) {
+                if (valid[i] && valid[j]) {
+                    drawList->AddLine(screenCorners[i], screenCorners[j], color, 1.5f);
+                }
+            };
+
+            drawEdge(0, 1); drawEdge(1, 2); drawEdge(2, 3); drawEdge(3, 0);
+            drawEdge(4, 5); drawEdge(5, 6); drawEdge(6, 7); drawEdge(7, 4);
+            drawEdge(0, 4); drawEdge(1, 5); drawEdge(2, 6); drawEdge(3, 7);
+
+        } else {
+            glm::vec3 localCorners[8] = {
+                col.offset + col.extents * glm::vec3(-1, -1, -1),
+                col.offset + col.extents * glm::vec3(1, -1, -1),
+                col.offset + col.extents * glm::vec3(1, 1, -1),
+                col.offset + col.extents * glm::vec3(-1, 1, -1),
+                col.offset + col.extents * glm::vec3(-1, -1, 1),
+                col.offset + col.extents * glm::vec3(1, -1, 1),
+                col.offset + col.extents * glm::vec3(1, 1, 1),
+                col.offset + col.extents * glm::vec3(-1, 1, 1)
+            };
+
+            glm::vec3 worldCorners[8];
+            ImVec2 screenCorners[8];
+            bool valid[8];
+
+            for (int k = 0; k < 8; ++k) {
+                worldCorners[k] = glm::vec3(worldM * glm::vec4(localCorners[k], 1.0f));
+                valid[k] = projectToScreen(worldCorners[k], screenCorners[k]);
+            }
+
+            auto drawEdge = [&](int i, int j) {
+                if (valid[i] && valid[j]) {
+                    drawList->AddLine(screenCorners[i], screenCorners[j], color, 1.5f);
+                }
+            };
+
+            drawEdge(0, 1); drawEdge(1, 2); drawEdge(2, 3); drawEdge(3, 0);
+            drawEdge(4, 5); drawEdge(5, 6); drawEdge(6, 7); drawEdge(7, 4);
+            drawEdge(0, 4); drawEdge(1, 5); drawEdge(2, 6); drawEdge(3, 7);
+        }
+    }
+}
+

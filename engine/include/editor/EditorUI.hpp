@@ -167,6 +167,14 @@ private:
      * @param t Output transform parameters.
      */
     void decomposeMatrixToTransform(const glm::mat4& mat, Transform& t);
+    /**
+     * @brief Recursively traverses parent references to build the entity's absolute world transform.
+     */
+    glm::mat4 getEntityWorldMatrix(Entity entity, int depth = 0);
+    /**
+     * @brief Draws wireframe overlays for all active colliders when enabled.
+     */
+    void drawColliderDebugOverlay();
 
     /** @brief Reference to registry. */
     Registry& registry;
@@ -206,4 +214,6 @@ private:
     std::string lastPickResult = "No pick attempted yet.";
     /** @brief Editor/Fly toggle key state cache. */
     bool previousToggleKeyDown = false;
+    /** @brief Flag to toggle drawing collider wireframes in the viewport. */
+    bool showColliders = false;
 };
