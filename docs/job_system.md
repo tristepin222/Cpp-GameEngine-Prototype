@@ -49,7 +49,7 @@ void parallelFor(int count, std::function<void(int)> func);
 * Otherwise, the loop is partitioned into $M$ chunks (where $M = \min(\text{threads}, \text{count})$).
 * The chunk size is calculated dynamically:
   
-  $$\text{chunk\_size} = \frac{\text{count} + M - 1}{M}$$
+  $$\text{chunk size} = \frac{\text{count} + M - 1}{M}$$
 
 * Each chunk is pushed to the job queue as a lambda capture:
   ```cpp

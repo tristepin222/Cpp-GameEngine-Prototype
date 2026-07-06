@@ -22,13 +22,13 @@ In the integration pass, forces and torques are integrated into velocities, and 
 
 $$\vec{a} = \frac{\vec{F}_{\text{total}}}{m}$$
 
-$$\vec{v}_{t+dt} = \left(\vec{v}_t + \vec{a} \cdot dt\right) \cdot \text{clamp}(1 - C_{\text{linear\_drag}} \cdot dt, 0, 1)$$
+$$\vec{v}_{t+dt} = \left(\vec{v}_t + \vec{a} \cdot dt\right) \cdot \text{clamp}(1 - C_{\text{linear drag}} \cdot dt, 0, 1)$$
 
 $$\vec{p}_{t+dt} = \vec{p}_t + \vec{v}_{t+dt} \cdot dt$$
 
 $$\vec{\alpha} = I^{-1} \vec{\tau}$$
 
-$$\vec{\omega}_{t+dt} = \left(\vec{\omega}_t + \vec{\alpha} \cdot dt\right) \cdot \text{clamp}(1 - C_{\text{angular\_drag}} \cdot dt, 0, 1)$$
+$$\vec{\omega}_{t+dt} = \left(\vec{\omega}_t + \vec{\alpha} \cdot dt\right) \cdot \text{clamp}(1 - C_{\text{angular drag}} \cdot dt, 0, 1)$$
 
 $$\vec{\theta}_{t+dt} = \vec{\theta}_t + \text{deg}(\vec{\omega}_{t+dt}) \cdot dt$$
 
