@@ -76,9 +76,9 @@ We clamp $\vec{C}_{s,\text{local}}$ to local extents, transform the point back t
 
 ### 4. OBB-OBB (Separating Axis Theorem)
 Applies the **Separating Axis Theorem (SAT)**. Two oriented boxes do not overlap if there exists a projection axis along which their 1D projections do not overlap. We project the boxes onto 15 candidate axes:
-* 3 local axes of Box A ($\vec{u}_{A0}, \vec{u}_{A1}, \vec{u}_{A2}$)
-* 3 local axes of Box B ($\vec{u}_{B0}, \vec{u}_{B1}, \vec{u}_{B2}$)
-* 9 cross products of their axes ($\vec{u}_{Ai} \times \vec{u}_{Bj}$)
+* 3 local axes of Box A ($\vec{u}\_{A0}, \vec{u}\_{A1}, \vec{u}\_{A2}$)
+* 3 local axes of Box B ($\vec{u}\_{B0}, \vec{u}\_{B1}, \vec{u}\_{B2}$)
+* 9 cross products of their axes ($\vec{u}\_{Ai} \times \vec{u}\_{Bj}$)
 
 For each axis $\vec{L}$, we calculate the projected half-extents radii:
 
@@ -126,7 +126,7 @@ The relative contact velocity at the contact point $\vec{P}$ is:
 
 $$\vec{v}_{\text{rel}} = \left( \vec{v}_{B} + \vec{\omega}_{B} \times \vec{r}_{B} \right) - \left( \vec{v}_{A} + \vec{\omega}_{A} \times \vec{r}_{A} \right)$$
 
-Where $\vec{r}_{A} = \vec{P} - \vec{C}_{A}$ and $\vec{r}_{B} = \vec{P} - \vec{C}_{B}$.
+Where $\vec{r}\_{A} = \vec{P} - \vec{C}\_{A}$ and $\vec{r}\_{B} = \vec{P} - \vec{C}\_{B}$.
 
 If the bodies are moving towards each other ($\vec{v}_{\text{rel}} \cdot \vec{N} < 0$), the impulse scalar $j$ is calculated:
 
