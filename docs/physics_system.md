@@ -95,12 +95,12 @@ For velocity resolution and rotational impulse calculations, the contact point i
 * **Sphere-Sphere**: The midpoint along the line segment between centers.
 * **Sphere-AABB / OBB-Sphere**: The closest point clamped on the box surface.
 * **OBB-OBB**: The midpoint between the deepest support points of the two boxes along the contact normal:
-  
-  $$\vec{S}_{A} = \vec{C}_{A} + \sum_{i=0}^2 \text{sign}(\vec{u}_{A,i} \cdot \vec{N}) \cdot e_{A,i} \cdot \vec{u}_{A,i}$$
-  
-  $$\vec{S}_{B} = \vec{C}_{B} - \sum_{j=0}^2 \text{sign}(\vec{u}_{B,j} \cdot \vec{N}) \cdot e_{B,j} \cdot \vec{u}_{B,j}$$
-  
-  $$\vec{P}_{\text{contact}} = \frac{\vec{S}_{A} + \vec{S}_{B}}{2}$$
+
+$$\vec{S}_{A} = \vec{C}_{A} + \sum_{i=0}^2 \text{sign}(\vec{u}_{A,i} \cdot \vec{N}) \cdot e_{A,i} \cdot \vec{u}_{A,i}$$
+
+$$\vec{S}_{B} = \vec{C}_{B} - \sum_{j=0}^2 \text{sign}(\vec{u}_{B,j} \cdot \vec{N}) \cdot e_{B,j} \cdot \vec{u}_{B,j}$$
+
+$$\vec{P}_{\text{contact}} = \frac{\vec{S}_{A} + \vec{S}_{B}}{2}$$
 
 ---
 
