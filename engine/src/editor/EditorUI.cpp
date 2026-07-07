@@ -1026,7 +1026,7 @@ void EditorUI::drawMeshEditor() {
             const char* droppedPath = (const char*)payload->Data;
             std::string pathStr(droppedPath);
             auto ext = std::filesystem::path(pathStr).extension().string();
-            if (ext == ".gltf" || ext == ".glb") {
+            if (ext == ".gltf" || ext == ".glb" || ext == ".fbx" || ext == ".FBX") {
                 try {
                     int primCount = renderer.resourceManager->getMeshPrimitiveCount(pathStr);
                     if (primCount > 1) {
@@ -1313,7 +1313,7 @@ void EditorUI::drawAssetBrowser() {
                 }
             } else if (entry.is_regular_file()) {
                 auto ext = entry.path().extension().string();
-                bool isModel = (ext == ".gltf" || ext == ".glb");
+                bool isModel = (ext == ".gltf" || ext == ".glb" || ext == ".fbx" || ext == ".FBX");
                 bool isTexture = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga");
                 bool isPrefab = (ext == ".prefab");
                 bool isScene = (ext == ".json");
@@ -2085,6 +2085,38 @@ void EditorUI::drawAnimatorEditor() {
     // Binary anim loader/saver utility controls
     static char animPathBuf[256] = "";
     InputText("Anim Path", animPathBuf, sizeof(animPathBuf));
+    if (BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+            const char* droppedPath = (const char*)payload->Data;
+            std::string pathStr(droppedPath);
+            auto ext = std::filesystem::path(pathStr).extension().string();
+            if (ext == ".fbx" || ext == ".FBX" || ext == ".anim" || ext == ".gltf" || ext == ".glb") {
+                strncpy_s(animPathBuf, pathStr.c_str(), sizeof(animPathBuf) - 1);
+                
+                SkeletonComponent* skeleton = registry.get<SkeletonComponent>(selectedEntity);
+                if (!skeleton) {
+                    SkeletonComponent newSkel{};
+                    registry.emplace<SkeletonComponent>(selectedEntity, std::move(newSkel));
+                    skeleton = registry.get<SkeletonComponent>(selectedEntity);
+                }
+                if (renderer.resourceManager->loadSkeletonAndAnimations(pathStr, *skeleton, *animator)) {
+                    if (auto* material = registry.get<Material>(selectedEntity)) {
+                        bool hasSkin = entityHasSkin(registry, selectedEntity);
+                        PipelineHandle pipeline = renderer.createPipelineForShaders(
+                            hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
+                            "build/shaders/unlit.frag.spv"
+                        );
+                        material->pipeline = pipeline.pipeline;
+                        material->pipelineLayout = pipeline.layout;
+                    }
+                    statusMessage = "Loaded animation successfully via drag & drop.";
+                } else {
+                    statusMessage = "Failed to load animation via drag & drop.";
+                }
+            }
+        }
+        EndDragDropTarget();
+    }
     
     if (Button("Load Anim")) {
         std::string pathStr(animPathBuf);

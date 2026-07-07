@@ -522,13 +522,35 @@ static Mesh loadFBXMesh(const std::string& path, VulkanRenderer& renderer, int p
         ufbx_face face = targetMesh->faces.data[i];
         if (face.num_indices < 3) continue;
 
+        size_t old_size = tempIndices.size();
+        size_t max_tris = face.num_indices - 2;
+        size_t max_indices = max_tris * 3;
+        
+        tempIndices.resize(old_size + max_indices);
+        
         uint32_t num_tris = ufbx_triangulate_face(
-            tempIndices.data() + tempIndices.size(),
-            tempIndices.capacity() - tempIndices.size(),
+            tempIndices.data() + old_size,
+            max_indices,
             targetMesh,
             face
         );
-        tempIndices.resize(tempIndices.size() + (num_tris * 3));
+        
+        tempIndices.resize(old_size + (num_tris * 3));
+    }
+    std::cout << "[FBX Debug] Path: " << path << "\n"
+              << "  num_vertices: " << targetMesh->num_vertices << "\n"
+              << "  num_indices (face corners): " << targetMesh->num_indices << "\n"
+              << "  num_faces: " << targetMesh->faces.count << "\n"
+              << "  triangulated indices count: " << tempIndices.size() << "\n"
+              << "  vertex_position.indices.count: " << targetMesh->vertex_position.indices.count << "\n"
+              << "  vertex_normal.indices.count: " << targetMesh->vertex_normal.indices.count << "\n"
+              << "  vertex_uv.indices.count: " << targetMesh->vertex_uv.indices.count << "\n";
+    if (!tempIndices.empty()) {
+        std::cout << "  first 5 tempIndices: ";
+        for (int i = 0; i < std::min(5, (int)tempIndices.size()); ++i) {
+            std::cout << tempIndices[i] << " ";
+        }
+        std::cout << "\n";
     }
 
     struct IndexTuple {
@@ -548,9 +570,9 @@ static Mesh loadFBXMesh(const std::string& path, VulkanRenderer& renderer, int p
     std::unordered_map<IndexTuple, uint32_t, IndexTupleHash> uniqueVertices;
     
     for (uint32_t index_idx : tempIndices) {
-        uint32_t pos_idx = (targetMesh->vertex_position.indices.count == 0) ? index_idx : targetMesh->vertex_position.indices.data[index_idx];
-        uint32_t norm_idx = (targetMesh->vertex_normal.indices.count == 0) ? index_idx : targetMesh->vertex_normal.indices.data[index_idx];
-        uint32_t uv_idx = (targetMesh->vertex_uv.indices.count == 0) ? index_idx : targetMesh->vertex_uv.indices.data[index_idx];
+        uint32_t pos_idx = (targetMesh->vertex_position.indices.count > 0) ? targetMesh->vertex_position.indices.data[index_idx] : targetMesh->vertex_indices.data[index_idx];
+        uint32_t norm_idx = (targetMesh->vertex_normal.indices.count > 0) ? targetMesh->vertex_normal.indices.data[index_idx] : targetMesh->vertex_indices.data[index_idx];
+        uint32_t uv_idx = (targetMesh->vertex_uv.indices.count > 0) ? targetMesh->vertex_uv.indices.data[index_idx] : targetMesh->vertex_indices.data[index_idx];
 
         IndexTuple tuple{ pos_idx, norm_idx, uv_idx };
         auto it = uniqueVertices.find(tuple);
@@ -623,6 +645,9 @@ static Mesh loadFBXMesh(const std::string& path, VulkanRenderer& renderer, int p
             mesh.vertices.push_back(vert);
         }
     }
+
+    std::cout << "  final mesh.vertices.size(): " << mesh.vertices.size() << "\n"
+              << "  final mesh.indices.size(): " << mesh.indices.size() << "\n";
 
     ufbx_free_scene(scene);
 
