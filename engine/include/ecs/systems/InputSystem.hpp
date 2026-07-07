@@ -6,6 +6,7 @@
 #include "ecs/components/inputComponent.hpp"
 #include "editor/EditorModeState.hpp"
 #include "renderer/VulkanRenderer.hpp"
+#include "ecs/components/EditorCamera.hpp"
 
 /**
  * @class InputSystem
@@ -33,18 +34,29 @@ public:
         static double lastX = 0, lastY = 0;
         glfwGetCursorPos(renderer.getWindow(), &x, &y);
 
-        switchMode(lastY, lastX);
+        if (!editorMode.isPlaying) {
+            switchMode(lastY, lastX);
+        } else {
+            // Play Mode: allow Escape key to toggle cursor lock
+            static bool prevEscDown = false;
+            GLFWwindow* window = renderer.getWindow();
+            bool escDown = glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
+            bool escPressed = escDown && !prevEscDown;
+            prevEscDown = escDown;
 
-
-        if (!editorMode.flyMode) {
-            lastX = x;
-            lastY = y;
-
-            for (auto [e, input] : registry.view<InputComponent>()) {
-                input.look = glm::vec2(0.0f);
-                input.movement = glm::vec3(0.0f);
+            if (escPressed) {
+                editorMode.flyMode = !editorMode.flyMode;
+                if (editorMode.flyMode) {
+                    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                } else {
+                    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                }
+                // Update coordinate cache to prevent viewport jumps on recapture
+                double cx, cy;
+                glfwGetCursorPos(window, &cx, &cy);
+                lastX = cx;
+                lastY = cy;
             }
-            return;
         }
 
         double dx = x - lastX;
@@ -52,18 +64,57 @@ public:
         lastX = x;
         lastY = y;
 
-        for (auto [e, input] : registry.view<InputComponent>()) {
-            input.look = glm::vec2(dx, dy);
+        if (!editorMode.isPlaying) {
+            // Editor Mode: inputs routed to editor camera if fly mode active
+            if (!editorMode.flyMode) {
+                for (auto [e, input] : registry.view<InputComponent>()) {
+                    input.look = glm::vec2(0.0f);
+                    input.movement = glm::vec3(0.0f);
+                }
+                return;
+            }
 
-            GLFWwindow* window = renderer.getWindow();
-            input.movement = glm::vec3(
-                (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) - (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS),
-                (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) - (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS),
-                (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) - (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-            );
+            for (auto [e, input] : registry.view<InputComponent>()) {
+                if (registry.has<EditorCamera>(e)) {
+                    input.look = glm::vec2(dx, dy);
+
+                    GLFWwindow* window = renderer.getWindow();
+                    input.movement = glm::vec3(
+                        (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) - (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS),
+                        (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) - (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS),
+                        (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) - (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+                    );
+                } else {
+                    input.look = glm::vec2(0.0f);
+                    input.movement = glm::vec3(0.0f);
+                }
+            }
+        } else {
+            // Play Mode: inputs routed to all standard gameplay entities, zeroing out editor camera
+            if (!editorMode.flyMode) {
+                for (auto [e, input] : registry.view<InputComponent>()) {
+                    input.look = glm::vec2(0.0f);
+                    input.movement = glm::vec3(0.0f);
+                }
+                return;
+            }
+
+            for (auto [e, input] : registry.view<InputComponent>()) {
+                if (!registry.has<EditorCamera>(e)) {
+                    input.look = glm::vec2(dx, dy);
+
+                    GLFWwindow* window = renderer.getWindow();
+                    input.movement = glm::vec3(
+                        (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) - (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS),
+                        (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) - (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS),
+                        (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) - (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+                    );
+                } else {
+                    input.look = glm::vec2(0.0f);
+                    input.movement = glm::vec3(0.0f);
+                }
+            }
         }
-
-
     }
 
     /**

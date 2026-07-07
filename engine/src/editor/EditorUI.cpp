@@ -28,6 +28,7 @@
 #include "ecs/components/Skeleton.hpp"
 #include "ecs/components/Animator.hpp"
 #include "ecs/components/Hierarchy.hpp"
+#include "ecs/components/EditorCamera.hpp"
 #include "ecs/components/AnimationController.hpp"
 #include "ecs/components/IKSolver.hpp"
 #include "ecs/components/RigidBody.hpp"
@@ -384,6 +385,13 @@ void EditorUI::drawPanels() {
         return;
     }
 
+    // Safety check: clear selection if the selected entity was destroyed/invalidated
+    if (hasSelection && (!registry.isValid(selectedEntity) || selectedEntity.getId() == Entity::INVALID_ENTITY)) {
+        selectedEntity = Entity();
+        hasSelection = false;
+        renameBuffer.clear();
+    }
+
     ImGuiIO& io = ImGui::GetIO();
     float width = io.DisplaySize.x;
     float height = io.DisplaySize.y;
@@ -412,10 +420,35 @@ void EditorUI::drawPanels() {
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Exit", "Alt+F4")) {
-                glfwSetWindowShouldClose(glfwGetCurrentContext(), GLFW_TRUE);
+                glfwSetWindowShouldClose(window, GLFW_TRUE);
             }
             ImGui::EndMenu();
         }
+        // Center-aligned Play / Stop buttons in the Main Menu Bar
+        float menuBarWidth = ImGui::GetWindowWidth();
+        float buttonGroupWidth = 80.0f; // estimated width
+        ImGui::SameLine(menuBarWidth * 0.5f - buttonGroupWidth * 0.5f);
+        
+        if (!editorMode.isPlaying) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.48f, 0.12f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.65f, 0.18f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.08f, 0.35f, 0.08f, 1.0f));
+            if (ImGui::Button("PLAY", ImVec2(80, 0))) {
+                editorMode.pendingPlay = true;
+                statusMessage = "Entering Play Mode...";
+            }
+            ImGui::PopStyleColor(3);
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.68f, 0.12f, 0.12f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.85f, 0.18f, 0.18f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.50f, 0.08f, 0.08f, 1.0f));
+            if (ImGui::Button("STOP", ImVec2(80, 0))) {
+                editorMode.pendingStop = true;
+                statusMessage = "Stopping simulation...";
+            }
+            ImGui::PopStyleColor(3);
+        }
+
         ImGui::EndMainMenuBar();
     }
 
@@ -741,6 +774,7 @@ void EditorUI::drawHierarchyPanel() {
 
     std::function<void(Entity, int)> drawEntityNode = [&](Entity entity, int depth) {
         if (depth > 10) return;
+        if (registry.has<EditorCamera>(entity)) return;
         Name* nameComp = registry.get<Name>(entity);
         if (!nameComp) return;
 
@@ -807,6 +841,7 @@ void EditorUI::drawHierarchyPanel() {
 
     // Draw all root entities (those with no valid parent)
     for (auto [entity, name] : registry.view<Name>()) {
+        if (registry.has<EditorCamera>(entity)) continue;
         bool hasParent = false;
         if (auto* hierarchy = registry.get<HierarchyComponent>(entity)) {
             if (hierarchy->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hierarchy->parent)) {
@@ -2277,7 +2312,13 @@ void EditorUI::drawAnimatorEditor() {
     }
 
     // Binary anim loader/saver utility controls
+    static Entity lastSelectedEntity{};
     static char animPathBuf[256] = "";
+    if (selectedEntity != lastSelectedEntity) {
+        lastSelectedEntity = selectedEntity;
+        strncpy_s(animPathBuf, animator->loadedAnimPath.c_str(), sizeof(animPathBuf) - 1);
+    }
+
     InputText("Anim Path", animPathBuf, sizeof(animPathBuf));
     if (BeginDragDropTarget()) {
         if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
@@ -2294,6 +2335,7 @@ void EditorUI::drawAnimatorEditor() {
                     skeleton = registry.get<SkeletonComponent>(selectedEntity);
                 }
                 if (renderer.resourceManager->loadSkeletonAndAnimations(pathStr, *skeleton, *animator)) {
+                    animator->loadedAnimPath = pathStr;
                     if (auto* material = registry.get<Material>(selectedEntity)) {
                         bool hasSkin = entityHasSkin(registry, selectedEntity);
                         PipelineHandle pipeline = renderer.createPipelineForShaders(
@@ -2321,6 +2363,7 @@ void EditorUI::drawAnimatorEditor() {
             skeleton = registry.get<SkeletonComponent>(selectedEntity);
         }
         if (renderer.resourceManager->loadSkeletonAndAnimations(pathStr, *skeleton, *animator)) {
+            animator->loadedAnimPath = pathStr;
             if (auto* material = registry.get<Material>(selectedEntity)) {
                 bool hasSkin = entityHasSkin(registry, selectedEntity);
                 PipelineHandle pipeline = renderer.createPipelineForShaders(

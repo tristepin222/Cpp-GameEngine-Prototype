@@ -540,6 +540,78 @@ static bool registerBuiltinComponents() {
         }
     );
 
+    // 10. Animator Component
+    reg.registerComponent(
+        "Animator",
+        [](Registry& registry, Entity entity, std::ostream& out, int indent) {
+            if (auto* animator = registry.get<AnimatorComponent>(entity)) {
+                std::string entityName = "Unknown";
+                if (auto* nameComp = registry.get<Name>(entity)) {
+                    entityName = nameComp->value;
+                }
+                std::cout << "[Serializer] Saving Animator for " << entityName 
+                          << " with active index: " << animator->activeAnimationIndex << std::endl;
+                out << ",\n" << JSONUtils::indent(indent) << "\"hasAnimator\": true,\n";
+                out << JSONUtils::indent(indent) << "\"animActiveIndex\": " << animator->activeAnimationIndex << ",\n";
+                out << JSONUtils::indent(indent) << "\"animPlaybackSpeed\": " << animator->playbackSpeed << ",\n";
+                out << JSONUtils::indent(indent) << "\"animLoop\": " << (animator->loop ? "true" : "false") << ",\n";
+                out << JSONUtils::indent(indent) << "\"loadedAnimPath\": " << JSONUtils::quote(animator->loadedAnimPath);
+            }
+        },
+        [](Registry& registry, VulkanRenderer& renderer, Entity entity, const std::string& json) {
+            float dummyVal = 0.0f;
+            if (JSONUtils::extractFloatValue(json, "animActiveIndex", dummyVal) || json.find("\"hasAnimator\": true") != std::string::npos || json.find("\"hasAnimator\":true") != std::string::npos) {
+                float activeIdxFloat = -1.0f;
+                float speed = 1.0f;
+                bool loop = true;
+                
+                JSONUtils::extractFloatValue(json, "animActiveIndex", activeIdxFloat);
+                JSONUtils::extractFloatValue(json, "animPlaybackSpeed", speed);
+                
+                std::string loopStr = JSONUtils::extractStringValue(json, "animLoop");
+                if (loopStr == "false" || json.find("\"animLoop\": false") != std::string::npos || json.find("\"animLoop\":false") != std::string::npos) {
+                    loop = false;
+                }
+
+                std::string loadedAnimPath = JSONUtils::extractStringValue(json, "loadedAnimPath");
+
+                std::string entityName = "Unknown";
+                if (auto* nameComp = registry.get<Name>(entity)) {
+                    entityName = nameComp->value;
+                }
+                std::cout << "[Deserializer] Restoring Animator for " << entityName 
+                          << " with active index: " << static_cast<int>(activeIdxFloat) 
+                          << ", loaded path: " << loadedAnimPath << std::endl;
+
+                AnimatorComponent* animator = registry.get<AnimatorComponent>(entity);
+                if (!animator) {
+                    AnimatorComponent animatorComp{};
+                    registry.emplace<AnimatorComponent>(entity, std::move(animatorComp));
+                    animator = registry.get<AnimatorComponent>(entity);
+                }
+
+                if (!loadedAnimPath.empty()) {
+                    SkeletonComponent* skeleton = registry.get<SkeletonComponent>(entity);
+                    if (!skeleton) {
+                        SkeletonComponent newSkel{};
+                        registry.emplace<SkeletonComponent>(entity, std::move(newSkel));
+                        skeleton = registry.get<SkeletonComponent>(entity);
+                    }
+                    if (animator && skeleton) {
+                        renderer.resourceManager->loadSkeletonAndAnimations(loadedAnimPath, *skeleton, *animator);
+                        animator->loadedAnimPath = loadedAnimPath;
+                    }
+                }
+
+                if (animator) {
+                    animator->activeAnimationIndex = static_cast<int>(activeIdxFloat);
+                    animator->playbackSpeed = speed;
+                    animator->loop = loop;
+                }
+            }
+        }
+    );
+
     return true;
 }
 

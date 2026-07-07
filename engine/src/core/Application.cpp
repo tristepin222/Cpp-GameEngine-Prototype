@@ -13,6 +13,12 @@
 #include "scenes/JSONUtils.hpp"
 #include "scenes/DefaultScene.hpp"
 #include "core/JobSystem.hpp"
+#include "ecs/components/EditorCamera.hpp"
+#include "ecs/components/Name.hpp"
+#include "ecs/components/Transform.hpp"
+#include "ecs/components/Camera.hpp"
+#include "ecs/components/inputComponent.hpp"
+
 
 namespace Engine {
 
@@ -71,16 +77,24 @@ namespace Engine {
 
         // Instantiate standard engine systems
         renderSystem = std::make_shared<RenderSystem>(registry, *renderer);
-        auto cameraSystem = std::make_shared<CameraSystem>(registry, *renderer);
+        auto cameraSystem = std::make_shared<CameraSystem>(registry, *renderer, editorMode);
         auto inputSystem = std::make_shared<InputSystem>(registry, *renderer, editorMode);
-        auto animationSystem = std::make_shared<AnimationSystem>(registry, *renderer);
-        auto physicsSystem = std::make_shared<PhysicsSystem>(registry);
+        auto animationSystem = std::make_shared<AnimationSystem>(registry, *renderer, editorMode);
+        auto physicsSystem = std::make_shared<PhysicsSystem>(registry, editorMode);
 
         systemManager.addSystem(inputSystem);
         systemManager.addSystem(cameraSystem);
         systemManager.addSystem(physicsSystem);
         systemManager.addSystem(animationSystem);
         systemManager.addSystem(renderSystem);
+
+        // Spawn persistent Editor Camera
+        Entity editorCam = registry.create();
+        registry.emplace<Name>(editorCam, Name{"EditorCamera"});
+        registry.emplace<Transform>(editorCam, Transform{ glm::vec3(0.0f, 2.0f, 5.0f) });
+        registry.emplace<Camera>(editorCam, Camera{});
+        registry.emplace<InputComponent>(editorCam, InputComponent{});
+        registry.emplace<EditorCamera>(editorCam, EditorCamera{});
 
         // Setup initial editor fly mode based on whether editor UI is present
         if (!config.enableEditor) {
@@ -124,6 +138,30 @@ namespace Engine {
 
         while (running && !renderer->shouldClose()) {
             glfwPollEvents();
+
+            if (editorMode.pendingPlay) {
+                editorMode.pendingPlay = false;
+                if (Scene* currentScene = sceneManager.getCurrentScene()) {
+                    currentScene->saveToFile("sandbox_game/assets/scenes/.play_temp.json");
+                }
+                editorMode.isPlaying = true;
+                editorMode.flyMode = true;
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            }
+            if (editorMode.pendingStop) {
+                editorMode.pendingStop = false;
+                editorMode.isPlaying = false;
+                editorMode.flyMode = false;
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                if (Scene* currentScene = sceneManager.getCurrentScene()) {
+                    currentScene->loadFromFile("sandbox_game/assets/scenes/.play_temp.json");
+                    try {
+                        std::filesystem::remove("sandbox_game/assets/scenes/.play_temp.json");
+                        std::filesystem::remove("assets/scenes/.play_temp.json");
+                    } catch (...) {}
+                }
+            }
+
             float dt = renderer->getDeltaTime();
 
             // Run user update callback

@@ -9,6 +9,7 @@
 #include "renderer/VulkanRenderer.hpp"
 #include "core/JobSystem.hpp"
 #include "core/VulkanBuffer.hpp"
+#include "editor/EditorModeState.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -16,6 +17,7 @@
 #include <glm/gtx/quaternion.hpp>
 #include <algorithm>
 #include <fstream>
+#include <iostream>
 
 /**
  * @class AnimationSystem
@@ -23,8 +25,8 @@
  */
 class AnimationSystem : public System {
 public:
-    AnimationSystem(Registry& reg, VulkanRenderer& renderer)
-        : registry(reg), renderer(renderer) {}
+    AnimationSystem(Registry& reg, VulkanRenderer& renderer, EditorModeState& editorMode)
+        : registry(reg), renderer(renderer), editorMode(editorMode) {}
 
         /**
          * @brief Updates skeletal poses for all animated entities.
@@ -41,6 +43,9 @@ public:
          * @param dt Delta time in seconds.
          */
         void update(float dt) override {
+            if (!editorMode.isPlaying) {
+                dt = 0.0f;
+            }
             // 0. Synchronize child animators & controllers with parent animators
             for (auto [entity, hierarchy, animator] : registry.view<HierarchyComponent, AnimatorComponent>()) {
                 if (hierarchy.parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hierarchy.parent)) {
@@ -589,6 +594,14 @@ public:
                 }
 
                 if (clip) {
+                    if (editorMode.isPlaying) {
+                        static int lastPrintedIndex = -999;
+                        if (animator.activeAnimationIndex != lastPrintedIndex) {
+                            std::cout << "[AnimationSystem] Entity plays animation index: " << animator.activeAnimationIndex 
+                                      << " (Name: " << clip->name << ")" << std::endl;
+                            lastPrintedIndex = animator.activeAnimationIndex;
+                        }
+                    }
                     animator.currentTime += dt * animator.playbackSpeed;
                     if (animator.loop) {
                         if (clip->duration > 0.0f) {
@@ -731,6 +744,7 @@ public:
 
         Registry& registry;
         VulkanRenderer& renderer;
+        EditorModeState& editorMode;
         std::vector<Entity> controllerEntities;
         std::vector<Entity> animatedEntities;
     };

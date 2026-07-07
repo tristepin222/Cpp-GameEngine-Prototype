@@ -71,4 +71,6 @@ struct AnimatorComponent {
     float playbackSpeed = 1.0f;
     /** @brief Should the clip restart on completion. */
     bool loop = true;
+    /** @brief Optional path to a separately loaded animation file (.anim, .fbx, etc.). */
+    std::string loadedAnimPath;
 };

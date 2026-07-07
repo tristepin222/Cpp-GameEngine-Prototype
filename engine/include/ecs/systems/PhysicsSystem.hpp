@@ -5,6 +5,7 @@
 #include "ecs/components/RigidBody.hpp"
 #include "ecs/components/Collider.hpp"
 #include "ecs/components/Hierarchy.hpp"
+#include "editor/EditorModeState.hpp"
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <vector>
@@ -39,9 +40,11 @@ namespace Engine {
      */
     class PhysicsSystem : public System {
     public:
-        PhysicsSystem(Registry& reg) : registry(reg) {}
+        PhysicsSystem(Registry& reg, EditorModeState& editorMode)
+            : registry(reg), editorMode(editorMode) {}
 
         void update(float dt) override {
+            if (!editorMode.isPlaying) return;
             if (dt <= 0.0f) return;
 
             glm::vec3 gravityVector{0.0f, -9.81f, 0.0f};
@@ -812,6 +815,7 @@ namespace Engine {
         }
 
         Registry& registry;
+        EditorModeState& editorMode;
     };
 
 } // namespace Engine
