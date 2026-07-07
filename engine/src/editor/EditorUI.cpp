@@ -1207,6 +1207,9 @@ void EditorUI::drawAssetBrowser() {
     static char s_createFolderBuffer[256] = "";
     static std::filesystem::path s_createSceneParentPath;
     static char s_createSceneBuffer[256] = "";
+    static bool s_openCreateFolderPopup;
+    static bool s_openCreateScenePopup;
+    static bool s_openRenamePopup;
 
     // ---- Toolbar ----
     if (Button("+ New Folder")) {
@@ -1244,6 +1247,34 @@ void EditorUI::drawAssetBrowser() {
                 std::string label = "[] " + name + "##" + pathStr;
                 bool open = TreeNodeEx(label.c_str(), flags);
 
+                if (BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                    SetDragDropPayload("DND_PAYLOAD_ASSET_PATH", pathStr.c_str(), pathStr.size() + 1);
+                    Text("Dragging folder %s", name.c_str());
+                    EndDragDropSource();
+                }
+
+                if (BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+                        const char* srcPath = (const char*)payload->Data;
+                        std::filesystem::path src(srcPath);
+                        std::filesystem::path dest = entry.path() / src.filename();
+                        
+                        std::string srcStr = src.generic_string();
+                        std::string destStr = dest.generic_string();
+                        if (srcStr == destStr || destStr.rfind(srcStr + "/", 0) == 0) {
+                            statusMessage = "Cannot move a folder into itself or its subfolder.";
+                        } else {
+                            try {
+                                std::filesystem::rename(src, dest);
+                                statusMessage = "Moved " + src.filename().string() + " to " + entry.path().filename().string();
+                            } catch (const std::exception& e) {
+                                statusMessage = std::string("Failed to move: ") + e.what();
+                            }
+                        }
+                    }
+                    EndDragDropTarget();
+                }
+
                 // Right click context menu on folders
                 if (BeginPopupContextItem(pathStr.c_str())) {
                     TextDisabled("Folder: %s", name.c_str());
@@ -1251,17 +1282,17 @@ void EditorUI::drawAssetBrowser() {
                     if (MenuItem("Create Subfolder")) {
                         s_createFolderParentPath = entry.path();
                         s_createFolderBuffer[0] = '\0';
-                        OpenPopup("CreateFolderPopup");
+                        s_openCreateFolderPopup = true;
                     }
                     if (MenuItem("Create New Scene")) {
                         s_createSceneParentPath = entry.path();
                         s_createSceneBuffer[0] = '\0';
-                        OpenPopup("CreateScenePopup");
+                        s_openCreateScenePopup = true;
                     }
                     if (MenuItem("Rename")) {
                         s_renameTargetPath = entry.path();
                         strncpy_s(s_renameBuffer, name.c_str(), sizeof(s_renameBuffer) - 1);
-                        OpenPopup("RenameAssetPopup");
+                        s_openRenamePopup = true;
                     }
                     PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
                     if (MenuItem("Delete Folder")) {
@@ -1522,7 +1553,7 @@ void EditorUI::drawAssetBrowser() {
                     if (MenuItem("Rename")) {
                         s_renameTargetPath = entry.path();
                         strncpy_s(s_renameBuffer, name.c_str(), sizeof(s_renameBuffer) - 1);
-                        OpenPopup("RenameAssetPopup");
+                        s_openRenamePopup = true;
                     }
                     PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
                     if (MenuItem("Delete File")) {
@@ -1544,6 +1575,41 @@ void EditorUI::drawAssetBrowser() {
     ImGui::BeginChild("AssetTreeChild", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
     drawDirectoryNode("assets");
     ImGui::EndChild();
+
+    if (BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+            const char* srcPath = (const char*)payload->Data;
+            std::filesystem::path src(srcPath);
+            std::filesystem::path dest = std::filesystem::path("assets") / src.filename();
+            
+            std::string srcStr = src.generic_string();
+            std::string destStr = dest.generic_string();
+            if (srcStr == destStr || destStr.rfind(srcStr + "/", 0) == 0) {
+                statusMessage = "Cannot move a folder into itself or its subfolder.";
+            } else {
+                try {
+                    std::filesystem::rename(src, dest);
+                    statusMessage = "Moved " + src.filename().string() + " to assets root";
+                } catch (const std::exception& e) {
+                    statusMessage = std::string("Failed to move: ") + e.what();
+                }
+            }
+        }
+        EndDragDropTarget();
+    }
+
+    if (s_openCreateFolderPopup) {
+        OpenPopup("CreateFolderPopup");
+        s_openCreateFolderPopup = false;
+    }
+    if (s_openCreateScenePopup) {
+        OpenPopup("CreateScenePopup");
+        s_openCreateScenePopup = false;
+    }
+    if (s_openRenamePopup) {
+        OpenPopup("RenameAssetPopup");
+        s_openRenamePopup = false;
+    }
 
     // ---- Popups ----
     if (BeginPopup("RenameAssetPopup")) {
