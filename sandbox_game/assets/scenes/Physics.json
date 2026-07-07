@@ -12,8 +12,8 @@
     },
     {
       "name": "Camera",
-      "position": [15.3089, 7.68077, -1.36678],
-      "rotation": [-27.7002, -192.2, 0],
+      "position": [-9.27394, 17.1622, -4.79195],
+      "rotation": [-60.9999, -682.707, 0],
       "scale": [1, 1, 1],
       "entityType": "Camera",
       "fov": 45
@@ -42,8 +42,9 @@
       "rotation": [0, -0, 0],
       "scale": [1, 1, 1],
       "entityType": "Primitive",
-      "primitive": "Cube",
-      "color": [0, 1, 0, 1]
+      "gltfPath": "assets/Meshes/Physics/Ch36_nonPBR.fbx",
+      "color": [1, 1, 1, 1],
+      "texturePath": "assets/Textures/Ch36_1001_Diffuse.png"
     }
   ]
 }

@@ -65,6 +65,12 @@ public:
     Mesh loadMesh(const std::string& path, VulkanRenderer& renderer, int primitiveIndex = -1);
 
     /**
+     * @brief Clears the cached mesh for a specific path to force a re-import.
+     * @param path The file path.
+     */
+    void clearMeshCache(const std::string& path);
+
+    /**
      * @brief Scans a glTF file and returns the count of primitive submesh parts.
      * @param path The glTF file path.
      * @return Number of primitive submesh parts.

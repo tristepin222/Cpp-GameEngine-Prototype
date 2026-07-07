@@ -5,11 +5,13 @@
 #include "cgltf.h"
 
 #include "ufbx.h"
+#include "scenes/JSONUtils.hpp"
 
 #include "renderer/ResourceManager.hpp"
 #include "renderer/VulkanRenderer.hpp"
 #include "core/VulkanBuffer.hpp"
 #include <iostream>
+#include <sstream>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/matrix_decompose.hpp>
 #include <stdexcept>
@@ -458,9 +460,25 @@ static Mesh loadFBXMesh(const std::string& path, VulkanRenderer& renderer, int p
     mesh.gltfPath = path;
     mesh.primitiveIndex = primitiveIndex;
 
+    // Load import settings if available
+    float targetScale = 1.0f;
+    bool generateNormals = true;
+    bool allowMissingPos = false;
+    std::string importPath = path + ".import";
+    std::ifstream importFile(importPath);
+    if (importFile.is_open()) {
+        std::stringstream ss;
+        ss << importFile.rdbuf();
+        std::string content = ss.str();
+        JSONUtils::extractFloatValue(content, "scale", targetScale);
+        generateNormals = (content.find("\"generateNormals\": true") != std::string::npos || content.find("\"generateNormals\":true") != std::string::npos || content.find("\"generateNormals\": 1") != std::string::npos);
+        allowMissingPos = (content.find("\"allowMissingPos\": true") != std::string::npos || content.find("\"allowMissingPos\":true") != std::string::npos || content.find("\"allowMissingPos\": 1") != std::string::npos);
+    }
+
     ufbx_load_opts opts = { 0 };
-    opts.target_unit_meters = 1.0f;
-    opts.generate_missing_normals = true;
+    opts.target_unit_meters = targetScale;
+    opts.generate_missing_normals = generateNormals;
+    opts.allow_missing_vertex_position = allowMissingPos;
     ufbx_error error;
     ufbx_scene* scene = ufbx_load_file(path.c_str(), &opts, &error);
     if (!scene) {
@@ -666,6 +684,17 @@ static Mesh loadFBXMesh(const std::string& path, VulkanRenderer& renderer, int p
     return mesh;
 }
 
+void ResourceManager::clearMeshCache(const std::string& path) {
+    meshCache.erase(path);
+    for (auto it = meshCache.begin(); it != meshCache.end();) {
+        if (it->first.rfind(path + "#", 0) == 0) {
+            it = meshCache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 Mesh ResourceManager::loadMesh(const std::string& path, VulkanRenderer& renderer, int primitiveIndex) {
     std::string cacheKey = path;
     if (primitiveIndex >= 0) {
@@ -675,6 +704,17 @@ Mesh ResourceManager::loadMesh(const std::string& path, VulkanRenderer& renderer
     auto it = meshCache.find(cacheKey);
     if (it != meshCache.end()) {
         return it->second;
+    }
+
+    // Load import settings if available
+    float targetScale = 1.0f;
+    std::string importPath = path + ".import";
+    std::ifstream importFile(importPath);
+    if (importFile.is_open()) {
+        std::stringstream ss;
+        ss << importFile.rdbuf();
+        std::string content = ss.str();
+        JSONUtils::extractFloatValue(content, "scale", targetScale);
     }
 
     if (path.length() >= 4 && (path.substr(path.length() - 4) == ".fbx" || path.substr(path.length() - 4) == ".FBX")) {
@@ -711,6 +751,13 @@ Mesh ResourceManager::loadMesh(const std::string& path, VulkanRenderer& renderer
             for (cgltf_size j = 0; j < scene.nodes_count; ++j) {
                 traverseNodes(data, scene.nodes[j], glm::mat4(1.0f), mesh, primitiveIndex, currentPrimIndex);
             }
+        }
+    }
+
+    // Scale glTF vertices if custom scale is specified
+    if (targetScale != 1.0f) {
+        for (auto& vert : mesh.vertices) {
+            vert.position *= targetScale;
         }
     }
 
@@ -818,8 +865,18 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
     }
     
     if (path.length() >= 4 && (path.substr(path.length() - 4) == ".fbx" || path.substr(path.length() - 4) == ".FBX")) {
+        float targetScale = 1.0f;
+        std::string importPath = path + ".import";
+        std::ifstream importFile(importPath);
+        if (importFile.is_open()) {
+            std::stringstream ss;
+            ss << importFile.rdbuf();
+            std::string content = ss.str();
+            JSONUtils::extractFloatValue(content, "scale", targetScale);
+        }
+
         ufbx_load_opts opts = { 0 };
-        opts.target_unit_meters = 1.0f;
+        opts.target_unit_meters = targetScale;
         ufbx_error error;
         ufbx_scene* scene = ufbx_load_file(path.c_str(), &opts, &error);
         if (!scene) {
@@ -838,11 +895,17 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
         collectNodes(collectNodes, scene->root_node);
 
         uint32_t jointCount = static_cast<uint32_t>(fbxNodes.size());
-        skeleton.joints.resize(jointCount);
+        bool targetHasSkeleton = !skeleton.joints.empty();
+        std::vector<Joint> loadedJoints;
+        if (!targetHasSkeleton) {
+            skeleton.joints.resize(jointCount);
+        } else {
+            loadedJoints.resize(jointCount);
+        }
 
         for (uint32_t i = 0; i < jointCount; ++i) {
             auto* node = fbxNodes[i];
-            auto& joint = skeleton.joints[i];
+            auto& joint = targetHasSkeleton ? loadedJoints[i] : skeleton.joints[i];
 
             joint.name = node->name.data ? node->name.data : "Joint_" + std::to_string(i);
             
@@ -870,13 +933,19 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
                     auto bIt = std::find(fbxNodes.begin(), fbxNodes.end(), cluster->bone_node);
                     if (bIt != fbxNodes.end()) {
                         int idx = static_cast<int>(std::distance(fbxNodes.begin(), bIt));
-                        skeleton.joints[idx].inverseBindMatrix = toGlmMatrix(cluster->geometry_to_bone);
+                        if (!targetHasSkeleton) {
+                            skeleton.joints[idx].inverseBindMatrix = toGlmMatrix(cluster->geometry_to_bone);
+                        } else {
+                            loadedJoints[idx].inverseBindMatrix = toGlmMatrix(cluster->geometry_to_bone);
+                        }
                     }
                 }
             }
         }
 
-        skeleton.jointMatrices.assign(jointCount, glm::mat4(1.0f));
+        if (!targetHasSkeleton) {
+            skeleton.jointMatrices.assign(jointCount, glm::mat4(1.0f));
+        }
 
         animator.animations.clear();
         for (size_t a = 0; a < scene->anim_stacks.count; ++a) {
@@ -893,7 +962,19 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
             for (size_t n = 0; n < fbxNodes.size(); ++n) {
                 ufbx_node* node = fbxNodes[n];
                 AnimationChannel channel{};
-                channel.jointIndex = static_cast<int>(n);
+                channel.jointName = node->name.data ? node->name.data : "";
+                
+                channel.jointIndex = -1;
+                if (targetHasSkeleton) {
+                    for (size_t i = 0; i < skeleton.joints.size(); ++i) {
+                        if (skeleton.joints[i].name == channel.jointName) {
+                            channel.jointIndex = static_cast<int>(i);
+                            break;
+                        }
+                    }
+                } else {
+                    channel.jointIndex = static_cast<int>(n);
+                }
 
                 for (int f = 0; f < numFrames; ++f) {
                     float t = static_cast<float>(f) / (numFrames - 1) * duration;
@@ -942,6 +1023,17 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
         return false;
     }
 
+    // Load import settings if available
+    float targetScale = 1.0f;
+    std::string importPath = path + ".import";
+    std::ifstream importFile(importPath);
+    if (importFile.is_open()) {
+        std::stringstream ss;
+        ss << importFile.rdbuf();
+        std::string content = ss.str();
+        JSONUtils::extractFloatValue(content, "scale", targetScale);
+    }
+
     if (data->skins_count == 0) {
         cgltf_free(data);
         return false;
@@ -951,10 +1043,17 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
     std::unordered_map<cgltf_node*, int> nodeToJointIndex;
 
     // 1. Load Joint Hierarchies & IBMs
-    skeleton.joints.resize(skin.joints_count);
+    bool targetHasSkeleton = !skeleton.joints.empty();
+    std::vector<Joint> loadedJoints;
+    if (!targetHasSkeleton) {
+        skeleton.joints.resize(skin.joints_count);
+    } else {
+        loadedJoints.resize(skin.joints_count);
+    }
+
     for (cgltf_size i = 0; i < skin.joints_count; ++i) {
         cgltf_node* jointNode = skin.joints[i];
-        Joint& joint = skeleton.joints[i];
+        Joint& joint = targetHasSkeleton ? loadedJoints[i] : skeleton.joints[i];
         joint.name = jointNode->name ? jointNode->name : "Joint_" + std::to_string(i);
         joint.parentIndex = -1;
 
@@ -963,6 +1062,11 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
         // Read Inverse Bind Matrix (IBM)
         if (skin.inverse_bind_matrices) {
             cgltf_accessor_read_float(skin.inverse_bind_matrices, i, &joint.inverseBindMatrix[0][0], 16);
+            if (targetScale != 1.0f) {
+                joint.inverseBindMatrix[3][0] *= targetScale;
+                joint.inverseBindMatrix[3][1] *= targetScale;
+                joint.inverseBindMatrix[3][2] *= targetScale;
+            }
         } else {
             joint.inverseBindMatrix = glm::mat4(1.0f);
         }
@@ -992,6 +1096,10 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
         glm::vec3 skew{};
         glm::vec4 perspective{};
         glm::decompose(joint.localTransform, joint.bindScale, joint.bindRotation, joint.bindTranslation, skew, perspective);
+
+        if (targetScale != 1.0f) {
+            joint.bindTranslation *= targetScale;
+        }
     }
 
     // Resolve Parent Indices
@@ -1000,7 +1108,11 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
         if (jointNode->parent) {
             auto it = nodeToJointIndex.find(jointNode->parent);
             if (it != nodeToJointIndex.end()) {
-                skeleton.joints[i].parentIndex = it->second;
+                if (!targetHasSkeleton) {
+                    skeleton.joints[i].parentIndex = it->second;
+                } else {
+                    loadedJoints[i].parentIndex = it->second;
+                }
             }
         }
     }
@@ -1028,7 +1140,19 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
 
             int jointIdx = it->second;
             AnimationChannel& animChannel = jointChannels[jointIdx];
-            animChannel.jointIndex = jointIdx;
+            animChannel.jointName = targetNode->name ? targetNode->name : "";
+            
+            animChannel.jointIndex = -1;
+            if (targetHasSkeleton) {
+                for (size_t i = 0; i < skeleton.joints.size(); ++i) {
+                    if (skeleton.joints[i].name == animChannel.jointName) {
+                        animChannel.jointIndex = static_cast<int>(i);
+                        break;
+                    }
+                }
+            } else {
+                animChannel.jointIndex = jointIdx;
+            }
 
             cgltf_animation_sampler* sampler = channel.sampler;
             size_t keyframeCount = sampler->input->count;
@@ -1041,7 +1165,7 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
                 float val[4]{};
                 if (channel.target_path == cgltf_animation_path_type_translation) {
                     cgltf_accessor_read_float(sampler->output, k, val, 3);
-                    animChannel.translationKeys.push_back({ time, glm::vec3(val[0], val[1], val[2]) });
+                    animChannel.translationKeys.push_back({ time, glm::vec3(val[0], val[1], val[2]) * targetScale });
                 } else if (channel.target_path == cgltf_animation_path_type_rotation) {
                     cgltf_accessor_read_float(sampler->output, k, val, 4);
                     animChannel.rotationKeys.push_back({ time, glm::quat(val[3], val[0], val[1], val[2]) });
@@ -1172,10 +1296,10 @@ bool ResourceManager::loadBinarySkeletonAndAnimations(const std::string& path, S
 
     uint32_t jointCount = 0;
     in.read(reinterpret_cast<char*>(&jointCount), sizeof(jointCount));
-    skeleton.joints.resize(jointCount);
+    std::vector<Joint> tempJoints(jointCount);
 
     for (uint32_t i = 0; i < jointCount; ++i) {
-        auto& joint = skeleton.joints[i];
+        auto& joint = tempJoints[i];
         uint32_t nameLength = 0;
         in.read(reinterpret_cast<char*>(&nameLength), sizeof(nameLength));
         if (nameLength > 0) {
@@ -1190,7 +1314,11 @@ bool ResourceManager::loadBinarySkeletonAndAnimations(const std::string& path, S
         in.read(reinterpret_cast<char*>(&joint.bindScale[0]), sizeof(glm::vec3));
     }
 
-    skeleton.jointMatrices.assign(jointCount, glm::mat4(1.0f));
+    bool targetHasSkeleton = !skeleton.joints.empty();
+    if (!targetHasSkeleton) {
+        skeleton.joints = tempJoints;
+        skeleton.jointMatrices.assign(jointCount, glm::mat4(1.0f));
+    }
 
     uint32_t animCount = 0;
     in.read(reinterpret_cast<char*>(&animCount), sizeof(animCount));
@@ -1212,7 +1340,26 @@ bool ResourceManager::loadBinarySkeletonAndAnimations(const std::string& path, S
 
         for (uint32_t ch = 0; ch < channelCount; ++ch) {
             auto& channel = clip.channels[ch];
-            in.read(reinterpret_cast<char*>(&channel.jointIndex), sizeof(channel.jointIndex));
+            int savedIndex = -1;
+            in.read(reinterpret_cast<char*>(&savedIndex), sizeof(savedIndex));
+
+            // Resolve the joint name from tempJoints
+            std::string jointName = "";
+            if (savedIndex >= 0 && savedIndex < static_cast<int>(tempJoints.size())) {
+                jointName = tempJoints[savedIndex].name;
+            }
+            channel.jointName = jointName;
+
+            // Map the channel's jointIndex to the target skeleton joint index by name
+            channel.jointIndex = -1;
+            if (!jointName.empty()) {
+                for (size_t i = 0; i < skeleton.joints.size(); ++i) {
+                    if (skeleton.joints[i].name == jointName) {
+                        channel.jointIndex = static_cast<int>(i);
+                        break;
+                    }
+                }
+            }
 
             uint32_t translationKeyCount = 0;
             in.read(reinterpret_cast<char*>(&translationKeyCount), sizeof(translationKeyCount));

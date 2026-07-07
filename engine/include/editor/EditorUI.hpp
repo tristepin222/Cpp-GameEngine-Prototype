@@ -97,6 +97,10 @@ private:
      */
     void drawAssetBrowser();
     /**
+     * @brief Renders the floating asset import settings window.
+     */
+    void drawImportSettingsWindow();
+    /**
      * @brief Renders inline controls for Mesh component fields.
      */
     void drawMeshEditor();

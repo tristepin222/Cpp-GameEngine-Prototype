@@ -1,4 +1,7 @@
 #include "editor/EditorUI.hpp"
+#include "scenes/JSONUtils.hpp"
+#include "ufbx.h"
+#include "cgltf.h"
 
 #include <limits>
 #include <stdexcept>
@@ -40,6 +43,161 @@
 
 using namespace ImGui;
 using namespace std;
+
+struct ImportSettingsMetadata {
+    std::string assetPath;
+    float scale = 1.0f;
+    bool generateNormals = true;
+    bool allowMissingPos = false;
+    
+    struct AnimMetadata {
+        std::string name;
+        double duration = 0.0;
+    };
+    std::vector<AnimMetadata> animations;
+    
+    struct TexMetadata {
+        std::string name;
+        size_t index = 0;
+        bool hasEmbeddedContent = false;
+        size_t contentSize = 0;
+    };
+    std::vector<TexMetadata> textures;
+};
+
+static bool s_openImportSettingsWindow = false;
+static bool s_triggerLoadImportSettings = false;
+static ImportSettingsMetadata s_importMetadata;
+static std::filesystem::path s_importSettingsAssetPath;
+
+static void loadImportSettingsMetadata(const std::filesystem::path& path) {
+    s_importMetadata = ImportSettingsMetadata{};
+    s_importMetadata.assetPath = path.generic_string();
+    
+    std::filesystem::path importPath = path.string() + ".import";
+    if (std::filesystem::exists(importPath)) {
+        try {
+            std::ifstream f(importPath);
+            if (f.is_open()) {
+                std::stringstream ss;
+                ss << f.rdbuf();
+                std::string content = ss.str();
+                float scaleVal = 1.0f;
+                if (JSONUtils::extractFloatValue(content, "scale", scaleVal)) {
+                    s_importMetadata.scale = scaleVal;
+                }
+                s_importMetadata.generateNormals = (content.find("\"generateNormals\": true") != std::string::npos || content.find("\"generateNormals\":true") != std::string::npos || content.find("\"generateNormals\": 1") != std::string::npos);
+                s_importMetadata.allowMissingPos = (content.find("\"allowMissingPos\": true") != std::string::npos || content.find("\"allowMissingPos\":true") != std::string::npos || content.find("\"allowMissingPos\": 1") != std::string::npos);
+            }
+        } catch (...) {}
+    }
+    
+    std::string ext = path.extension().string();
+    if (ext == ".fbx" || ext == ".FBX") {
+        ufbx_load_opts opts = { 0 };
+        ufbx_error error;
+        ufbx_scene* scene = ufbx_load_file(path.string().c_str(), &opts, &error);
+        if (scene) {
+            for (size_t i = 0; i < scene->anim_stacks.count; ++i) {
+                ufbx_anim_stack* stack = scene->anim_stacks.data[i];
+                std::string name = stack->name.data ? stack->name.data : "UnnamedAnim";
+                double dur = stack->time_end - stack->time_begin;
+                s_importMetadata.animations.push_back({ name, dur });
+            }
+            for (size_t i = 0; i < scene->texture_files.count; ++i) {
+                ufbx_texture_file& tf = scene->texture_files.data[i];
+                std::string name = std::filesystem::path(tf.filename.data ? tf.filename.data : "").filename().string();
+                if (name.empty()) name = "texture_" + std::to_string(i);
+                s_importMetadata.textures.push_back({ name, i, tf.content.size > 0, tf.content.size });
+            }
+            ufbx_free_scene(scene);
+        }
+    } else if (ext == ".gltf" || ext == ".glb") {
+        cgltf_options options = {};
+        cgltf_data* data = nullptr;
+        cgltf_result result = cgltf_parse_file(&options, path.string().c_str(), &data);
+        if (result == cgltf_result_success) {
+            for (cgltf_size i = 0; i < data->animations_count; ++i) {
+                cgltf_animation& anim = data->animations[i];
+                std::string name = anim.name ? anim.name : "UnnamedAnim";
+                double max_time = 0.0;
+                for (cgltf_size j = 0; j < anim.channels_count; ++j) {
+                    if (anim.channels[j].sampler && anim.channels[j].sampler->input) {
+                        cgltf_accessor* input = anim.channels[j].sampler->input;
+                        if (input->count > 0) {
+                            cgltf_float outVal = 0.0f;
+                            cgltf_accessor_read_float(input, input->count - 1, &outVal, 1);
+                            max_time = std::max(max_time, (double)outVal);
+                        }
+                    }
+                }
+                s_importMetadata.animations.push_back({ name, max_time });
+            }
+            cgltf_free(data);
+        }
+    }
+}
+
+static void saveImportSettings() {
+    std::string relativePath = s_importMetadata.assetPath + ".import";
+    try {
+        // Write active copy
+        std::ofstream f(relativePath);
+        if (f.is_open()) {
+            f << "{\n"
+              << "  \"scale\": " << s_importMetadata.scale << ",\n"
+              << "  \"generateNormals\": " << (s_importMetadata.generateNormals ? "true" : "false") << ",\n"
+              << "  \"allowMissingPos\": " << (s_importMetadata.allowMissingPos ? "true" : "false") << "\n"
+              << "}\n";
+            f.close();
+        }
+        
+        // Write source copy
+        std::filesystem::path sourceBase("../../../sandbox_game");
+        if (std::filesystem::exists(sourceBase / "assets")) {
+            std::filesystem::path sourcePath = sourceBase / relativePath;
+            if (!sourcePath.parent_path().empty()) {
+                std::filesystem::create_directories(sourcePath.parent_path());
+            }
+            std::ofstream fSrc(sourcePath);
+            if (fSrc.is_open()) {
+                fSrc << "{\n"
+                     << "  \"scale\": " << s_importMetadata.scale << ",\n"
+                     << "  \"generateNormals\": " << (s_importMetadata.generateNormals ? "true" : "false") << ",\n"
+                     << "  \"allowMissingPos\": " << (s_importMetadata.allowMissingPos ? "true" : "false") << "\n"
+                     << "}\n";
+                fSrc.close();
+            }
+        }
+    } catch (...) {}
+}
+
+static bool writeExtractedFile(const std::string& relativePath, const void* data, size_t size) {
+    // 1. Write to active run folder (makes it show up in the editor instantly)
+    std::filesystem::path activePath(relativePath);
+    if (!activePath.parent_path().empty()) {
+        std::filesystem::create_directories(activePath.parent_path());
+    }
+    std::ofstream activeOut(activePath, std::ios::binary);
+    if (!activeOut.is_open()) return false;
+    activeOut.write(reinterpret_cast<const char*>(data), size);
+    activeOut.close();
+
+    // 2. Write to source folder if it exists (makes it persistent across builds/cleans)
+    std::filesystem::path sourceBase("../../../sandbox_game");
+    if (std::filesystem::exists(sourceBase / "assets")) {
+        std::filesystem::path sourcePath = sourceBase / relativePath;
+        if (!sourcePath.parent_path().empty()) {
+            std::filesystem::create_directories(sourcePath.parent_path());
+        }
+        std::ofstream sourceOut(sourcePath, std::ios::binary);
+        if (sourceOut.is_open()) {
+            sourceOut.write(reinterpret_cast<const char*>(data), size);
+            sourceOut.close();
+        }
+    }
+    return true;
+}
 
 static bool entityHasSkin(Registry& registry, Entity entity) {
     if (registry.has<SkeletonComponent>(entity)) return true;
@@ -295,6 +453,9 @@ void EditorUI::drawPanels() {
     drawGizmo();
     drawColliderDebugOverlay();
     handleViewportPicking();
+    
+    // 7. Float Import Settings panel
+    drawImportSettingsWindow();
 }
 
 /**
@@ -1327,6 +1488,35 @@ void EditorUI::drawAssetBrowser() {
                 std::string labelStr = prefix + name + "##" + pathStr;
                 Selectable(labelStr.c_str(), false, ImGuiSelectableFlags_AllowOverlap);
 
+                // Right click context menu on files (must follow Selectable immediately to bind correctly)
+                if (BeginPopupContextItem(pathStr.c_str())) {
+                    TextDisabled("File: %s", name.c_str());
+                    Separator();
+                    if (isModel) {
+                        if (MenuItem("Import Settings...")) {
+                            s_importSettingsAssetPath = entry.path();
+                            s_triggerLoadImportSettings = true;
+                        }
+                        Separator();
+                    }
+                    if (MenuItem("Rename")) {
+                        s_renameTargetPath = entry.path();
+                        strncpy_s(s_renameBuffer, name.c_str(), sizeof(s_renameBuffer) - 1);
+                        s_openRenamePopup = true;
+                    }
+                    PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+                    if (MenuItem("Delete File")) {
+                        try {
+                            std::filesystem::remove(entry.path());
+                            statusMessage = "Deleted file: " + name;
+                        } catch (const std::exception& e) {
+                            statusMessage = std::string("Failed to delete: ") + e.what();
+                        }
+                    }
+                    PopStyleColor();
+                    EndPopup();
+                }
+
                 if (isScene) {
                     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
                         Scene* currentScene = sceneManager.getCurrentScene();
@@ -1546,27 +1736,7 @@ void EditorUI::drawAssetBrowser() {
                     PopID();
                 }
 
-                // Right click context menu on files
-                if (BeginPopupContextItem(pathStr.c_str())) {
-                    TextDisabled("File: %s", name.c_str());
-                    Separator();
-                    if (MenuItem("Rename")) {
-                        s_renameTargetPath = entry.path();
-                        strncpy_s(s_renameBuffer, name.c_str(), sizeof(s_renameBuffer) - 1);
-                        s_openRenamePopup = true;
-                    }
-                    PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
-                    if (MenuItem("Delete File")) {
-                        try {
-                            std::filesystem::remove(entry.path());
-                            statusMessage = "Deleted file: " + name;
-                        } catch (const std::exception& e) {
-                            statusMessage = std::string("Failed to delete: ") + e.what();
-                        }
-                    }
-                    PopStyleColor();
-                    EndPopup();
-                }
+
             }
         }
     };
@@ -2692,5 +2862,213 @@ void EditorUI::drawColliderDebugOverlay() {
             drawEdge(0, 4); drawEdge(1, 5); drawEdge(2, 6); drawEdge(3, 7);
         }
     }
+}
+
+void EditorUI::drawImportSettingsWindow() {
+    if (s_triggerLoadImportSettings) {
+        loadImportSettingsMetadata(s_importSettingsAssetPath);
+        s_openImportSettingsWindow = true;
+        s_triggerLoadImportSettings = false;
+    }
+
+    if (!s_openImportSettingsWindow) return;
+
+    Begin("Import Settings", &s_openImportSettingsWindow, ImGuiWindowFlags_AlwaysAutoResize);
+
+    if (s_importSettingsAssetPath.empty()) {
+        Text("No asset selected.");
+        End();
+        return;
+    }
+
+    Text("Source Asset: %s", s_importMetadata.assetPath.c_str());
+    Separator();
+
+    // 1. General Import Options
+    drawSectionHeader("Import Settings");
+    InputFloat("Scale Factor", &s_importMetadata.scale, 0.01f, 0.1f, "%.4f");
+    Checkbox("Generate Missing Normals", &s_importMetadata.generateNormals);
+    Checkbox("Allow Missing Vertex Positions", &s_importMetadata.allowMissingPos);
+
+    // 2. Animations List & Extraction
+    Spacing();
+    drawSectionHeader("Animations");
+    if (s_importMetadata.animations.empty()) {
+        TextDisabled("No animations found in this asset.");
+    } else {
+        if (Button("Extract All Animations")) {
+            SkeletonComponent tempSkel{};
+            AnimatorComponent tempAnim{};
+            if (renderer.resourceManager->loadSkeletonAndAnimations(s_importMetadata.assetPath, tempSkel, tempAnim)) {
+                std::string baseName = s_importSettingsAssetPath.stem().string();
+                std::string relativePath = "assets/animations/" + baseName + ".anim";
+                
+                std::filesystem::create_directories("assets/animations");
+                bool success = renderer.resourceManager->saveBinarySkeletonAndAnimations(relativePath, tempSkel, tempAnim);
+                
+                std::filesystem::path sourceBase("../../../sandbox_game");
+                if (std::filesystem::exists(sourceBase / "assets")) {
+                    std::filesystem::create_directories(sourceBase / "assets/animations");
+                    renderer.resourceManager->saveBinarySkeletonAndAnimations((sourceBase / relativePath).generic_string(), tempSkel, tempAnim);
+                }
+                
+                if (success) {
+                    statusMessage = "Extracted all animations to " + relativePath;
+                } else {
+                    statusMessage = "Failed to save animations.";
+                }
+            } else {
+                statusMessage = "Failed to load animation source.";
+            }
+        }
+        
+        for (const auto& anim : s_importMetadata.animations) {
+            Text("  - %s (%.2fs)", anim.name.c_str(), anim.duration);
+            SameLine(320);
+            PushID(anim.name.c_str());
+            if (Button("Extract")) {
+                SkeletonComponent tempSkel{};
+                AnimatorComponent tempAnim{};
+                if (renderer.resourceManager->loadSkeletonAndAnimations(s_importMetadata.assetPath, tempSkel, tempAnim)) {
+                    std::vector<AnimationClip> filtered;
+                    for (const auto& clip : tempAnim.animations) {
+                        if (clip.name == anim.name) {
+                            filtered.push_back(clip);
+                        }
+                    }
+                    if (!filtered.empty()) {
+                        tempAnim.animations = filtered;
+                        std::string baseName = s_importSettingsAssetPath.stem().string();
+                        std::string relativePath = "assets/animations/" + baseName + "_" + anim.name + ".anim";
+                        
+                        std::filesystem::create_directories("assets/animations");
+                        bool success = renderer.resourceManager->saveBinarySkeletonAndAnimations(relativePath, tempSkel, tempAnim);
+                        
+                        std::filesystem::path sourceBase("../../../sandbox_game");
+                        if (std::filesystem::exists(sourceBase / "assets")) {
+                            std::filesystem::create_directories(sourceBase / "assets/animations");
+                            renderer.resourceManager->saveBinarySkeletonAndAnimations((sourceBase / relativePath).generic_string(), tempSkel, tempAnim);
+                        }
+                        
+                        if (success) {
+                            statusMessage = "Extracted animation to " + relativePath;
+                        } else {
+                            statusMessage = "Failed to save binary animation.";
+                        }
+                    } else {
+                        statusMessage = "Animation clip not found.";
+                    }
+                } else {
+                    statusMessage = "Failed to load skeleton/animation source.";
+                }
+            }
+            PopID();
+        }
+    }
+
+    // 3. Embedded Textures List & Extraction
+    Spacing();
+    drawSectionHeader("Embedded Textures");
+    if (s_importMetadata.textures.empty()) {
+        TextDisabled("No embedded textures found in this asset.");
+    } else {
+        if (Button("Extract All Textures")) {
+            ufbx_load_opts opts = { 0 };
+            ufbx_error error;
+            ufbx_scene* scene = ufbx_load_file(s_importMetadata.assetPath.c_str(), &opts, &error);
+            if (scene) {
+                int count = 0;
+                for (size_t i = 0; i < scene->texture_files.count; ++i) {
+                    ufbx_texture_file& tf = scene->texture_files.data[i];
+                    if (tf.content.size > 0) {
+                        std::string outName = std::filesystem::path(tf.filename.data ? tf.filename.data : "").filename().string();
+                        if (outName.empty()) outName = "extracted_texture_" + std::to_string(i) + ".png";
+                        std::string relativePath = "assets/textures/" + outName;
+                        if (writeExtractedFile(relativePath, tf.content.data, tf.content.size)) {
+                            count++;
+                        }
+                    }
+                }
+                statusMessage = "Extracted " + std::to_string(count) + " textures.";
+                ufbx_free_scene(scene);
+            } else {
+                statusMessage = "Failed to open FBX scene.";
+            }
+        }
+        
+        for (const auto& tex : s_importMetadata.textures) {
+            Text("  - %s (%s)", tex.name.c_str(), tex.hasEmbeddedContent ? "embedded" : "reference");
+            if (tex.hasEmbeddedContent) {
+                SameLine(320);
+                PushID(static_cast<int>(tex.index));
+                if (Button("Extract")) {
+                    ufbx_load_opts opts = { 0 };
+                    ufbx_error error;
+                    ufbx_scene* scene = ufbx_load_file(s_importMetadata.assetPath.c_str(), &opts, &error);
+                    if (scene) {
+                        if (tex.index < scene->texture_files.count) {
+                            ufbx_texture_file& tf = scene->texture_files.data[tex.index];
+                            std::string outName = std::filesystem::path(tf.filename.data ? tf.filename.data : "").filename().string();
+                            if (outName.empty()) outName = "extracted_texture_" + std::to_string(tex.index) + ".png";
+                            std::string relativePath = "assets/textures/" + outName;
+                            if (writeExtractedFile(relativePath, tf.content.data, tf.content.size)) {
+                                statusMessage = "Extracted texture to " + relativePath;
+                            } else {
+                                statusMessage = "Failed to write extracted file.";
+                            }
+                        }
+                        ufbx_free_scene(scene);
+                    }
+                }
+                PopID();
+            }
+        }
+    }
+
+    Separator();
+    Spacing();
+
+    // 4. Import / Apply Button
+    if (Button("Apply & Re-import", ImVec2(150, 30))) {
+        saveImportSettings();
+        
+        renderer.resourceManager->clearMeshCache(s_importMetadata.assetPath);
+        
+        if (hasSelection && registry.isValid(selectedEntity)) {
+            if (auto* mesh = registry.get<Mesh>(selectedEntity)) {
+                if (mesh->gltfPath == s_importMetadata.assetPath) {
+                    try {
+                        int primCount = renderer.resourceManager->getMeshPrimitiveCount(s_importMetadata.assetPath);
+                        if (primCount > 1) {
+                            Mesh loaded = renderer.resourceManager->loadMesh(s_importMetadata.assetPath, renderer, 0);
+                            mesh->vertices = loaded.vertices;
+                            mesh->indices = loaded.indices;
+                            mesh->vertexBuffer = loaded.vertexBuffer;
+                            mesh->indexBuffer = loaded.indexBuffer;
+                            mesh->id = loaded.id;
+                        } else {
+                            Mesh loaded = renderer.resourceManager->loadMesh(s_importMetadata.assetPath, renderer);
+                            mesh->vertices = loaded.vertices;
+                            mesh->indices = loaded.indices;
+                            mesh->vertexBuffer = loaded.vertexBuffer;
+                            mesh->indexBuffer = loaded.indexBuffer;
+                            mesh->id = loaded.id;
+                        }
+                        statusMessage = "Applied import settings and re-imported active mesh!";
+                    } catch (const std::exception& e) {
+                        statusMessage = std::string("Re-import failed: ") + e.what();
+                    }
+                }
+            }
+        }
+        
+        s_openImportSettingsWindow = false;
+    }
+    SameLine();
+    if (Button("Cancel", ImVec2(100, 30))) {
+        s_openImportSettingsWindow = false;
+    }
+
+    End();
 }
 

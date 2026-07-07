@@ -33,6 +33,8 @@ struct KeyframeRot {
 struct AnimationChannel {
     /** @brief Target joint index in the SkeletonComponent. */
     int jointIndex = -1;
+    /** @brief Target joint name identifier. */
+    std::string jointName;
     /** @brief List of translation keyframes. */
     std::vector<Keyframe> translationKeys;
     /** @brief List of rotation keyframes. */
