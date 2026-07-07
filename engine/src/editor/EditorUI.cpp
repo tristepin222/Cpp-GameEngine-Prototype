@@ -3,6 +3,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <fstream>
 
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -1204,12 +1205,20 @@ void EditorUI::drawAssetBrowser() {
     static char s_renameBuffer[256] = "";
     static std::filesystem::path s_createFolderParentPath;
     static char s_createFolderBuffer[256] = "";
+    static std::filesystem::path s_createSceneParentPath;
+    static char s_createSceneBuffer[256] = "";
 
     // ---- Toolbar ----
     if (Button("+ New Folder")) {
         s_createFolderParentPath = "assets";
         s_createFolderBuffer[0] = '\0';
         OpenPopup("CreateFolderPopup");
+    }
+    SameLine();
+    if (Button("+ New Scene")) {
+        s_createSceneParentPath = "assets";
+        s_createSceneBuffer[0] = '\0';
+        OpenPopup("CreateScenePopup");
     }
     SameLine();
     if (Button("Refresh")) {
@@ -1244,6 +1253,11 @@ void EditorUI::drawAssetBrowser() {
                         s_createFolderBuffer[0] = '\0';
                         OpenPopup("CreateFolderPopup");
                     }
+                    if (MenuItem("Create New Scene")) {
+                        s_createSceneParentPath = entry.path();
+                        s_createSceneBuffer[0] = '\0';
+                        OpenPopup("CreateScenePopup");
+                    }
                     if (MenuItem("Rename")) {
                         s_renameTargetPath = entry.path();
                         strncpy_s(s_renameBuffer, name.c_str(), sizeof(s_renameBuffer) - 1);
@@ -1271,14 +1285,31 @@ void EditorUI::drawAssetBrowser() {
                 bool isModel = (ext == ".gltf" || ext == ".glb");
                 bool isTexture = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga");
                 bool isPrefab = (ext == ".prefab");
+                bool isScene = (ext == ".json");
 
                 std::string prefix = "  ";
                 if (isModel) prefix = "[] ";
                 else if (isTexture) prefix = "[] ";
                 else if (isPrefab) prefix = "[] ";
+                else if (isScene) prefix = "[] ";
 
                 std::string labelStr = prefix + name + "##" + pathStr;
                 Selectable(labelStr.c_str(), false, ImGuiSelectableFlags_AllowOverlap);
+
+                if (isScene) {
+                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+                        Scene* currentScene = sceneManager.getCurrentScene();
+                        if (currentScene && currentScene->loadFromFile(pathStr)) {
+                            scenePath = pathStr;
+                            statusMessage = "Scene loaded from " + pathStr;
+                            hasSelection = false;
+                            selectedEntity = Entity();
+                            renameBuffer.clear();
+                        } else {
+                            statusMessage = "Failed to load scene from " + pathStr;
+                        }
+                    }
+                }
 
                 if (BeginDragDropSource(ImGuiDragDropFlags_None)) {
                     SetDragDropPayload("DND_PAYLOAD_ASSET_PATH", pathStr.c_str(), pathStr.size() + 1);
@@ -1466,6 +1497,22 @@ void EditorUI::drawAssetBrowser() {
                         }
                     }
                     PopID();
+                } else if (isScene) {
+                    SameLine();
+                    PushID(pathStr.c_str());
+                    if (Button("Load")) {
+                        Scene* currentScene = sceneManager.getCurrentScene();
+                        if (currentScene && currentScene->loadFromFile(pathStr)) {
+                            scenePath = pathStr;
+                            statusMessage = "Scene loaded from " + pathStr;
+                            hasSelection = false;
+                            selectedEntity = Entity();
+                            renameBuffer.clear();
+                        } else {
+                            statusMessage = "Failed to load scene.";
+                        }
+                    }
+                    PopID();
                 }
 
                 // Right click context menu on files
@@ -1533,6 +1580,34 @@ void EditorUI::drawAssetBrowser() {
                     CloseCurrentPopup();
                 } catch (const std::exception& e) {
                     statusMessage = std::string("Failed to create folder: ") + e.what();
+                }
+            }
+        }
+        SameLine();
+        if (Button("Cancel", ImVec2(120, 0))) {
+            CloseCurrentPopup();
+        }
+        EndPopup();
+    }
+
+    if (BeginPopup("CreateScenePopup")) {
+        Text("Create Scene under: %s", s_createSceneParentPath.generic_string().c_str());
+        InputText("Scene Name", s_createSceneBuffer, sizeof(s_createSceneBuffer));
+        if (Button("Create", ImVec2(120, 0))) {
+            if (strlen(s_createSceneBuffer) > 0) {
+                std::string sceneName = s_createSceneBuffer;
+                if (sceneName.length() < 5 || sceneName.substr(sceneName.length() - 5) != ".json") {
+                    sceneName += ".json";
+                }
+                auto newScenePath = s_createSceneParentPath / sceneName;
+                try {
+                    std::ofstream out(newScenePath);
+                    out << "{\n  \"scene\": \"" << s_createSceneBuffer << "\",\n  \"entities\": []\n}\n";
+                    out.close();
+                    statusMessage = "Scene created successfully: " + sceneName;
+                    CloseCurrentPopup();
+                } catch (const std::exception& e) {
+                    statusMessage = std::string("Failed to create scene: ") + e.what();
                 }
             }
         }

@@ -626,6 +626,9 @@ bool SceneSerializer::deserialize(const std::string& path, std::vector<Entity>& 
 
     std::vector<std::string> entityObjects = JSONUtils::extractEntityObjects(source);
     if (entityObjects.empty()) {
+        if (source.find("\"entities\"") != std::string::npos) {
+            return true;
+        }
         return false;
     }
 
