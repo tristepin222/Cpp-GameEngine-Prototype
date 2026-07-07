@@ -858,6 +858,30 @@ void ResourceManager::cleanup(VkDevice device) {
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
+#include <cctype>
+
+static bool isRootMotionJoint(const SkeletonComponent& skeleton, int jointIndex) {
+    if (jointIndex < 0 || jointIndex >= static_cast<int>(skeleton.joints.size())) return false;
+    
+    // 1. Direct root (parentIndex == -1)
+    if (skeleton.joints[jointIndex].parentIndex == -1) {
+        return true;
+    }
+    
+    // 2. Direct child of direct root (parent has parentIndex == -1)
+    int parentIdx = skeleton.joints[jointIndex].parentIndex;
+    if (parentIdx >= 0 && parentIdx < static_cast<int>(skeleton.joints.size())) {
+        if (skeleton.joints[parentIdx].parentIndex == -1) {
+            std::string name = skeleton.joints[jointIndex].name;
+            for (char& c : name) c = static_cast<char>(::tolower(static_cast<unsigned char>(c)));
+            if (name.find("hips") != std::string::npos || name.find("root") != std::string::npos || name.find("pelvis") != std::string::npos) {
+                return true;
+            }
+        }
+    }
+    
+    return false;
+}
 
 bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, SkeletonComponent& skeleton, AnimatorComponent& animator) {
     if (path.length() >= 5 && path.substr(path.length() - 5) == ".anim") {
@@ -866,6 +890,7 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
     
     if (path.length() >= 4 && (path.substr(path.length() - 4) == ".fbx" || path.substr(path.length() - 4) == ".FBX")) {
         float targetScale = 1.0f;
+        bool forceInPlace = false;
         std::string importPath = path + ".import";
         std::ifstream importFile(importPath);
         if (importFile.is_open()) {
@@ -873,6 +898,7 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
             ss << importFile.rdbuf();
             std::string content = ss.str();
             JSONUtils::extractFloatValue(content, "scale", targetScale);
+            forceInPlace = (content.find("\"forceInPlace\": true") != std::string::npos || content.find("\"forceInPlace\":true") != std::string::npos || content.find("\"forceInPlace\": 1") != std::string::npos);
         }
 
         ufbx_load_opts opts = { 0 };
@@ -981,9 +1007,17 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
                     double evalTime = stack->time_begin + t;
                     ufbx_transform xform = ufbx_evaluate_transform(stack->anim, node, evalTime);
 
+                    glm::vec3 translation(xform.translation.x, xform.translation.y, xform.translation.z);
+                    if (forceInPlace && channel.jointIndex >= 0 && channel.jointIndex < static_cast<int>(skeleton.joints.size())) {
+                        if (isRootMotionJoint(skeleton, channel.jointIndex)) {
+                            translation.x = skeleton.joints[channel.jointIndex].bindTranslation.x;
+                            translation.z = skeleton.joints[channel.jointIndex].bindTranslation.z;
+                        }
+                    }
+
                     Keyframe tKey{};
                     tKey.time = t;
-                    tKey.value = glm::vec3(xform.translation.x, xform.translation.y, xform.translation.z);
+                    tKey.value = translation;
                     channel.translationKeys.push_back(tKey);
 
                     KeyframeRot rKey{};
@@ -1025,6 +1059,7 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
 
     // Load import settings if available
     float targetScale = 1.0f;
+    bool forceInPlace = false;
     std::string importPath = path + ".import";
     std::ifstream importFile(importPath);
     if (importFile.is_open()) {
@@ -1032,6 +1067,7 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
         ss << importFile.rdbuf();
         std::string content = ss.str();
         JSONUtils::extractFloatValue(content, "scale", targetScale);
+        forceInPlace = (content.find("\"forceInPlace\": true") != std::string::npos || content.find("\"forceInPlace\":true") != std::string::npos || content.find("\"forceInPlace\": 1") != std::string::npos);
     }
 
     if (data->skins_count == 0) {
@@ -1165,7 +1201,15 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
                 float val[4]{};
                 if (channel.target_path == cgltf_animation_path_type_translation) {
                     cgltf_accessor_read_float(sampler->output, k, val, 3);
-                    animChannel.translationKeys.push_back({ time, glm::vec3(val[0], val[1], val[2]) * targetScale });
+                    glm::vec3 translation(val[0], val[1], val[2]);
+                    translation *= targetScale;
+                    if (forceInPlace && animChannel.jointIndex >= 0 && animChannel.jointIndex < static_cast<int>(skeleton.joints.size())) {
+                        if (isRootMotionJoint(skeleton, animChannel.jointIndex)) {
+                            translation.x = skeleton.joints[animChannel.jointIndex].bindTranslation.x;
+                            translation.z = skeleton.joints[animChannel.jointIndex].bindTranslation.z;
+                        }
+                    }
+                    animChannel.translationKeys.push_back({ time, translation });
                 } else if (channel.target_path == cgltf_animation_path_type_rotation) {
                     cgltf_accessor_read_float(sampler->output, k, val, 4);
                     animChannel.rotationKeys.push_back({ time, glm::quat(val[3], val[0], val[1], val[2]) });

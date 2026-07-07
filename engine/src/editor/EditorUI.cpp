@@ -49,6 +49,7 @@ struct ImportSettingsMetadata {
     float scale = 1.0f;
     bool generateNormals = true;
     bool allowMissingPos = false;
+    bool forceInPlace = false;
     
     struct AnimMetadata {
         std::string name;
@@ -88,6 +89,7 @@ static void loadImportSettingsMetadata(const std::filesystem::path& path) {
                 }
                 s_importMetadata.generateNormals = (content.find("\"generateNormals\": true") != std::string::npos || content.find("\"generateNormals\":true") != std::string::npos || content.find("\"generateNormals\": 1") != std::string::npos);
                 s_importMetadata.allowMissingPos = (content.find("\"allowMissingPos\": true") != std::string::npos || content.find("\"allowMissingPos\":true") != std::string::npos || content.find("\"allowMissingPos\": 1") != std::string::npos);
+                s_importMetadata.forceInPlace = (content.find("\"forceInPlace\": true") != std::string::npos || content.find("\"forceInPlace\":true") != std::string::npos || content.find("\"forceInPlace\": 1") != std::string::npos);
             }
         } catch (...) {}
     }
@@ -147,7 +149,8 @@ static void saveImportSettings() {
             f << "{\n"
               << "  \"scale\": " << s_importMetadata.scale << ",\n"
               << "  \"generateNormals\": " << (s_importMetadata.generateNormals ? "true" : "false") << ",\n"
-              << "  \"allowMissingPos\": " << (s_importMetadata.allowMissingPos ? "true" : "false") << "\n"
+              << "  \"allowMissingPos\": " << (s_importMetadata.allowMissingPos ? "true" : "false") << ",\n"
+              << "  \"forceInPlace\": " << (s_importMetadata.forceInPlace ? "true" : "false") << "\n"
               << "}\n";
             f.close();
         }
@@ -164,7 +167,8 @@ static void saveImportSettings() {
                 fSrc << "{\n"
                      << "  \"scale\": " << s_importMetadata.scale << ",\n"
                      << "  \"generateNormals\": " << (s_importMetadata.generateNormals ? "true" : "false") << ",\n"
-                     << "  \"allowMissingPos\": " << (s_importMetadata.allowMissingPos ? "true" : "false") << "\n"
+                     << "  \"allowMissingPos\": " << (s_importMetadata.allowMissingPos ? "true" : "false") << ",\n"
+                     << "  \"forceInPlace\": " << (s_importMetadata.forceInPlace ? "true" : "false") << "\n"
                      << "}\n";
                 fSrc.close();
             }
@@ -1458,10 +1462,15 @@ void EditorUI::drawAssetBrowser() {
                     PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
                     if (MenuItem("Delete Folder")) {
                         try {
-                            std::filesystem::remove_all(entry.path());
+                            std::filesystem::path activePath = entry.path();
+                            std::filesystem::path sourcePath = std::filesystem::path("../../../sandbox_game") / activePath;
+                            std::filesystem::remove_all(activePath);
+                            if (std::filesystem::exists(sourcePath)) {
+                                std::filesystem::remove_all(sourcePath);
+                            }
                             statusMessage = "Deleted folder: " + name;
                         } catch (const std::exception& e) {
-                            statusMessage = std::string("Failed to delete: ") + e.what();
+                            statusMessage = std::string("Failed to delete folder: ") + e.what();
                         }
                     }
                     PopStyleColor();
@@ -1507,10 +1516,25 @@ void EditorUI::drawAssetBrowser() {
                     PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
                     if (MenuItem("Delete File")) {
                         try {
-                            std::filesystem::remove(entry.path());
+                            std::filesystem::path activePath = entry.path();
+                            std::filesystem::path sourcePath = std::filesystem::path("../../../sandbox_game") / activePath;
+                            
+                            std::filesystem::path activeImport = activePath.string() + ".import";
+                            std::filesystem::path sourceImport = sourcePath.string() + ".import";
+                            
+                            std::filesystem::remove(activePath);
+                            if (std::filesystem::exists(sourcePath)) {
+                                std::filesystem::remove(sourcePath);
+                            }
+                            if (std::filesystem::exists(activeImport)) {
+                                std::filesystem::remove(activeImport);
+                            }
+                            if (std::filesystem::exists(sourceImport)) {
+                                std::filesystem::remove(sourceImport);
+                            }
                             statusMessage = "Deleted file: " + name;
                         } catch (const std::exception& e) {
-                            statusMessage = std::string("Failed to delete: ") + e.what();
+                            statusMessage = std::string("Failed to delete file: ") + e.what();
                         }
                     }
                     PopStyleColor();
@@ -2889,6 +2913,7 @@ void EditorUI::drawImportSettingsWindow() {
     InputFloat("Scale Factor", &s_importMetadata.scale, 0.01f, 0.1f, "%.4f");
     Checkbox("Generate Missing Normals", &s_importMetadata.generateNormals);
     Checkbox("Allow Missing Vertex Positions", &s_importMetadata.allowMissingPos);
+    Checkbox("Force In-Place (Strip Root Motion XZ)", &s_importMetadata.forceInPlace);
 
     // 2. Animations List & Extraction
     Spacing();
