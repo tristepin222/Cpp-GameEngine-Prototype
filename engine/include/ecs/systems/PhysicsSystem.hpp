@@ -46,12 +46,38 @@ namespace Engine {
         void update(float dt) override {
             if (!editorMode.isPlaying) return;
             if (dt <= 0.0f) return;
+            dt = std::min(dt, 1.0f / 30.0f);
 
             glm::vec3 gravityVector{0.0f, -9.81f, 0.0f};
 
             // 1. Integration Pass (Gravity and Force accumulation)
             for (auto [entity, transform, rb] : registry.view<Transform, RigidBodyComponent>()) {
                 if (rb.type == RigidBodyType::Static) continue;
+
+                // Reset contact flag every frame BEFORE collision pass runs
+                rb.hadContactThisFrame = false;
+                rb.unstableContactThisFrame = false;
+
+                // --- Sleeping body handling ---
+                if (rb.sleeping) {
+                    // Wake if external code directly set velocity / angular velocity
+                    // above the sleep threshold (e.g. launch impulse from game code).
+                    bool externalVel   = glm::length(rb.velocity)        > 0.08f;
+                    bool externalAngVel= glm::length(rb.angularVelocity) > 0.15f;
+                    bool externalForce = glm::length(rb.force)           > 0.01f ||
+                                        glm::length(rb.torque)           > 0.01f;
+                    if (externalVel || externalAngVel || externalForce) {
+                        rb.sleeping   = false;  // Wake up
+                        rb.sleepTimer = 0.0f;
+                        // Fall through to full integration below
+                    } else {
+                        // Nothing is moving this body — clear accumulated forces
+                        // and skip the rest of integration.
+                        rb.force  = glm::vec3(0.0f);
+                        rb.torque = glm::vec3(0.0f);
+                        continue;
+                    }
+                }
 
                 // Validate mass to prevent NaN propagation
                 float massVal = rb.mass;
@@ -69,8 +95,8 @@ namespace Engine {
 
                 rb.velocity += accel * dt;
 
-                // Apply linear drag damping
-                rb.velocity *= glm::clamp(1.0f - rb.linearDrag * dt, 0.0f, 1.0f);
+                // Apply linear drag damping (exponential for numerical stability)
+                rb.velocity *= std::exp(-rb.linearDrag * dt);
 
                 // Validate velocity
                 if (std::isnan(rb.velocity.x) || std::isinf(rb.velocity.x)) rb.velocity = glm::vec3(0.0f);
@@ -92,26 +118,23 @@ namespace Engine {
                     rb.angularVelocity = glm::vec3(0.0f);
                 }
 
-                // Calculate angular acceleration from torque (using simplified local inertia tensor for a unit sphere/box)
-                // To keep it simple and stable, we update angularVelocity directly or via simplified moment of inertia.
-                // Let's assume a simplified moment of inertia contribution for torque integration:
                 float inertiaScale = 0.5f * massVal;
                 glm::vec3 angularAccel = rb.torque / (inertiaScale > 1e-4f ? inertiaScale : 1.0f);
                 rb.angularVelocity += angularAccel * dt;
 
-                // Apply angular drag damping
-                rb.angularVelocity *= glm::clamp(1.0f - rb.angularDrag * dt, 0.0f, 1.0f);
+                // Apply angular drag damping (exponential for numerical stability)
+                rb.angularVelocity *= std::exp(-rb.angularDrag * dt);
 
                 // Update Euler rotation (degrees)
                 transform.rotation += glm::degrees(rb.angularVelocity) * dt;
 
-                // Keep rotation angles within clean range [-180, 180] or [0, 360] to prevent Euler drift
+                // Keep rotation angles within clean range to prevent Euler drift
                 transform.rotation.x = std::fmod(transform.rotation.x, 360.0f);
                 transform.rotation.y = std::fmod(transform.rotation.y, 360.0f);
                 transform.rotation.z = std::fmod(transform.rotation.z, 360.0f);
 
                 // Reset forces and torques
-                rb.force = glm::vec3(0.0f);
+                rb.force  = glm::vec3(0.0f);
                 rb.torque = glm::vec3(0.0f);
             }
 
@@ -127,8 +150,10 @@ namespace Engine {
                 colliders.push_back({entity, &transform, &collider});
             }
 
-            // Run 2 passes to stabilize collision stacking
-            const int passes = 2;
+            // Multiple solver passes approximate the iterative contact solver used by engines
+            // like Unity/PhysX and Unreal/Chaos. This is what keeps stacks and resting contacts stable.
+            const int passes = 6;
+            const float solverDt = dt / static_cast<float>(passes);
             for (int pass = 0; pass < passes; ++pass) {
                 for (size_t i = 0; i < colliders.size(); ++i) {
                     for (size_t j = i + 1; j < colliders.size(); ++j) {
@@ -144,13 +169,53 @@ namespace Engine {
                             resolveCollision(
                                 entryA.entity, *entryA.transform, *entryA.collider,
                                 entryB.entity, *entryB.transform, *entryB.collider,
-                                colInfo
+                                colInfo,
+                                solverDt
                             );
                         }
                     }
                 }
             }
+
+            // 3. Post-collision Sleep / Velocity-Floor Pass
+            // Evaluated AFTER gravity integration AND collision impulses.
+            // Only snap to zero if the body was actually moving (speed > 1e-3).
+            // This prevents a just-spawned body with vel=0 from immediately sleeping
+            // and blocking gravity from ever moving it.
+            {
+                const float sleepLinThresh = 0.08f;   // m/s
+                const float sleepAngThresh = 0.15f;   // rad/s  (~8 deg/s)
+
+                for (auto [entity, transform, rb] : registry.view<Transform, RigidBodyComponent>()) {
+                    if (rb.type == RigidBodyType::Static) continue;
+                    if (rb.sleeping) continue;
+
+                    float linSpeed = glm::length(rb.velocity);
+                    float angSpeed = glm::length(rb.angularVelocity);
+
+                    if (linSpeed < sleepLinThresh && angSpeed < sleepAngThresh) {
+                        // Only accumulate sleep time if the body is in contact.
+                        // Without contact, the body is in free fall and shouldn't sleep.
+                        if (rb.hadContactThisFrame && !rb.unstableContactThisFrame) {
+                            rb.sleepTimer += dt;
+                            if (rb.sleepTimer >= 0.5f) { // Require 0.5 seconds of sustained rest
+                                rb.velocity        = glm::vec3(0.0f);
+                                rb.angularVelocity = glm::vec3(0.0f);
+                                rb.sleeping        = true;
+                                rb.sleepTimer      = 0.0f;
+                            }
+                        } else {
+                            rb.sleepTimer = 0.0f;
+                        }
+                    } else {
+                        // Moving — ensure sleeping flag and timer are reset
+                        rb.sleeping   = false;
+                        rb.sleepTimer = 0.0f;
+                    }
+                }
+            }
         }
+
 
         /**
          * @brief Casts a ray into the scene and finds the closest intersecting entity with a collider.
@@ -518,8 +583,17 @@ namespace Engine {
                     return info; // Separating axis found
                 }
                 
-                if (overlap < minOverlap) {
-                    minOverlap = overlap;
+                // Penalize edge-edge (cross product) axes slightly (15% bias) to strongly prefer
+                // face contact when overlaps are very close. This prevents numerical noise from
+                // selecting a diagonal cross-product axis as the collision normal when a box is
+                // resting flat on a face.
+                float biasedOverlap = overlap;
+                if (i >= 6) {
+                    biasedOverlap *= 1.15f;
+                }
+                
+                if (biasedOverlap < minOverlap) {
+                    minOverlap = biasedOverlap;
                     bestAxis = L;
                 }
             }
@@ -532,7 +606,16 @@ namespace Engine {
             }
             info.normal = bestAxis;
             
-            // Compute contact point as the midpoint of support points along bestAxis
+            // Identify which candidate axis was selected to determine if it is a face or edge contact
+            int bestAxisIndex = -1;
+            for (int i = 0; i < axisCount; ++i) {
+                if (glm::length(candidateAxes[i] - bestAxis) < 1e-3f || glm::length(candidateAxes[i] + bestAxis) < 1e-3f) {
+                    bestAxisIndex = i;
+                    break;
+                }
+            }
+
+            // Compute support points along bestAxis
             glm::vec3 supportA = obbA.center;
             for (int i = 0; i < 3; ++i) {
                 float dotVal = glm::dot(obbA.axes[i], bestAxis);
@@ -544,8 +627,19 @@ namespace Engine {
                 float dotVal = glm::dot(obbB.axes[i], -bestAxis);
                 supportB += (dotVal >= 0.0f ? 1.0f : -1.0f) * obbB.extents[i] * obbB.axes[i];
             }
-            
-            info.contactPoint = 0.5f * (supportA + supportB);
+
+            if (bestAxisIndex >= 0 && bestAxisIndex < 3) {
+                // Axis is a face normal of obbA: corner of obbB is penetrating obbA's face.
+                // The contact point is the penetrating corner of B.
+                info.contactPoint = supportB;
+            } else if (bestAxisIndex >= 3 && bestAxisIndex < 6) {
+                // Axis is a face normal of obbB: corner of obbA is penetrating obbB's face.
+                // The contact point is the penetrating corner of A.
+                info.contactPoint = supportA;
+            } else {
+                // Axis is a cross-product (edge-edge): contact point is the midpoint of the closest points on the edges.
+                info.contactPoint = 0.5f * (supportA + supportB);
+            }
             
             return info;
         }
@@ -581,9 +675,9 @@ namespace Engine {
                     }
                 }
             } else if (colA.shape == ColliderShape::Sphere && colB.shape == ColliderShape::AABB) {
-                return checkSphereAABB(colA, posA, colB, posB, false);
+                return checkSphereAABB(colA, posA, colB, posB, true);
             } else if (colA.shape == ColliderShape::AABB && colB.shape == ColliderShape::Sphere) {
-                return checkSphereAABB(colB, posB, colA, posA, true);
+                return checkSphereAABB(colB, posB, colA, posA, false);
             } else if (colA.shape == ColliderShape::AABB && colB.shape == ColliderShape::AABB) {
                 // AABB - AABB (fast path)
                 float overlapX = (colA.extents.x + colB.extents.x) - std::abs(posB.x - posA.x);
@@ -627,8 +721,9 @@ namespace Engine {
          * @brief Separates overlapping transforms and applies impulse response velocities.
          */
         void resolveCollision(Entity entityA, Transform& transA, ColliderComponent& colA,
-                              Entity entityB, Transform& transB, ColliderComponent& colB,
-                              const CollisionInfo& colInfo) {
+                               Entity entityB, Transform& transB, ColliderComponent& colB,
+                               const CollisionInfo& colInfo,
+                               float dt) {
             
             RigidBodyComponent* rbA = registry.get<RigidBodyComponent>(entityA);
             RigidBodyComponent* rbB = registry.get<RigidBodyComponent>(entityB);
@@ -636,183 +731,353 @@ namespace Engine {
             bool staticA = !rbA || (rbA->type == RigidBodyType::Static);
             bool staticB = !rbB || (rbB->type == RigidBodyType::Static);
 
-            if (staticA && staticB) return; // Static objects don't resolve
+            if (staticA && staticB) return;
 
-            // 1. Positional Separation (resolves overlap)
+            glm::mat4 worldMatrixA = getEntityWorldMatrix(entityA);
+            glm::mat4 worldMatrixB = getEntityWorldMatrix(entityB);
+            glm::vec3 posA = glm::vec3(worldMatrixA * glm::vec4(colA.offset, 1.0f));
+            glm::vec3 posB = glm::vec3(worldMatrixB * glm::vec4(colB.offset, 1.0f));
+
+            OBB obbA = (colA.shape == ColliderShape::OBB) ? getOBB(entityA, colA) : getOBBFromAABB(colA, posA);
+            OBB obbB = (colB.shape == ColliderShape::OBB) ? getOBB(entityB, colB) : getOBBFromAABB(colB, posB);
+
             glm::vec3 normal = colInfo.normal;
-            float penetration = colInfo.penetration;
+            if (glm::length(normal) < 1e-5f) return;
+            normal = glm::normalize(normal);
 
-            if (staticA) {
-                transB.position += normal * penetration;
-            } else if (staticB) {
-                transA.position -= normal * penetration;
-            } else {
-                // Both dynamic: distribute based on mass ratio safely
-                float totalMass = rbA->mass + rbB->mass;
-                float ratioA = 0.5f;
-                float ratioB = 0.5f;
-                if (totalMass > 1e-4f) {
-                    ratioA = rbB->mass / totalMass;
-                    ratioB = rbA->mass / totalMass;
+            // --- Snap normal to static face axis to prevent lateral OBB sliding artifacts ---
+            if (staticA || staticB) {
+                const OBB& staticOBB = staticA ? obbA : obbB;
+                float maxDot = 0.0f;
+                int bestAxisIndex = -1;
+                float bestSign = 1.0f;
+                for (int i = 0; i < 3; ++i) {
+                    float dotVal = glm::dot(normal, staticOBB.axes[i]);
+                    if (std::abs(dotVal) > maxDot) {
+                        maxDot = std::abs(dotVal);
+                        bestAxisIndex = i;
+                        bestSign = (dotVal >= 0.0f) ? 1.0f : -1.0f;
+                    }
                 }
-
-                transA.position -= normal * penetration * ratioA;
-                transB.position += normal * penetration * ratioB;
-            }
-
-            // 2. Velocity & Rotational Resolution (impulse solver)
-            if (rbA || rbB) {
-                glm::vec3 extentsA = colA.extents;
-                if (colA.shape == ColliderShape::OBB) {
-                    glm::mat4 worldM = getEntityWorldMatrix(entityA);
-                    for (int i = 0; i < 3; ++i) {
-                        extentsA[i] *= glm::length(glm::vec3(worldM[i]));
-                    }
-                } else if (colA.shape == ColliderShape::Sphere) {
-                    extentsA = glm::vec3(colA.radius);
-                }
-
-                glm::vec3 extentsB = colB.extents;
-                if (colB.shape == ColliderShape::OBB) {
-                    glm::mat4 worldM = getEntityWorldMatrix(entityB);
-                    for (int i = 0; i < 3; ++i) {
-                        extentsB[i] *= glm::length(glm::vec3(worldM[i]));
-                    }
-                } else if (colB.shape == ColliderShape::Sphere) {
-                    extentsB = glm::vec3(colB.radius);
-                }
-
-                glm::mat3 invInertiaWorldA(0.0f);
-                float invMassA = (staticA || rbA->mass < 1e-4f) ? 0.0f : 1.0f / rbA->mass;
-                if (!staticA && rbA->mass > 1e-4f) {
-                    glm::mat4 worldM = getEntityWorldMatrix(entityA);
-                    glm::mat3 R = glm::mat3(worldM);
-                    for (int i = 0; i < 3; ++i) {
-                        float len = glm::length(R[i]);
-                        if (len > 1e-4f) R[i] /= len;
-                    }
-                    glm::mat3 invInertiaLocal(0.0f);
-                    if (colA.shape == ColliderShape::Sphere) {
-                        float r = colA.radius;
-                        float val = 2.5f / (rbA->mass * r * r);
-                        invInertiaLocal = glm::mat3(val);
-                    } else {
-                        float ex = extentsA.x;
-                        float ey = extentsA.y;
-                        float ez = extentsA.z;
-                        float ix = (1.0f / 3.0f) * rbA->mass * (ey * ey + ez * ez);
-                        float iy = (1.0f / 3.0f) * rbA->mass * (ex * ex + ez * ez);
-                        float iz = (1.0f / 3.0f) * rbA->mass * (ex * ex + ey * ey);
-                        invInertiaLocal[0][0] = 1.0f / ix;
-                        invInertiaLocal[1][1] = 1.0f / iy;
-                        invInertiaLocal[2][2] = 1.0f / iz;
-                    }
-                    invInertiaWorldA = R * invInertiaLocal * glm::transpose(R);
-                }
-
-                glm::mat3 invInertiaWorldB(0.0f);
-                float invMassB = (staticB || rbB->mass < 1e-4f) ? 0.0f : 1.0f / rbB->mass;
-                if (!staticB && rbB->mass > 1e-4f) {
-                    glm::mat4 worldM = getEntityWorldMatrix(entityB);
-                    glm::mat3 R = glm::mat3(worldM);
-                    for (int i = 0; i < 3; ++i) {
-                        float len = glm::length(R[i]);
-                        if (len > 1e-4f) R[i] /= len;
-                    }
-                    glm::mat3 invInertiaLocal(0.0f);
-                    if (colB.shape == ColliderShape::Sphere) {
-                        float r = colB.radius;
-                        float val = 2.5f / (rbB->mass * r * r);
-                        invInertiaLocal = glm::mat3(val);
-                    } else {
-                        float ex = extentsB.x;
-                        float ey = extentsB.y;
-                        float ez = extentsB.z;
-                        float ix = (1.0f / 3.0f) * rbB->mass * (ey * ey + ez * ez);
-                        float iy = (1.0f / 3.0f) * rbB->mass * (ex * ex + ez * ez);
-                        float iz = (1.0f / 3.0f) * rbB->mass * (ex * ex + ey * ey);
-                        invInertiaLocal[0][0] = 1.0f / ix;
-                        invInertiaLocal[1][1] = 1.0f / iy;
-                        invInertiaLocal[2][2] = 1.0f / iz;
-                    }
-                    invInertiaWorldB = R * invInertiaLocal * glm::transpose(R);
-                }
-
-                glm::vec3 velA = rbA ? rbA->velocity : glm::vec3(0.0f);
-                glm::vec3 velB = rbB ? rbB->velocity : glm::vec3(0.0f);
-                glm::vec3 angVelA = rbA ? rbA->angularVelocity : glm::vec3(0.0f);
-                glm::vec3 angVelB = rbB ? rbB->angularVelocity : glm::vec3(0.0f);
-
-                glm::vec3 rA = colInfo.contactPoint - transA.position;
-                glm::vec3 rB = colInfo.contactPoint - transB.position;
-
-                glm::vec3 contactVelA = velA + glm::cross(angVelA, rA);
-                glm::vec3 contactVelB = velB + glm::cross(angVelB, rB);
-
-                glm::vec3 relativeVel = contactVelB - contactVelA;
-                float velAlongNormal = glm::dot(relativeVel, normal);
-
-                // Only resolve if they are moving towards each other
-                if (velAlongNormal < 0.0f) {
-                    float restitutionA = rbA ? rbA->restitution : 0.5f;
-                    float restitutionB = rbB ? rbB->restitution : 0.5f;
-                    float e = std::min(restitutionA, restitutionB);
-
-                    float impulseScalar = -(1.0f + e) * velAlongNormal;
-
-                    float den = invMassA + invMassB;
-                    if (!staticA) {
-                        glm::vec3 angComponentA = glm::cross(invInertiaWorldA * glm::cross(rA, normal), rA);
-                        den += glm::dot(angComponentA, normal);
-                    }
-                    if (!staticB) {
-                        glm::vec3 angComponentB = glm::cross(invInertiaWorldB * glm::cross(rB, normal), rB);
-                        den += glm::dot(angComponentB, normal);
-                    }
-
-                    if (den > 1e-4f) {
-                        impulseScalar /= den;
-                    } else {
-                        impulseScalar = 0.0f;
-                    }
-
-                    glm::vec3 impulse = impulseScalar * normal;
-
-                    if (!staticA) {
-                        rbA->velocity -= invMassA * impulse;
-                        rbA->angularVelocity -= invInertiaWorldA * glm::cross(rA, impulse);
-                    }
-                    if (!staticB) {
-                        rbB->velocity += invMassB * impulse;
-                        rbB->angularVelocity += invInertiaWorldB * glm::cross(rB, impulse);
-                    }
+                // If collision normal is closely aligned with one of the static body's face normals (within ~18 degrees),
+                // snap it to that face normal to guarantee forces act purely perpendicular to the static face.
+                if (maxDot > 0.95f) {
+                    normal = bestSign * staticOBB.axes[bestAxisIndex];
                 }
             }
 
-            // Safety guards to instantly clamp and recover from any mathematical NaN/Inf values during collision resolution
-            auto validateEntityState = [](Transform& trans, RigidBodyComponent* rb) {
-                if (std::isnan(trans.position.x) || std::isinf(trans.position.x) ||
-                    std::isnan(trans.position.y) || std::isinf(trans.position.y) ||
-                    std::isnan(trans.position.z) || std::isinf(trans.position.z)) {
-                    trans.position = glm::vec3(0.0f);
-                    if (rb) rb->velocity = glm::vec3(0.0f);
-                }
-                if (rb) {
-                    if (std::isnan(rb->velocity.x) || std::isinf(rb->velocity.x) ||
-                        std::isnan(rb->velocity.y) || std::isinf(rb->velocity.y) ||
-                        std::isnan(rb->velocity.z) || std::isinf(rb->velocity.z)) {
-                        rb->velocity = glm::vec3(0.0f);
-                    }
-                    if (std::isnan(rb->angularVelocity.x) || std::isinf(rb->angularVelocity.x) ||
-                        std::isnan(rb->angularVelocity.y) || std::isinf(rb->angularVelocity.y) ||
-                        std::isnan(rb->angularVelocity.z) || std::isinf(rb->angularVelocity.z)) {
-                        rb->angularVelocity = glm::vec3(0.0f);
-                    }
-                }
+            if (!staticA) rbA->hadContactThisFrame = true;
+            if (!staticB) rbB->hadContactThisFrame = true;
+
+            // --- Sleep Wakeup & Bailout Guard ---
+            bool aSleeping = rbA && rbA->sleeping;
+            bool bSleeping = rbB && rbB->sleeping;
+
+            auto wakeIfMoving = [](RigidBodyComponent* rb, RigidBodyComponent* other, bool otherStatic) {
+                if (!rb || !rb->sleeping) return;
+                if (otherStatic) return;
+                if (!other || other->sleeping) return;
+                rb->sleeping   = false;
+                rb->sleepTimer = 0.0f;
             };
-            validateEntityState(transA, rbA);
-            validateEntityState(transB, rbB);
+            wakeIfMoving(rbA, rbB, staticB);
+            wakeIfMoving(rbB, rbA, staticA);
+
+            aSleeping = rbA && rbA->sleeping;
+            bSleeping = rbB && rbB->sleeping;
+
+            bool skipVelocityA = aSleeping && (staticB || bSleeping);
+            bool skipVelocityB = bSleeping && (staticA || aSleeping);
+
+            // --- Compute Inertia Tensors ---
+            glm::mat3 invInertiaWorldA(0.0f);
+            float invMassA = (staticA || rbA->mass < 1e-4f) ? 0.0f : 1.0f / rbA->mass;
+            if (!staticA && rbA->mass > 1e-4f) {
+                glm::mat3 R = glm::mat3(obbA.axes[0], obbA.axes[1], obbA.axes[2]);
+                glm::mat3 invInertiaLocal(0.0f);
+                if (colA.shape == ColliderShape::Sphere) {
+                    float r = colA.radius;
+                    float val = 2.5f / (rbA->mass * r * r);
+                    invInertiaLocal = glm::mat3(val);
+                } else {
+                    float ex = obbA.extents.x;
+                    float ey = obbA.extents.y;
+                    float ez = obbA.extents.z;
+                    float ix = (1.0f / 3.0f) * rbA->mass * (ey * ey + ez * ez);
+                    float iy = (1.0f / 3.0f) * rbA->mass * (ex * ex + ez * ez);
+                    float iz = (1.0f / 3.0f) * rbA->mass * (ex * ex + ey * ey);
+                    invInertiaLocal[0][0] = 1.0f / ix;
+                    invInertiaLocal[1][1] = 1.0f / iy;
+                    invInertiaLocal[2][2] = 1.0f / iz;
+                }
+                invInertiaWorldA = R * invInertiaLocal * glm::transpose(R);
+            }
+
+            glm::mat3 invInertiaWorldB(0.0f);
+            float invMassB = (staticB || rbB->mass < 1e-4f) ? 0.0f : 1.0f / rbB->mass;
+            if (!staticB && rbB->mass > 1e-4f) {
+                glm::mat3 R = glm::mat3(obbB.axes[0], obbB.axes[1], obbB.axes[2]);
+                glm::mat3 invInertiaLocal(0.0f);
+                if (colB.shape == ColliderShape::Sphere) {
+                    float r = colB.radius;
+                    float val = 2.5f / (rbB->mass * r * r);
+                    invInertiaLocal = glm::mat3(val);
+                } else {
+                    float ex = obbB.extents.x;
+                    float ey = obbB.extents.y;
+                    float ez = obbB.extents.z;
+                    float ix = (1.0f / 3.0f) * rbB->mass * (ey * ey + ez * ez);
+                    float iy = (1.0f / 3.0f) * rbB->mass * (ex * ex + ez * ez);
+                    float iz = (1.0f / 3.0f) * rbB->mass * (ex * ex + ey * ey);
+                    invInertiaLocal[0][0] = 1.0f / ix;
+                    invInertiaLocal[1][1] = 1.0f / iy;
+                    invInertiaLocal[2][2] = 1.0f / iz;
+                }
+                invInertiaWorldB = R * invInertiaLocal * glm::transpose(R);
+            }
+
+            // Helper lambda for effective mass factors along a direction
+            auto computeK = [&](float invM_A, float invM_B,
+                                const glm::mat3& invI_A, const glm::mat3& invI_B,
+                                const glm::vec3& r_A, const glm::vec3& r_B, const glm::vec3& dir) {
+                float K = invM_A + invM_B;
+                if (invM_A > 0.0f) {
+                    K += glm::dot(glm::cross(invI_A * glm::cross(r_A, dir), r_A), dir);
+                }
+                if (invM_B > 0.0f) {
+                    K += glm::dot(glm::cross(invI_B * glm::cross(r_B, dir), r_B), dir);
+                }
+                return K;
+            };
+
+            glm::vec3 rA = colInfo.contactPoint - transA.position;
+            glm::vec3 rB = colInfo.contactPoint - transB.position;
+
+            // --- 1. Position Projection (resolves overlap and rotates flat) ---
+            float penetration = colInfo.penetration;
+            float slop = 0.0001f; // 0.1 mm slop
+            float baumgarte = 0.5f; // resolve 50% of overlap per pass
+            float J_p = 0.0f;
+            if (penetration > slop) {
+                float K_pos = computeK(invMassA, invMassB, invInertiaWorldA, invInertiaWorldB, rA, rB, normal);
+                if (K_pos > 1e-4f) {
+                    J_p = (penetration - slop) * baumgarte / K_pos;
+                }
+            }
+
+            if (J_p > 0.0f) {
+                glm::vec3 C_p = J_p * normal;
+                if (!staticA) {
+                    transA.position -= invMassA * C_p;
+                    glm::vec3 deltaThetaA = -invInertiaWorldA * glm::cross(rA, C_p);
+                    transA.rotation += glm::degrees(deltaThetaA);
+                    transA.rotation.x = std::fmod(transA.rotation.x, 360.0f);
+                    transA.rotation.y = std::fmod(transA.rotation.y, 360.0f);
+                    transA.rotation.z = std::fmod(transA.rotation.z, 360.0f);
+                }
+                if (!staticB) {
+                    transB.position += invMassB * C_p;
+                    glm::vec3 deltaThetaB = invInertiaWorldB * glm::cross(rB, C_p);
+                    transB.rotation += glm::degrees(deltaThetaB);
+                    transB.rotation.x = std::fmod(transB.rotation.x, 360.0f);
+                    transB.rotation.y = std::fmod(transB.rotation.y, 360.0f);
+                    transB.rotation.z = std::fmod(transB.rotation.z, 360.0f);
+                }
+                // Recompute contact vectors relative to new transforms
+                rA = colInfo.contactPoint - transA.position;
+                rB = colInfo.contactPoint - transB.position;
+            }
+
+            if (skipVelocityA && skipVelocityB) return;
+
+            // --- 2. Normal Velocity Resolution (impulse solver) ---
+            glm::vec3 velA = rbA ? rbA->velocity : glm::vec3(0.0f);
+            glm::vec3 velB = rbB ? rbB->velocity : glm::vec3(0.0f);
+            glm::vec3 angVelA = rbA ? rbA->angularVelocity : glm::vec3(0.0f);
+            glm::vec3 angVelB = rbB ? rbB->angularVelocity : glm::vec3(0.0f);
+
+            glm::vec3 contactVelA = velA + glm::cross(angVelA, rA);
+            glm::vec3 contactVelB = velB + glm::cross(angVelB, rB);
+            glm::vec3 relativeVel = contactVelB - contactVelA;
+
+            float velAlongNormal = glm::dot(relativeVel, normal);
+
+            float restitutionA = rbA ? rbA->restitution : 0.5f;
+            float restitutionB = rbB ? rbB->restitution : 0.5f;
+            float e = std::min(restitutionA, restitutionB);
+
+            // Restitution threshold
+            float linVelAlongN = glm::dot(velB - velA, normal);
+            if (velAlongNormal > -0.25f || linVelAlongN > -0.25f) {
+                e = 0.0f;
+            }
+
+            // --- Prevent Phantom Motion state ---
+            if (velAlongNormal > -0.25f && linVelAlongN < 0.0f) {
+                if (staticA && !staticB) {
+                    rbB->velocity -= normal * linVelAlongN;
+                } else if (staticB && !staticA) {
+                    rbA->velocity += normal * linVelAlongN;
+                } else if (!staticA && !staticB) {
+                    float totalMass = rbA->mass + rbB->mass;
+                    float ratioA = 0.5f;
+                    float ratioB = 0.5f;
+                    if (totalMass > 1e-4f) {
+                        ratioA = rbB->mass / totalMass;
+                        ratioB = rbA->mass / totalMass;
+                    }
+                    rbA->velocity += normal * linVelAlongN * ratioA;
+                    rbB->velocity -= normal * linVelAlongN * ratioB;
+                }
+                // Refresh relative velocities
+                velA = rbA ? rbA->velocity : glm::vec3(0.0f);
+                velB = rbB ? rbB->velocity : glm::vec3(0.0f);
+                contactVelA = velA + glm::cross(angVelA, rA);
+                contactVelB = velB + glm::cross(angVelB, rB);
+                relativeVel = contactVelB - contactVelA;
+                velAlongNormal = glm::dot(relativeVel, normal);
+            }
+
+            float K_vel = computeK(invMassA, invMassB, invInertiaWorldA, invInertiaWorldB, rA, rB, normal);
+            float impulseScalar = 0.0f;
+            if (velAlongNormal < 0.0f && K_vel > 1e-4f) {
+                impulseScalar = -(1.0f + e) * velAlongNormal / K_vel;
+            }
+
+            if (impulseScalar < 0.0f) impulseScalar = 0.0f;
+
+            if (impulseScalar > 0.0f) {
+                glm::vec3 impulse = impulseScalar * normal;
+                if (!staticA && !skipVelocityA) {
+                    rbA->velocity -= invMassA * impulse;
+                    rbA->angularVelocity -= invInertiaWorldA * glm::cross(rA, impulse);
+                }
+                if (!staticB && !skipVelocityB) {
+                    rbB->velocity += invMassB * impulse;
+                    rbB->angularVelocity += invInertiaWorldB * glm::cross(rB, impulse);
+                }
+            }
+
+            // --- 3. Friction (tangent impulse) ---
+            velA = rbA ? rbA->velocity : glm::vec3(0.0f);
+            velB = rbB ? rbB->velocity : glm::vec3(0.0f);
+            angVelA = rbA ? rbA->angularVelocity : glm::vec3(0.0f);
+            angVelB = rbB ? rbB->angularVelocity : glm::vec3(0.0f);
+
+            contactVelA = velA + glm::cross(angVelA, rA);
+            contactVelB = velB + glm::cross(angVelB, rB);
+            relativeVel = contactVelB - contactVelA;
+
+            glm::vec3 tangent = relativeVel - glm::dot(relativeVel, normal) * normal;
+            float tangentLen = glm::length(tangent);
+            if (tangentLen > 1e-5f) {
+                tangent = glm::normalize(tangent);
+                float K_tangent = computeK(invMassA, invMassB, invInertiaWorldA, invInertiaWorldB, rA, rB, tangent);
+                float tangentImpulseScalar = 0.0f;
+                if (K_tangent > 1e-4f) {
+                    tangentImpulseScalar = -tangentLen / K_tangent;
+                }
+
+                float frictionA = rbA ? rbA->friction : 0.3f;
+                float frictionB = rbB ? rbB->friction : 0.3f;
+                float mu = std::sqrt(frictionA * frictionB);
+                
+                float effectiveNormalImpulse = impulseScalar;
+                if (effectiveNormalImpulse < 1e-5f && penetration > 1e-5f) {
+                    float massA = (rbA && !staticA) ? rbA->mass : 0.0f;
+                    float massB = (rbB && !staticB) ? rbB->mass : 0.0f;
+                    float activeMass = 1.0f;
+                    if (massA > 0.0f && massB > 0.0f) {
+                        activeMass = std::min(massA, massB);
+                    } else {
+                        activeMass = (massA > 0.0f) ? massA : ((massB > 0.0f) ? massB : 1.0f);
+                    }
+                    effectiveNormalImpulse = activeMass * 9.81f * dt;
+                }
+                float maxFriction = mu * effectiveNormalImpulse;
+
+                if (std::abs(tangentImpulseScalar) > maxFriction) {
+                    tangentImpulseScalar = (tangentImpulseScalar > 0.0f) ? maxFriction : -maxFriction;
+                }
+
+                glm::vec3 tangentImpulse = tangentImpulseScalar * tangent;
+
+                if (!staticA && !skipVelocityA) {
+                    rbA->velocity -= invMassA * tangentImpulse;
+                    rbA->angularVelocity -= invInertiaWorldA * glm::cross(rA, tangentImpulse);
+                }
+                if (!staticB && !skipVelocityB) {
+                    rbB->velocity += invMassB * tangentImpulse;
+                    rbB->angularVelocity += invInertiaWorldB * glm::cross(rB, tangentImpulse);
+                }
+            }
+
+            // --- 4. Torsional Friction ---
+            velA = rbA ? rbA->velocity : glm::vec3(0.0f);
+            velB = rbB ? rbB->velocity : glm::vec3(0.0f);
+            angVelA = rbA ? rbA->angularVelocity : glm::vec3(0.0f);
+            angVelB = rbB ? rbB->angularVelocity : glm::vec3(0.0f);
+
+            glm::vec3 relAngVel = angVelB - angVelA;
+            float angVelAlongN = glm::dot(relAngVel, normal);
+            if (std::abs(angVelAlongN) > 1e-5f) {
+                float K_rot = 0.0f;
+                if (!staticA) K_rot += glm::dot(invInertiaWorldA * normal, normal);
+                if (!staticB) K_rot += glm::dot(invInertiaWorldB * normal, normal);
+
+                if (K_rot > 1e-5f) {
+                    float rotImpulseScalar = -angVelAlongN / K_rot;
+                    float frictionA = rbA ? rbA->friction : 0.3f;
+                    float frictionB = rbB ? rbB->friction : 0.3f;
+                    float mu = std::sqrt(frictionA * frictionB);
+                    float muRot = mu * 0.1f;
+                    
+                    float effectiveNormalImpulse = impulseScalar;
+                    if (effectiveNormalImpulse < 1e-5f && penetration > 1e-5f) {
+                        float massA = (rbA && !staticA) ? rbA->mass : 0.0f;
+                        float massB = (rbB && !staticB) ? rbB->mass : 0.0f;
+                        float activeMass = 1.0f;
+                        if (massA > 0.0f && massB > 0.0f) {
+                            activeMass = std::min(massA, massB);
+                        } else {
+                            activeMass = (massA > 0.0f) ? massA : ((massB > 0.0f) ? massB : 1.0f);
+                        }
+                        effectiveNormalImpulse = activeMass * 9.81f * dt;
+                    }
+                    float maxRotFriction = muRot * effectiveNormalImpulse;
+
+                    if (std::abs(rotImpulseScalar) > maxRotFriction) {
+                        rotImpulseScalar = (rotImpulseScalar > 0.0f) ? maxRotFriction : -maxRotFriction;
+                    }
+
+                    glm::vec3 rotImpulse = rotImpulseScalar * normal;
+                    if (!staticA && !skipVelocityA) {
+                        rbA->angularVelocity -= invInertiaWorldA * rotImpulse;
+                    }
+                    if (!staticB && !skipVelocityB) {
+                        rbB->angularVelocity += invInertiaWorldB * rotImpulse;
+                    }
+                }
+            }
+
+            static int colDbg = 0;
+            bool shouldPrint = (++colDbg % 30 == 0);
+            if (shouldPrint) {
+                std::cerr << "[Collision] normal=(" << normal.x << "," << normal.y << "," << normal.z
+                          << ") pen=" << penetration
+                          << " impulseScalar=" << impulseScalar
+                          << " velAlongN=" << velAlongNormal
+                          << " linVelAlongN=" << linVelAlongN << "\n";
+                std::cerr.flush();
+                if (!staticB && rbB) {
+                    std::cerr << "  -> B_vel=(" << rbB->velocity.x << "," << rbB->velocity.y << "," << rbB->velocity.z
+                              << ") B_angVel=(" << rbB->angularVelocity.x << "," << rbB->angularVelocity.y << "," << rbB->angularVelocity.z << ")\n";
+                    std::cerr.flush();
+                }
+            }
         }
+
+
 
         Registry& registry;
         EditorModeState& editorMode;

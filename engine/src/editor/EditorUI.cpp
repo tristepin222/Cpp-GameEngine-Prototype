@@ -2753,6 +2753,16 @@ void EditorUI::drawRigidBodyEditor() {
         if (rb->restitution < 0.0f) rb->restitution = 0.0f;
         if (rb->restitution > 1.0f) rb->restitution = 1.0f;
     }
+    if (SliderFloat("Friction", &rb->friction, 0.0f, 1.0f)) {
+        if (rb->friction < 0.0f) rb->friction = 0.0f;
+        if (rb->friction > 1.0f) rb->friction = 1.0f;
+    }
+    if (DragFloat("Linear Drag", &rb->linearDrag, 0.01f, 0.0f, 10.0f)) {
+        if (rb->linearDrag < 0.0f) rb->linearDrag = 0.0f;
+    }
+    if (DragFloat("Angular Drag", &rb->angularDrag, 0.01f, 0.0f, 10.0f)) {
+        if (rb->angularDrag < 0.0f) rb->angularDrag = 0.0f;
+    }
 }
 
 void EditorUI::drawColliderEditor() {

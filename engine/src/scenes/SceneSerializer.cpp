@@ -482,6 +482,9 @@ static bool registerBuiltinComponents() {
                 out << ",\n" << JSONUtils::indent(indent) << "\"rbVelZ\": " << rb->velocity.z;
                 out << ",\n" << JSONUtils::indent(indent) << "\"rbGravityScale\": " << rb->gravityScale;
                 out << ",\n" << JSONUtils::indent(indent) << "\"rbRestitution\": " << rb->restitution;
+                out << ",\n" << JSONUtils::indent(indent) << "\"rbFriction\": " << rb->friction;
+                out << ",\n" << JSONUtils::indent(indent) << "\"rbLinearDrag\": " << rb->linearDrag;
+                out << ",\n" << JSONUtils::indent(indent) << "\"rbAngularDrag\": " << rb->angularDrag;
             }
         },
         [](Registry& registry, VulkanRenderer& renderer, Entity entity, const std::string& json) {
@@ -496,6 +499,9 @@ static bool registerBuiltinComponents() {
                 JSONUtils::extractFloatValue(json, "rbVelZ", rb.velocity.z);
                 JSONUtils::extractFloatValue(json, "rbGravityScale", rb.gravityScale);
                 JSONUtils::extractFloatValue(json, "rbRestitution", rb.restitution);
+                JSONUtils::extractFloatValue(json, "rbFriction", rb.friction);
+                JSONUtils::extractFloatValue(json, "rbLinearDrag", rb.linearDrag);
+                JSONUtils::extractFloatValue(json, "rbAngularDrag", rb.angularDrag);
                 registry.emplace<RigidBodyComponent>(entity, std::move(rb));
             }
         }
