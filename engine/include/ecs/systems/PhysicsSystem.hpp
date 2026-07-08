@@ -866,6 +866,16 @@ namespace Engine {
             }
 
             if (J_p > 0.0f) {
+                // Reset sleep timer while active positional resolution (translation or rotation) is happening
+                if (rbA) {
+                    rbA->sleeping = false;
+                    rbA->sleepTimer = 0.0f;
+                }
+                if (rbB) {
+                    rbB->sleeping = false;
+                    rbB->sleepTimer = 0.0f;
+                }
+
                 glm::vec3 C_p = J_p * normal;
                 if (!staticA) {
                     transA.position -= invMassA * C_p;
@@ -902,8 +912,8 @@ namespace Engine {
 
             float velAlongNormal = glm::dot(relativeVel, normal);
 
-            float restitutionA = rbA ? rbA->restitution : 0.5f;
-            float restitutionB = rbB ? rbB->restitution : 0.5f;
+            float restitutionA = rbA ? rbA->restitution : (rbB ? rbB->restitution : 0.5f);
+            float restitutionB = rbB ? rbB->restitution : (rbA ? rbA->restitution : 0.5f);
             float e = std::min(restitutionA, restitutionB);
 
             // Restitution threshold
@@ -912,36 +922,13 @@ namespace Engine {
                 e = 0.0f;
             }
 
-            // --- Prevent Phantom Motion state ---
-            if (velAlongNormal > -0.25f && linVelAlongN < 0.0f) {
-                if (staticA && !staticB) {
-                    rbB->velocity -= normal * linVelAlongN;
-                } else if (staticB && !staticA) {
-                    rbA->velocity += normal * linVelAlongN;
-                } else if (!staticA && !staticB) {
-                    float totalMass = rbA->mass + rbB->mass;
-                    float ratioA = 0.5f;
-                    float ratioB = 0.5f;
-                    if (totalMass > 1e-4f) {
-                        ratioA = rbB->mass / totalMass;
-                        ratioB = rbA->mass / totalMass;
-                    }
-                    rbA->velocity += normal * linVelAlongN * ratioA;
-                    rbB->velocity -= normal * linVelAlongN * ratioB;
-                }
-                // Refresh relative velocities
-                velA = rbA ? rbA->velocity : glm::vec3(0.0f);
-                velB = rbB ? rbB->velocity : glm::vec3(0.0f);
-                contactVelA = velA + glm::cross(angVelA, rA);
-                contactVelB = velB + glm::cross(angVelB, rB);
-                relativeVel = contactVelB - contactVelA;
-                velAlongNormal = glm::dot(relativeVel, normal);
-            }
-
             float K_vel = computeK(invMassA, invMassB, invInertiaWorldA, invInertiaWorldB, rA, rB, normal);
             float impulseScalar = 0.0f;
-            if (velAlongNormal < 0.0f && K_vel > 1e-4f) {
-                impulseScalar = -(1.0f + e) * velAlongNormal / K_vel;
+            
+            if (K_vel > 1e-4f) {
+                if (velAlongNormal < 0.0f) {
+                    impulseScalar = -(1.0f + e) * velAlongNormal / K_vel;
+                }
             }
 
             if (impulseScalar < 0.0f) impulseScalar = 0.0f;
@@ -978,8 +965,8 @@ namespace Engine {
                     tangentImpulseScalar = -tangentLen / K_tangent;
                 }
 
-                float frictionA = rbA ? rbA->friction : 0.3f;
-                float frictionB = rbB ? rbB->friction : 0.3f;
+                float frictionA = rbA ? rbA->friction : (rbB ? rbB->friction : 0.3f);
+                float frictionB = rbB ? rbB->friction : (rbA ? rbA->friction : 0.3f);
                 float mu = std::sqrt(frictionA * frictionB);
                 
                 float effectiveNormalImpulse = impulseScalar;
@@ -1027,8 +1014,8 @@ namespace Engine {
 
                 if (K_rot > 1e-5f) {
                     float rotImpulseScalar = -angVelAlongN / K_rot;
-                    float frictionA = rbA ? rbA->friction : 0.3f;
-                    float frictionB = rbB ? rbB->friction : 0.3f;
+                    float frictionA = rbA ? rbA->friction : (rbB ? rbB->friction : 0.3f);
+                    float frictionB = rbB ? rbB->friction : (rbA ? rbA->friction : 0.3f);
                     float mu = std::sqrt(frictionA * frictionB);
                     float muRot = mu * 0.1f;
                     
