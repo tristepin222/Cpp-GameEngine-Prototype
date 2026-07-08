@@ -1,20 +1,5 @@
-#include "core/Application.hpp"
-#include "GameMetadataComponent.hpp"
+#include "SandboxApp.hpp"
 #include <iostream>
-
-/**
- * @class SandboxApp
- * @brief Subclass of Engine::Application defining game-specific initialization.
- */
-class SandboxApp : public Engine::Application {
-public:
-    SandboxApp() : Application() {}
-
-    void onStart() override {
-        // Register custom game-level component with serialization registry
-        registerComponent<GameMetadataComponent>("GameMetadata");
-    }
-};
 
 /**
  * @brief Entry point for sandbox game application.

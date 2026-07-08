@@ -153,6 +153,10 @@ private:
      */
     void drawColliderEditor();
     /**
+     * @brief Renders inline controls for PlayerController component fields.
+     */
+    void drawPlayerControllerEditor();
+    /**
      * @brief Draws a styled banner title inside component panels.
      * @param title Header title text.
      */

@@ -88,6 +88,12 @@ namespace Engine {
 
                 glm::vec3 gravityForce = gravityVector * rb.gravityScale * massVal;
                 glm::vec3 totalForce = rb.force + gravityForce;
+
+                // Enforce position constraints on forces/velocities
+                if (rb.freezePositionX) { totalForce.x = 0.0f; rb.velocity.x = 0.0f; }
+                if (rb.freezePositionY) { totalForce.y = 0.0f; rb.velocity.y = 0.0f; }
+                if (rb.freezePositionZ) { totalForce.z = 0.0f; rb.velocity.z = 0.0f; }
+
                 glm::vec3 accel = totalForce / massVal;
 
                 // Validate acceleration
@@ -97,6 +103,10 @@ namespace Engine {
 
                 // Apply linear drag damping (exponential for numerical stability)
                 rb.velocity *= std::exp(-rb.linearDrag * dt);
+
+                if (rb.freezePositionX) rb.velocity.x = 0.0f;
+                if (rb.freezePositionY) rb.velocity.y = 0.0f;
+                if (rb.freezePositionZ) rb.velocity.z = 0.0f;
 
                 // Validate velocity
                 if (std::isnan(rb.velocity.x) || std::isinf(rb.velocity.x)) rb.velocity = glm::vec3(0.0f);
@@ -118,6 +128,10 @@ namespace Engine {
                     rb.angularVelocity = glm::vec3(0.0f);
                 }
 
+                if (rb.freezeRotationX) { rb.torque.x = 0.0f; rb.angularVelocity.x = 0.0f; }
+                if (rb.freezeRotationY) { rb.torque.y = 0.0f; rb.angularVelocity.y = 0.0f; }
+                if (rb.freezeRotationZ) { rb.torque.z = 0.0f; rb.angularVelocity.z = 0.0f; }
+
                 float inertiaScale = 0.5f * massVal;
                 glm::vec3 angularAccel = rb.torque / (inertiaScale > 1e-4f ? inertiaScale : 1.0f);
                 rb.angularVelocity += angularAccel * dt;
@@ -125,8 +139,16 @@ namespace Engine {
                 // Apply angular drag damping (exponential for numerical stability)
                 rb.angularVelocity *= std::exp(-rb.angularDrag * dt);
 
+                if (rb.freezeRotationX) rb.angularVelocity.x = 0.0f;
+                if (rb.freezeRotationY) rb.angularVelocity.y = 0.0f;
+                if (rb.freezeRotationZ) rb.angularVelocity.z = 0.0f;
+
                 // Update Euler rotation (degrees)
                 transform.rotation += glm::degrees(rb.angularVelocity) * dt;
+
+                if (rb.freezeRotationX) transform.rotation.x = 0.0f;
+                if (rb.freezeRotationY) transform.rotation.y = 0.0f;
+                if (rb.freezeRotationZ) transform.rotation.z = 0.0f;
 
                 // Keep rotation angles within clean range to prevent Euler drift
                 transform.rotation.x = std::fmod(transform.rotation.x, 360.0f);
@@ -412,11 +434,16 @@ namespace Engine {
             OBB obb;
             obb.center = glm::vec3(worldM * glm::vec4(col.offset, 1.0f));
             
+            glm::vec3 baseExtents = col.extents;
+            if (col.shape == ColliderShape::Capsule) {
+                baseExtents = glm::vec3(col.radius, col.height * 0.5f, col.radius);
+            }
+
             for (int i = 0; i < 3; ++i) {
                 glm::vec3 colAxis = glm::vec3(worldM[i]);
                 float axisLen = glm::length(colAxis);
                 obb.axes[i] = (axisLen > 1e-4f) ? (colAxis / axisLen) : glm::vec3(i == 0, i == 1, i == 2);
-                obb.extents[i] = col.extents[i] * (axisLen > 1e-4f ? axisLen : 1.0f);
+                obb.extents[i] = baseExtents[i] * (axisLen > 1e-4f ? axisLen : 1.0f);
             }
             return obb;
         }
@@ -430,7 +457,12 @@ namespace Engine {
             obb.axes[0] = glm::vec3(1.0f, 0.0f, 0.0f);
             obb.axes[1] = glm::vec3(0.0f, 1.0f, 0.0f);
             obb.axes[2] = glm::vec3(0.0f, 0.0f, 1.0f);
-            obb.extents = col.extents;
+            
+            if (col.shape == ColliderShape::Capsule) {
+                obb.extents = glm::vec3(col.radius, col.height * 0.5f, col.radius);
+            } else {
+                obb.extents = col.extents;
+            }
             return obb;
         }
 
@@ -1045,6 +1077,24 @@ namespace Engine {
                         rbB->angularVelocity += invInertiaWorldB * rotImpulse;
                     }
                 }
+            }
+
+            // Enforce constraints on resolveCollision final velocities
+            if (rbA && !staticA) {
+                if (rbA->freezePositionX) rbA->velocity.x = 0.0f;
+                if (rbA->freezePositionY) rbA->velocity.y = 0.0f;
+                if (rbA->freezePositionZ) rbA->velocity.z = 0.0f;
+                if (rbA->freezeRotationX) rbA->angularVelocity.x = 0.0f;
+                if (rbA->freezeRotationY) rbA->angularVelocity.y = 0.0f;
+                if (rbA->freezeRotationZ) rbA->angularVelocity.z = 0.0f;
+            }
+            if (rbB && !staticB) {
+                if (rbB->freezePositionX) rbB->velocity.x = 0.0f;
+                if (rbB->freezePositionY) rbB->velocity.y = 0.0f;
+                if (rbB->freezePositionZ) rbB->velocity.z = 0.0f;
+                if (rbB->freezeRotationX) rbB->angularVelocity.x = 0.0f;
+                if (rbB->freezeRotationY) rbB->angularVelocity.y = 0.0f;
+                if (rbB->freezeRotationZ) rbB->angularVelocity.z = 0.0f;
             }
 
             static int colDbg = 0;

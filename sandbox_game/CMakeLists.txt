@@ -4,6 +4,8 @@ project(SandboxGame LANGUAGES CXX)
 # Executable target sources
 set(SANDBOX_SOURCES
     src/main.cpp
+    src/SandboxApp.cpp
+    src/PlayerControllerSystem.cpp
 )
 
 add_executable(sandbox_game ${SANDBOX_SOURCES})

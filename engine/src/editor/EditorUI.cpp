@@ -33,6 +33,7 @@
 #include "ecs/components/IKSolver.hpp"
 #include "ecs/components/RigidBody.hpp"
 #include "ecs/components/Collider.hpp"
+#include "ecs/components/PlayerControllerComponent.hpp"
 #include <functional>
 #include "renderer/VulkanRenderer.hpp"
 #include "scenes/Scene.hpp"
@@ -965,6 +966,7 @@ void EditorUI::drawInspectorPanel() {
     drawAnimationControllerEditor();
     drawRigidBodyEditor();
     drawColliderEditor();
+    drawPlayerControllerEditor();
     drawGridEditor();
     drawCameraEditor();
 
@@ -1019,6 +1021,10 @@ void EditorUI::drawInspectorPanel() {
         if (!registry.has<ColliderComponent>(selectedEntity) && ImGui::MenuItem("Collider")) {
             registry.emplace<ColliderComponent>(selectedEntity, ColliderComponent{});
             statusMessage = "Added Collider component.";
+        }
+        if (!registry.has<PlayerControllerComponent>(selectedEntity) && ImGui::MenuItem("Player Controller")) {
+            registry.emplace<PlayerControllerComponent>(selectedEntity, PlayerControllerComponent{});
+            statusMessage = "Added Player Controller component.";
         }
 
         // Render dynamic plugin component add options
@@ -1154,17 +1160,13 @@ void EditorUI::drawMaterialEditor() {
         return;
     }
 
-    bool open = CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen);
-    SameLine(ImGui::GetWindowWidth() - 40.0f);
-    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
-    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
-    if (Button("X##Material", ImVec2(24, 20))) {
+    bool visible = true;
+    bool open = CollapsingHeader("Material", &visible, ImGuiTreeNodeFlags_DefaultOpen);
+    if (!visible) {
         registry.remove<Material>(selectedEntity);
         statusMessage = "Removed Material component.";
-        PopStyleColor(2);
         return;
     }
-    PopStyleColor(2);
 
     if (!open) {
         return;
@@ -1216,17 +1218,13 @@ void EditorUI::drawMeshEditor() {
         return;
     }
 
-    bool open = CollapsingHeader("Mesh", ImGuiTreeNodeFlags_DefaultOpen);
-    SameLine(ImGui::GetWindowWidth() - 40.0f);
-    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
-    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
-    if (Button("X##Mesh", ImVec2(24, 20))) {
+    bool visible = true;
+    bool open = CollapsingHeader("Mesh", &visible, ImGuiTreeNodeFlags_DefaultOpen);
+    if (!visible) {
         registry.remove<Mesh>(selectedEntity);
         statusMessage = "Removed Mesh component.";
-        PopStyleColor(2);
         return;
     }
-    PopStyleColor(2);
 
     if (!open) {
         return;
@@ -1942,17 +1940,13 @@ void EditorUI::drawGridEditor() {
         return;
     }
 
-    bool open = CollapsingHeader("Grid", ImGuiTreeNodeFlags_DefaultOpen);
-    SameLine(ImGui::GetWindowWidth() - 40.0f);
-    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
-    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
-    if (Button("X##Grid", ImVec2(24, 20))) {
+    bool visible = true;
+    bool open = CollapsingHeader("Grid", &visible, ImGuiTreeNodeFlags_DefaultOpen);
+    if (!visible) {
         registry.remove<Grid>(selectedEntity);
         statusMessage = "Removed Grid component.";
-        PopStyleColor(2);
         return;
     }
-    PopStyleColor(2);
 
     if (!open) {
         return;
@@ -1972,17 +1966,13 @@ void EditorUI::drawCameraEditor() {
         return;
     }
 
-    bool open = CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen);
-    SameLine(ImGui::GetWindowWidth() - 40.0f);
-    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
-    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
-    if (Button("X##Camera", ImVec2(24, 20))) {
+    bool visible = true;
+    bool open = CollapsingHeader("Camera", &visible, ImGuiTreeNodeFlags_DefaultOpen);
+    if (!visible) {
         registry.remove<Camera>(selectedEntity);
         statusMessage = "Removed Camera component.";
-        PopStyleColor(2);
         return;
     }
-    PopStyleColor(2);
 
     if (!open) {
         return;
@@ -2273,17 +2263,13 @@ void EditorUI::drawSkeletonEditor() {
         return;
     }
 
-    bool open = CollapsingHeader("Skeleton", ImGuiTreeNodeFlags_DefaultOpen);
-    SameLine(ImGui::GetWindowWidth() - 40.0f);
-    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
-    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
-    if (Button("X##Skeleton", ImVec2(24, 20))) {
+    bool visible = true;
+    bool open = CollapsingHeader("Skeleton", &visible, ImGuiTreeNodeFlags_DefaultOpen);
+    if (!visible) {
         registry.remove<SkeletonComponent>(selectedEntity);
         statusMessage = "Removed Skeleton component.";
-        PopStyleColor(2);
         return;
     }
-    PopStyleColor(2);
 
     if (!open) {
         return;
@@ -2305,17 +2291,13 @@ void EditorUI::drawAnimatorEditor() {
         return;
     }
 
-    bool open = CollapsingHeader("Animator", ImGuiTreeNodeFlags_DefaultOpen);
-    SameLine(ImGui::GetWindowWidth() - 40.0f);
-    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
-    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
-    if (Button("X##Animator", ImVec2(24, 20))) {
+    bool visible = true;
+    bool open = CollapsingHeader("Animator", &visible, ImGuiTreeNodeFlags_DefaultOpen);
+    if (!visible) {
         registry.remove<AnimatorComponent>(selectedEntity);
         statusMessage = "Removed Animator component.";
-        PopStyleColor(2);
         return;
     }
-    PopStyleColor(2);
 
     if (!open) {
         return;
@@ -2461,17 +2443,13 @@ void EditorUI::drawHierarchyEditor() {
         return;
     }
 
-    bool open = CollapsingHeader("Hierarchy Link", ImGuiTreeNodeFlags_DefaultOpen);
-    SameLine(ImGui::GetWindowWidth() - 40.0f);
-    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
-    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
-    if (Button("X##Hierarchy", ImVec2(24, 20))) {
+    bool visible = true;
+    bool open = CollapsingHeader("Hierarchy Link", &visible, ImGuiTreeNodeFlags_DefaultOpen);
+    if (!visible) {
         registry.remove<HierarchyComponent>(selectedEntity);
         statusMessage = "Removed Hierarchy component.";
-        PopStyleColor(2);
         return;
     }
-    PopStyleColor(2);
 
     if (!open) {
         return;
@@ -2531,17 +2509,13 @@ void EditorUI::drawIKSolverEditor() {
         return;
     }
 
-    bool open = CollapsingHeader("IK Solver", ImGuiTreeNodeFlags_DefaultOpen);
-    SameLine(ImGui::GetWindowWidth() - 40.0f);
-    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
-    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
-    if (Button("X##IKSolver", ImVec2(24, 20))) {
+    bool visible = true;
+    bool open = CollapsingHeader("IK Solver", &visible, ImGuiTreeNodeFlags_DefaultOpen);
+    if (!visible) {
         registry.remove<IKSolverComponent>(selectedEntity);
         statusMessage = "Removed IK Solver component.";
-        PopStyleColor(2);
         return;
     }
-    PopStyleColor(2);
 
     if (!open) {
         return;
@@ -2651,17 +2625,13 @@ void EditorUI::drawAnimationControllerEditor() {
         return;
     }
 
-    bool open = CollapsingHeader("Animation Controller", ImGuiTreeNodeFlags_DefaultOpen);
-    SameLine(ImGui::GetWindowWidth() - 40.0f);
-    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
-    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
-    if (Button("X##AnimController", ImVec2(24, 20))) {
+    bool visible = true;
+    bool open = CollapsingHeader("Animation Controller", &visible, ImGuiTreeNodeFlags_DefaultOpen);
+    if (!visible) {
         registry.remove<AnimationControllerComponent>(selectedEntity);
         statusMessage = "Removed Animation Controller component.";
-        PopStyleColor(2);
         return;
     }
-    PopStyleColor(2);
 
     if (!open) {
         return;
@@ -2739,17 +2709,13 @@ void EditorUI::drawRigidBodyEditor() {
     RigidBodyComponent* rb = registry.get<RigidBodyComponent>(selectedEntity);
     if (!rb) return;
 
-    bool open = CollapsingHeader("RigidBody", ImGuiTreeNodeFlags_DefaultOpen);
-    SameLine(ImGui::GetWindowWidth() - 40.0f);
-    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
-    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
-    if (Button("X##RigidBody", ImVec2(24, 20))) {
+    bool visible = true;
+    bool open = CollapsingHeader("RigidBody", &visible, ImGuiTreeNodeFlags_DefaultOpen);
+    if (!visible) {
         registry.remove<RigidBodyComponent>(selectedEntity);
         statusMessage = "Removed RigidBody component.";
-        PopStyleColor(2);
         return;
     }
-    PopStyleColor(2);
 
     if (!open) return;
 
@@ -2780,41 +2746,66 @@ void EditorUI::drawRigidBodyEditor() {
     if (DragFloat("Angular Drag", &rb->angularDrag, 0.01f, 0.0f, 10.0f)) {
         if (rb->angularDrag < 0.0f) rb->angularDrag = 0.0f;
     }
+
+    Separator();
+    Text("Constraints");
+    
+    Text("Freeze Position");
+    SameLine(130.0f);
+    Checkbox("X##FreezePX", &rb->freezePositionX);
+    SameLine(190.0f);
+    Checkbox("Y##FreezePY", &rb->freezePositionY);
+    SameLine(250.0f);
+    Checkbox("Z##FreezePZ", &rb->freezePositionZ);
+
+    Text("Freeze Rotation");
+    SameLine(130.0f);
+    Checkbox("X##FreezeRX", &rb->freezeRotationX);
+    SameLine(190.0f);
+    Checkbox("Y##FreezeRY", &rb->freezeRotationY);
+    SameLine(250.0f);
+    Checkbox("Z##FreezeRZ", &rb->freezeRotationZ);
 }
 
 void EditorUI::drawColliderEditor() {
     ColliderComponent* col = registry.get<ColliderComponent>(selectedEntity);
     if (!col) return;
 
-    bool open = CollapsingHeader("Collider", ImGuiTreeNodeFlags_DefaultOpen);
-    SameLine(ImGui::GetWindowWidth() - 40.0f);
-    PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.12f, 0.12f, 1.0f));
-    PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
-    if (Button("X##Collider", ImVec2(24, 20))) {
+    bool visible = true;
+    bool open = CollapsingHeader("Collider", &visible, ImGuiTreeNodeFlags_DefaultOpen);
+    if (!visible) {
         registry.remove<ColliderComponent>(selectedEntity);
         statusMessage = "Removed Collider component.";
-        PopStyleColor(2);
         return;
     }
-    PopStyleColor(2);
 
     if (!open) return;
 
     // Shape Selection
-    const char* shapes[] = { "Sphere", "AABB", "OBB" };
+    const char* shapes[] = { "Sphere", "AABB", "OBB", "Capsule" };
     int currentShape = 1;
     if (col->shape == ColliderShape::Sphere) currentShape = 0;
     else if (col->shape == ColliderShape::OBB) currentShape = 2;
+    else if (col->shape == ColliderShape::Capsule) currentShape = 3;
 
-    if (Combo("Shape", &currentShape, shapes, 3)) {
+    if (Combo("Shape", &currentShape, shapes, 4)) {
         if (currentShape == 0) col->shape = ColliderShape::Sphere;
         else if (currentShape == 2) col->shape = ColliderShape::OBB;
+        else if (currentShape == 3) col->shape = ColliderShape::Capsule;
         else col->shape = ColliderShape::AABB;
     }
 
     if (col->shape == ColliderShape::Sphere) {
         if (DragFloat("Radius", &col->radius, 0.05f, 0.001f, 100.0f)) {
             if (col->radius < 0.001f) col->radius = 0.001f;
+        }
+    } else if (col->shape == ColliderShape::Capsule) {
+        if (DragFloat("Radius", &col->radius, 0.05f, 0.001f, 100.0f)) {
+            if (col->radius < 0.001f) col->radius = 0.001f;
+            if (col->height < col->radius * 2.0f) col->height = col->radius * 2.0f;
+        }
+        if (DragFloat("Height", &col->height, 0.05f, 0.001f, 100.0f)) {
+            if (col->height < col->radius * 2.0f) col->height = col->radius * 2.0f;
         }
     } else {
         if (DragFloat3("Half-Extents", &col->extents[0], 0.05f, 0.001f, 100.0f)) {
@@ -2826,6 +2817,69 @@ void EditorUI::drawColliderEditor() {
 
     DragFloat3("Center Offset", &col->offset[0], 0.05f);
 }
+
+void EditorUI::drawPlayerControllerEditor() {
+    PlayerControllerComponent* pc = registry.get<PlayerControllerComponent>(selectedEntity);
+    if (!pc) return;
+
+    bool visible = true;
+    bool open = CollapsingHeader("Player Controller", &visible, ImGuiTreeNodeFlags_DefaultOpen);
+    if (!visible) {
+        registry.remove<PlayerControllerComponent>(selectedEntity);
+        statusMessage = "Removed Player Controller component.";
+        return;
+    }
+
+    if (!open) return;
+
+    DragFloat("Speed##PlayerSpeed", &pc->speed, 0.05f, 0.1f, 100.0f);
+    DragFloat("Jump Force##PlayerJump", &pc->jumpForce, 0.05f, 0.1f, 100.0f);
+    DragFloat("Interact Range##PlayerInteract", &pc->interactRange, 0.05f, 0.1f, 10.0f);
+
+    // Draw real-time runtime state if playing
+    if (editorMode.isPlaying) {
+        ImGui::Separator();
+        ImGui::Text("Runtime State:");
+        ImGui::Text("Debug Update Count: %d", pc->debugRunningCount);
+
+        // Compute camera direction exactly as in PlayerControllerSystem
+        glm::vec3 testForward(0.0f, 0.0f, -1.0f);
+        glm::vec3 testRight(1.0f, 0.0f, 0.0f);
+        int cameraCount = 0;
+        for (auto [camEntity, cam, camTransform] : registry.view<Camera, Transform>()) {
+            cameraCount++;
+            float yaw = camTransform.rotation.y;
+            testForward.x = cos(glm::radians(yaw));
+            testForward.y = 0.0f;
+            testForward.z = sin(glm::radians(yaw));
+            if (glm::length(testForward) > 1e-4f) {
+                testForward = glm::normalize(testForward);
+            }
+            testRight = glm::normalize(glm::cross(testForward, glm::vec3(0.0f, 1.0f, 0.0f)));
+            break;
+        }
+        ImGui::Text("Cameras found: %d", cameraCount);
+        ImGui::Text("Cam Forward: (%.3f, %.3f)", testForward.x, testForward.z);
+        ImGui::Text("Cam Right: (%.3f, %.3f)", testRight.x, testRight.z);
+        ImGui::Text("MoveDir Length: %.4f", pc->debugMoveDirLength);
+        ImGui::Text("PC Set Velocity: (%.3f, %.3f, %.3f)", pc->debugRbVelocity.x, pc->debugRbVelocity.y, pc->debugRbVelocity.z);
+
+        if (auto* rb = registry.get<RigidBodyComponent>(selectedEntity)) {
+            ImGui::Text("Sleeping: %s", rb->sleeping ? "Yes" : "No");
+            ImGui::Text("Velocity: (%.3f, %.3f, %.3f)", rb->velocity.x, rb->velocity.y, rb->velocity.z);
+        } else {
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Warning: No RigidBodyComponent found!");
+        }
+
+        if (window) {
+            ImGui::Text("W pressed: %s", (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) ? "Yes" : "No");
+            ImGui::Text("A pressed: %s", (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) ? "Yes" : "No");
+            ImGui::Text("S pressed: %s", (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) ? "Yes" : "No");
+            ImGui::Text("D pressed: %s", (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) ? "Yes" : "No");
+        }
+    }
+}
+
 
 glm::mat4 EditorUI::getEntityWorldMatrix(Entity entity, int depth) {
     if (depth > 100) return glm::mat4(1.0f);
@@ -2924,7 +2978,7 @@ void EditorUI::drawColliderDebugOverlay() {
             drawEdge(4, 5); drawEdge(5, 6); drawEdge(6, 7); drawEdge(7, 4);
             drawEdge(0, 4); drawEdge(1, 5); drawEdge(2, 6); drawEdge(3, 7);
 
-        } else {
+        } else if (col.shape == ColliderShape::OBB) {
             glm::vec3 localCorners[8] = {
                 col.offset + col.extents * glm::vec3(-1, -1, -1),
                 col.offset + col.extents * glm::vec3(1, -1, -1),
@@ -2954,6 +3008,83 @@ void EditorUI::drawColliderDebugOverlay() {
             drawEdge(0, 1); drawEdge(1, 2); drawEdge(2, 3); drawEdge(3, 0);
             drawEdge(4, 5); drawEdge(5, 6); drawEdge(6, 7); drawEdge(7, 4);
             drawEdge(0, 4); drawEdge(1, 5); drawEdge(2, 6); drawEdge(3, 7);
+
+        } else if (col.shape == ColliderShape::Capsule) {
+            const int segments = 16;
+            float radius = col.radius;
+            float halfHeight = std::max(0.0f, (col.height - 2.0f * radius) * 0.5f);
+
+            glm::vec3 bottomCenter = glm::vec3(worldM * glm::vec4(col.offset - glm::vec3(0.0f, halfHeight, 0.0f), 1.0f));
+            glm::vec3 topCenter = glm::vec3(worldM * glm::vec4(col.offset + glm::vec3(0.0f, halfHeight, 0.0f), 1.0f));
+
+            // Extract world-space axes from worldM to draw rings aligned with the entity's orientation
+            glm::vec3 axisX = glm::normalize(glm::vec3(worldM[0]));
+            glm::vec3 axisY = glm::normalize(glm::vec3(worldM[1]));
+            glm::vec3 axisZ = glm::normalize(glm::vec3(worldM[2]));
+
+            auto drawRing = [&](const glm::vec3& center, const glm::vec3& u, const glm::vec3& v) {
+                ImVec2 prevScreen;
+                bool prevValid = false;
+                for (int step = 0; step <= segments; ++step) {
+                    float angle = (float)step / (float)segments * 2.0f * 3.14159265f;
+                    glm::vec3 offset = radius * (std::cos(angle) * u + std::sin(angle) * v);
+                    ImVec2 currScreen;
+                    if (projectToScreen(center + offset, currScreen)) {
+                        if (prevValid) {
+                            drawList->AddLine(prevScreen, currScreen, color, 1.5f);
+                        }
+                        prevScreen = currScreen;
+                        prevValid = true;
+                    } else {
+                        prevValid = false;
+                    }
+                }
+            };
+
+            // Draw horizontal rings at the top and bottom hemispherical centers
+            drawRing(bottomCenter, axisX, axisZ);
+            drawRing(topCenter, axisX, axisZ);
+
+            // Draw hemispherical dome wireframes (vertical arcs)
+            auto drawDome = [&](const glm::vec3& center, const glm::vec3& u, const glm::vec3& v, bool isTop) {
+                ImVec2 prevScreen;
+                bool prevValid = false;
+                for (int step = 0; step <= segments / 2; ++step) {
+                    float angle = (float)step / (float)(segments / 2) * 3.14159265f * 0.5f;
+                    if (!isTop) angle = -angle;
+                    glm::vec3 offset = radius * (std::cos(angle) * u + std::sin(angle) * v);
+                    ImVec2 currScreen;
+                    if (projectToScreen(center + offset, currScreen)) {
+                        if (prevValid) {
+                            drawList->AddLine(prevScreen, currScreen, color, 1.5f);
+                        }
+                        prevScreen = currScreen;
+                        prevValid = true;
+                    } else {
+                        prevValid = false;
+                    }
+                }
+            };
+
+            // Draw vertical dome arcs (XY and ZY planes)
+            drawDome(topCenter, axisX, axisY, true);
+            drawDome(topCenter, axisZ, axisY, true);
+            drawDome(bottomCenter, axisX, axisY, false);
+            drawDome(bottomCenter, axisZ, axisY, false);
+
+            // Connect top and bottom hemispherical rings with 4 vertical lines (along Y axis)
+            auto drawLine = [&](const glm::vec3& localOffset) {
+                glm::vec3 worldOffset = localOffset.x * axisX + localOffset.y * axisY + localOffset.z * axisZ;
+                ImVec2 p1, p2;
+                if (projectToScreen(bottomCenter + worldOffset, p1) && projectToScreen(topCenter + worldOffset, p2)) {
+                    drawList->AddLine(p1, p2, color, 1.5f);
+                }
+            };
+
+            drawLine(glm::vec3(radius, 0.0f, 0.0f));
+            drawLine(glm::vec3(-radius, 0.0f, 0.0f));
+            drawLine(glm::vec3(0.0f, 0.0f, radius));
+            drawLine(glm::vec3(0.0f, 0.0f, -radius));
         }
     }
 }

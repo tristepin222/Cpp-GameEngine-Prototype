@@ -399,6 +399,11 @@ bool VulkanRenderer::shouldClose() const {
     return glfwWindowShouldClose(window);
 }
 
+bool VulkanRenderer::getKey(int key) const {
+    if (!window) return false;
+    return glfwGetKey(window, key) == GLFW_PRESS;
+}
+
 /**
  * @brief Uploads mesh data to vertex and index buffers.
  * @param meshID ID of target mesh.

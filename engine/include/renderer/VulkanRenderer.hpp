@@ -211,6 +211,12 @@ public:
      */
     GLFWwindow* getWindow() const { return window; }
     /**
+     * @brief Checks if a key is currently pressed (executes within engine.dll context).
+     * @param key GLFW key code.
+     * @return True if pressed.
+     */
+    bool getKey(int key) const;
+    /**
      * @brief Gets Vulkan RenderPass.
      * @return RenderPass handle.
      */

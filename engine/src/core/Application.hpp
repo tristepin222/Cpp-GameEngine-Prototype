@@ -84,6 +84,11 @@ namespace Engine {
          */
         virtual void onShutdown() {}
 
+        /**
+         * @brief Gets the current EditorModeState (e.g. isPlaying, flyMode).
+         */
+        EditorModeState& getEditorMode() { return editorMode; }
+
     protected:
         /** @brief Registry instance for ECS entity-component database. */
         Registry registry;

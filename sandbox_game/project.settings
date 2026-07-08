@@ -3,5 +3,5 @@
   "width": 1280,
   "height": 720,
   "enableEditor": true,
-  "startScenePath": "assets/scenes/test_scene.json"
+  "startScenePath": "assets/scenes/Physics/Physics.json"
 }

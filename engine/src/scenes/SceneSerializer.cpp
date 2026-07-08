@@ -18,6 +18,8 @@
 #include "ecs/components/IKSolver.hpp"
 #include "ecs/components/RigidBody.hpp"
 #include "ecs/components/Collider.hpp"
+#include "ecs/components/PlayerControllerComponent.hpp"
+
 
 struct ParentNameComponent {
     std::string name;
@@ -485,9 +487,15 @@ static bool registerBuiltinComponents() {
                 out << ",\n" << JSONUtils::indent(indent) << "\"rbFriction\": " << rb->friction;
                 out << ",\n" << JSONUtils::indent(indent) << "\"rbLinearDrag\": " << rb->linearDrag;
                 out << ",\n" << JSONUtils::indent(indent) << "\"rbAngularDrag\": " << rb->angularDrag;
+                out << ",\n" << JSONUtils::indent(indent) << "\"rbFreezePX\": " << (rb->freezePositionX ? 1.0f : 0.0f);
+                out << ",\n" << JSONUtils::indent(indent) << "\"rbFreezePY\": " << (rb->freezePositionY ? 1.0f : 0.0f);
+                out << ",\n" << JSONUtils::indent(indent) << "\"rbFreezePZ\": " << (rb->freezePositionZ ? 1.0f : 0.0f);
+                out << ",\n" << JSONUtils::indent(indent) << "\"rbFreezeRX\": " << (rb->freezeRotationX ? 1.0f : 0.0f);
+                out << ",\n" << JSONUtils::indent(indent) << "\"rbFreezeRY\": " << (rb->freezeRotationY ? 1.0f : 0.0f);
+                out << ",\n" << JSONUtils::indent(indent) << "\"rbFreezeRZ\": " << (rb->freezeRotationZ ? 1.0f : 0.0f);
             }
         },
-        [](Registry& registry, VulkanRenderer& renderer, Entity entity, const std::string& json) {
+        [](Registry& registry, VulkanRenderer&, Entity entity, const std::string& json) {
             float dummyVal = 0.0f;
             if (JSONUtils::extractFloatValue(json, "rbMass", dummyVal) || json.find("\"hasRigidBody\": true") != std::string::npos || json.find("\"hasRigidBody\":true") != std::string::npos) {
                 RigidBodyComponent rb{};
@@ -502,6 +510,16 @@ static bool registerBuiltinComponents() {
                 JSONUtils::extractFloatValue(json, "rbFriction", rb.friction);
                 JSONUtils::extractFloatValue(json, "rbLinearDrag", rb.linearDrag);
                 JSONUtils::extractFloatValue(json, "rbAngularDrag", rb.angularDrag);
+                
+                float fPX = 0.0f, fPY = 0.0f, fPZ = 0.0f;
+                float fRX = 0.0f, fRY = 0.0f, fRZ = 0.0f;
+                if (JSONUtils::extractFloatValue(json, "rbFreezePX", fPX)) rb.freezePositionX = (fPX > 0.5f);
+                if (JSONUtils::extractFloatValue(json, "rbFreezePY", fPY)) rb.freezePositionY = (fPY > 0.5f);
+                if (JSONUtils::extractFloatValue(json, "rbFreezePZ", fPZ)) rb.freezePositionZ = (fPZ > 0.5f);
+                if (JSONUtils::extractFloatValue(json, "rbFreezeRX", fRX)) rb.freezeRotationX = (fRX > 0.5f);
+                if (JSONUtils::extractFloatValue(json, "rbFreezeRY", fRY)) rb.freezeRotationY = (fRY > 0.5f);
+                if (JSONUtils::extractFloatValue(json, "rbFreezeRZ", fRZ)) rb.freezeRotationZ = (fRZ > 0.5f);
+
                 registry.emplace<RigidBodyComponent>(entity, std::move(rb));
             }
         }
@@ -515,9 +533,11 @@ static bool registerBuiltinComponents() {
                 std::string shapeStr = "AABB";
                 if (col->shape == ColliderShape::Sphere) shapeStr = "Sphere";
                 else if (col->shape == ColliderShape::OBB) shapeStr = "OBB";
+                else if (col->shape == ColliderShape::Capsule) shapeStr = "Capsule";
                 out << ",\n" << JSONUtils::indent(indent) << "\"hasCollider\": true";
                 out << ",\n" << JSONUtils::indent(indent) << "\"colShape\": " << JSONUtils::quote(shapeStr);
                 out << ",\n" << JSONUtils::indent(indent) << "\"colRadius\": " << col->radius;
+                out << ",\n" << JSONUtils::indent(indent) << "\"colHeight\": " << col->height;
                 out << ",\n" << JSONUtils::indent(indent) << "\"colExtX\": " << col->extents.x;
                 out << ",\n" << JSONUtils::indent(indent) << "\"colExtY\": " << col->extents.y;
                 out << ",\n" << JSONUtils::indent(indent) << "\"colExtZ\": " << col->extents.z;
@@ -526,15 +546,17 @@ static bool registerBuiltinComponents() {
                 out << ",\n" << JSONUtils::indent(indent) << "\"colOffsetZ\": " << col->offset.z;
             }
         },
-        [](Registry& registry, VulkanRenderer& renderer, Entity entity, const std::string& json) {
+        [](Registry& registry, VulkanRenderer&, Entity entity, const std::string& json) {
             float dummyVal = 0.0f;
             if (JSONUtils::extractFloatValue(json, "colRadius", dummyVal) || json.find("\"hasCollider\": true") != std::string::npos || json.find("\"hasCollider\":true") != std::string::npos) {
                 ColliderComponent col{};
                 std::string shapeStr = JSONUtils::extractStringValue(json, "colShape");
                 if (shapeStr == "Sphere") col.shape = ColliderShape::Sphere;
                 else if (shapeStr == "OBB") col.shape = ColliderShape::OBB;
+                else if (shapeStr == "Capsule") col.shape = ColliderShape::Capsule;
                 else col.shape = ColliderShape::AABB;
                 JSONUtils::extractFloatValue(json, "colRadius", col.radius);
+                JSONUtils::extractFloatValue(json, "colHeight", col.height);
                 JSONUtils::extractFloatValue(json, "colExtX", col.extents.x);
                 JSONUtils::extractFloatValue(json, "colExtY", col.extents.y);
                 JSONUtils::extractFloatValue(json, "colExtZ", col.extents.z);
@@ -546,7 +568,29 @@ static bool registerBuiltinComponents() {
         }
     );
 
-    // 10. Animator Component
+    // 10. PlayerController Component
+    reg.registerComponent(
+        "PlayerController",
+        [](Registry& registry, Entity entity, std::ostream& out, int indent) {
+            if (auto* pc = registry.get<PlayerControllerComponent>(entity)) {
+                out << ",\n" << JSONUtils::indent(indent) << "\"playerSpeed\": " << pc->speed;
+                out << ",\n" << JSONUtils::indent(indent) << "\"playerJumpForce\": " << pc->jumpForce;
+                out << ",\n" << JSONUtils::indent(indent) << "\"playerInteractRange\": " << pc->interactRange;
+            }
+        },
+        [](Registry& registry, VulkanRenderer&, Entity entity, const std::string& json) {
+            float dummyVal = 0.0f;
+            if (JSONUtils::extractFloatValue(json, "playerSpeed", dummyVal)) {
+                PlayerControllerComponent pc{};
+                pc.speed = dummyVal;
+                JSONUtils::extractFloatValue(json, "playerJumpForce", pc.jumpForce);
+                JSONUtils::extractFloatValue(json, "playerInteractRange", pc.interactRange);
+                registry.emplace<PlayerControllerComponent>(entity, std::move(pc));
+            }
+        }
+    );
+
+    // 11. Animator Component
     reg.registerComponent(
         "Animator",
         [](Registry& registry, Entity entity, std::ostream& out, int indent) {

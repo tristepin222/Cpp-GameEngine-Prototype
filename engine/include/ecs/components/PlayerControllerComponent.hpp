@@ -1,0 +1,20 @@
+#pragma once
+
+/**
+ * @struct PlayerControllerComponent
+ * @brief Component to mark and control player movement and interaction.
+ */
+struct PlayerControllerComponent {
+    float speed = 5.0f;
+    float jumpForce = 6.0f;
+    float interactRange = 3.0f;
+
+    // Transient input state
+    bool wasJumpPressed = false;
+    bool wasInteractPressed = false;
+
+    // Diagnostic state
+    int debugRunningCount = 0;
+    glm::vec3 debugRbVelocity{0.0f};
+    float debugMoveDirLength = 0.0f;
+};

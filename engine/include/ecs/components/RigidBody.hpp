@@ -32,4 +32,12 @@ struct RigidBodyComponent {
     bool  hadContactThisFrame  = false;  // Set by collision resolver; cleared each integration pass
                                          // Used to prevent free-falling bodies from sleeping
     bool  unstableContactThisFrame = false; // Contact support is producing torque; don't sleep yet
+
+    // Constraints (Freeze axes)
+    bool freezePositionX = false;
+    bool freezePositionY = false;
+    bool freezePositionZ = false;
+    bool freezeRotationX = false;
+    bool freezeRotationY = false;
+    bool freezeRotationZ = false;
 };
