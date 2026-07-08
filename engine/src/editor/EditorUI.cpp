@@ -968,6 +968,11 @@ void EditorUI::drawInspectorPanel() {
     drawGridEditor();
     drawCameraEditor();
 
+    // Render dynamic plugin component editors
+    for (auto& [compName, callback] : getDynamicInspectors()) {
+        callback(registry, selectedEntity);
+    }
+
     ImGui::Separator();
     if (ImGui::Button("+ Add Component", ImVec2(-1, 30))) {
         ImGui::OpenPopup("AddComponentPopup");
@@ -1015,6 +1020,15 @@ void EditorUI::drawInspectorPanel() {
             registry.emplace<ColliderComponent>(selectedEntity, ColliderComponent{});
             statusMessage = "Added Collider component.";
         }
+
+        // Render dynamic plugin component add options
+        for (auto& [compName, callback] : getDynamicAddCallbacks()) {
+            if (ImGui::MenuItem(compName.c_str())) {
+                callback(registry, selectedEntity);
+                statusMessage = "Added " + compName + " component.";
+            }
+        }
+
         ImGui::EndPopup();
     }
 
@@ -3151,5 +3165,23 @@ void EditorUI::drawImportSettingsWindow() {
     }
 
     End();
+}
+
+void EditorUI::registerComponentInspector(const std::string& name, ComponentInspectorCallback callback) {
+    getDynamicInspectors().push_back({name, callback});
+}
+
+void EditorUI::registerComponentAddCallback(const std::string& name, ComponentAddCallback callback) {
+    getDynamicAddCallbacks().push_back({name, callback});
+}
+
+std::vector<std::pair<std::string, EditorUI::ComponentInspectorCallback>>& EditorUI::getDynamicInspectors() {
+    static std::vector<std::pair<std::string, ComponentInspectorCallback>> s_inspectors;
+    return s_inspectors;
+}
+
+std::vector<std::pair<std::string, EditorUI::ComponentAddCallback>>& EditorUI::getDynamicAddCallbacks() {
+    static std::vector<std::pair<std::string, ComponentAddCallback>> s_callbacks;
+    return s_callbacks;
 }
 

@@ -57,5 +57,6 @@ FetchContent_MakeAvailable(stb)
 # --- Add Subdirectories ---
 add_subdirectory(engine)
 add_subdirectory(sandbox_game)
+add_subdirectory(plugins)
 
 message(STATUS "Configured engine workspace subdirectories")

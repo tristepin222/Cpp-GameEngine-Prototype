@@ -110,12 +110,20 @@ namespace Engine {
         }
 
         // Load generic data-driven scene automatically
+        pluginManager = std::make_unique<PluginManager>(registry, systemManager, *renderer, editorMode);
+        pluginManager->loadPlugins();
+
         sceneManager.changeScene(std::make_unique<DefaultScene>(registry, *renderer, config.startScenePath));
 
         running = true;
     }
 
     void Application::cleanupEngine() {
+        if (pluginManager) {
+            pluginManager->unloadPlugins();
+            pluginManager.reset();
+        }
+
         JobSystem::getInstance().shutdown(); // Shutdown Job System thread pool
 
         if (editorUI) {

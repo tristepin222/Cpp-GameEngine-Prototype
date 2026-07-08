@@ -43,6 +43,13 @@ add_custom_command(TARGET sandbox_game POST_BUILD
     COMMENT "Copying project settings to sandbox run folder..."
 )
 
+add_custom_command(TARGET sandbox_game POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy
+    "$<TARGET_FILE:engine>"
+    "$<TARGET_FILE_DIR:sandbox_game>/"
+    COMMENT "Copying engine DLL next to game executable..."
+)
+
 # Rename binary output target name to 'game' or keep 'sandbox_game'
 set_target_properties(sandbox_game PROPERTIES OUTPUT_NAME "game")
 

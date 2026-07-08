@@ -2,6 +2,8 @@
 
 #include <glm/glm.hpp>
 #include <string>
+#include <vector>
+#include <functional>
 #include <vulkan/vulkan.h>
 
 #include "../ecs/Entity.hpp"
@@ -58,6 +60,16 @@ public:
      * @brief Toggles between first-person fly camera controls and editor UI control modes.
      */
     void toggleFlyMode();
+
+    // Dynamic UI Registration for dynamic plugins
+    using ComponentInspectorCallback = std::function<void(Registry&, Entity)>;
+    using ComponentAddCallback = std::function<void(Registry&, Entity)>;
+
+    static void registerComponentInspector(const std::string& name, ComponentInspectorCallback callback);
+    static void registerComponentAddCallback(const std::string& name, ComponentAddCallback callback);
+
+    static std::vector<std::pair<std::string, ComponentInspectorCallback>>& getDynamicInspectors();
+    static std::vector<std::pair<std::string, ComponentAddCallback>>& getDynamicAddCallbacks();
 
 private:
     /**

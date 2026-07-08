@@ -7,30 +7,21 @@
 #include <vector>
 #include <memory>
 
+#include "core/EngineAPI.hpp"
+
 // Simple runtime component type id registry
 /**
  * @brief Retrieves the global map of component types to unique numeric IDs.
  * @return Reference to the type index map.
  */
-inline std::unordered_map<std::type_index, std::size_t>& g_componentTypeMap() {
-    static std::unordered_map<std::type_index, std::size_t> map;
-    return map;
-}
+ENGINE_API std::unordered_map<std::type_index, std::size_t>& g_componentTypeMap();
 
 /**
  * @brief Registers or retrieves the unique ID for a component type.
  * @param idx The type index.
  * @return The unique ID of the component type.
  */
-inline std::size_t registerComponentType(std::type_index idx) {
-    auto &map = g_componentTypeMap();
-    if (map.find(idx) == map.end()) {
-        std::size_t id = map.size();
-        map[idx] = id;
-        return id;
-    }
-    return map[idx];
-}
+ENGINE_API std::size_t registerComponentType(std::type_index idx);
 
 /**
  * @class Registry

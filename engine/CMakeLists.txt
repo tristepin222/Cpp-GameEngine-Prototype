@@ -37,6 +37,7 @@ target_link_libraries(imguizmo PRIVATE imgui glm::glm)
 set(ENGINE_SOURCES
     src/VulkanRenderer.cpp
     src/core/Application.cpp
+    src/core/PluginManager.cpp
     src/core/FrameManager.cpp
     src/core/JobSystem.cpp
     src/core/PipelineBuilder.cpp
@@ -51,16 +52,19 @@ set(ENGINE_SOURCES
     src/core/VulkanSwapChain.cpp
     src/ecs/EntityFactory.cpp
     src/ecs/EntityCloner.cpp
+    src/ecs/Registry.cpp
     src/editor/EditorUI.cpp
     src/scenes/Scene.cpp
     src/scenes/JSONUtils.cpp
+    src/scenes/ComponentSerializerRegistry.cpp
     src/scenes/SceneManager.cpp
     src/scenes/SceneSerializer.cpp
     src/renderer/ResourceManager.cpp
     src/ufbx.cpp
 )
 
-add_library(engine STATIC ${ENGINE_SOURCES})
+add_library(engine SHARED ${ENGINE_SOURCES})
+set_target_properties(engine PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 # Public include directories (include/ and src/ are exported to linking targets)
 target_include_directories(engine PUBLIC

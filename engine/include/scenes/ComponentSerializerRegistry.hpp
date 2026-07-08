@@ -7,13 +7,15 @@
 #include "ecs/Registry.hpp"
 #include "scenes/JSONUtils.hpp"
 
+#include "core/EngineAPI.hpp"
+
 class VulkanRenderer;
 
 /**
  * @class ComponentSerializerRegistry
  * @brief Singleton registry managing callbacks for component serialization and deserialization.
  */
-class ComponentSerializerRegistry {
+class ENGINE_API ComponentSerializerRegistry {
 public:
     /** @brief Signature for component serialization callbacks. */
     using SerializerCallback = std::function<void(Registry& registry, Entity entity, std::ostream& out, int indentLevel)>;
@@ -37,10 +39,7 @@ public:
      * @brief Retrieves singleton instance of the registry.
      * @return Singleton instance.
      */
-    static ComponentSerializerRegistry& getInstance() {
-        static ComponentSerializerRegistry instance;
-        return instance;
-    }
+    static ComponentSerializerRegistry& getInstance();
 
     /**
      * @brief Registers serializer callbacks for a component type.
