@@ -19,6 +19,7 @@ I analyzed the solver logs and traced the relative contact point velocity $v_{\t
 I implemented a **Phantom Motion Prevention** pass inside the velocity solver in [PhysicsSystem.hpp](../engine/include/ecs/systems/PhysicsSystem.hpp):
 * When the body is in resting contact ($e == 0.0f$) and the center of mass is still moving downwards along the normal ($v_{\text{lin}} \cdot n < 0$), I directly subtract this linear downward velocity component from the body's velocity.
 * This breaks the cancellation feedback loop, forcing the linear velocity to zero and letting normal friction and angular drag damp the remaining angular velocity.
+* *Note*: After fixing contact points and friction scaling, I removed this hack entirely, as the physics resolved naturally and the phantom motion check was blocking pivoting/tipping under gravity.
 
 ---
 
@@ -36,6 +37,7 @@ I inspected the sleep pass in the physics loop. I found that the sleeping logic 
 I implemented a **0.5-second Sleep Timer**:
 * The engine now accumulates time in `sleepTimer` while the body is in contact and its speeds are below the thresholds.
 * The body only goes to sleep if it remains continuously still for `0.5` seconds. This gives it enough time to tip over, roll flat, and settle.
+* I also added a check to force the body to stay awake while the position projection solver is actively correcting coordinates (`J_p > 0.0f`). This prevents premature freezes during structural rotation.
 
 ---
 
@@ -62,8 +64,24 @@ I rewrote the narrow-phase contact solver to implement **Face-Normal Snapping**,
 1. **Corner Contact Anchoring**: If a face is penetrated (normal box-on-ground collision), the contact point is set exactly at the penetrating corner of the cube (`supportB`), rather than being averaged with the floor's center. This ensures correct lever arms for torque.
 2. **Face-Normal Snapping**: If the collision normal is within $18^{\circ}$ of a static body's face axis, we snap the collision normal directly to that face axis. This guarantees normal forces act purely perpendicular to the floor, preventing sideways sliding.
 3. **Gravity-Aware Friction Damping**: I added a fallback to the friction solver. If the normal impulse is zero but the bodies are still in contact, friction is clamped by the static gravity-equivalent force ($mg \cdot dt$) rather than zero. This stops sliding/creeping instantly.
+4. **Passive Velocity Solver (Split Impulse)**: I removed Baumgarte stabilization (velocity bias) from the velocity solver, allowing the position solver to handle all penetration correction geometrically. This makes the simulation 100% stable and prevents artificial energy from causing rubber-ball bouncing or explosions.
+
+---
+
+## 4. Viewport Translation Gizmo Drift
+
+### The Struggle
+When the user dragged a rigid body using the translation (move) gizmo, it rotated erratically in the editor viewport instead of moving in a straight line.
+
+### My Discoveries & Analysis
+The editor UI uses ImGuizmo to manipulate the entity's 3D matrix. In `EditorUI::decomposeMatrixToTransform`, the editor decomposed the modified world matrix back to `t.position`, `t.rotation`, and `t.scale` component values. 
+
+However, decomposing rotation/scale from matrices with non-uniform scaling or parent rotations is susceptible to floating-point rounding errors. During translation-only dragging, a tiny rotational drift was decomposed and written back to the component, changing the matrix slightly in the next frame and causing an unstable feedback loop of erratic rotation.
+
+### The Solution
+I updated `decomposeMatrixToTransform` in [EditorUI.cpp](../engine/src/editor/EditorUI.cpp) to **only apply position decomposition** back to the `Transform` component, keeping rotation and scale completely unchanged. Since the editor currently only manipulates translation via `ImGuizmo::TRANSLATE`, this completely isolates the position and stops any translation-induced rotation drift.
 
 ---
 
 ## Conclusion
-By shifting contact points to the actual penetrating corners, snapping collision normals to floor axes, and introducing a sleep timer, the physics simulation is now completely stable. The cube now tips over, rolls flat, slides to a clean stop, and sleeps exactly like in commercial engines (Unity/Unreal).
+By shifting contact points to the actual penetrating corners, snapping collision normals to floor axes, introducing a sleep timer, and isolating translate-gizmo updates, the physics simulation and viewport interactions are now completely stable. The cube now tips over, rolls flat, slides to a clean stop, and sleeps exactly like in commercial engines (Unity/Unreal).

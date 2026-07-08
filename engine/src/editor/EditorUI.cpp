@@ -643,6 +643,8 @@ void EditorUI::decomposeMatrixToTransform(const glm::mat4& mat, Transform& t)
         matrixTranslation[2]
     );
 
+    // Keep rotation and scale unchanged to prevent decomposition drift/erratic rotation when using translation gizmo
+    /*
     t.rotation = glm::vec3(
         matrixRotation[0],
         matrixRotation[1],
@@ -654,6 +656,7 @@ void EditorUI::decomposeMatrixToTransform(const glm::mat4& mat, Transform& t)
         matrixScale[1],
         matrixScale[2]
     );
+    */
 
     // Safety guards to prevent NaN/Inf propagation to the C++ transform state
     if (std::isnan(t.position.x) || std::isinf(t.position.x) ||
