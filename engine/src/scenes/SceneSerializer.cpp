@@ -19,6 +19,7 @@
 #include "ecs/components/RigidBody.hpp"
 #include "ecs/components/Collider.hpp"
 #include "ecs/components/PlayerControllerComponent.hpp"
+#include "meta/ComponentReflection.hpp"
 
 
 struct ParentNameComponent {
@@ -470,60 +471,8 @@ static bool registerBuiltinComponents() {
         }
     );
 
-    // 8. RigidBody Component
-    reg.registerComponent(
-        "RigidBody",
-        [](Registry& registry, Entity entity, std::ostream& out, int indent) {
-            if (auto* rb = registry.get<RigidBodyComponent>(entity)) {
-                std::string typeStr = (rb->type == RigidBodyType::Static) ? "Static" : "Dynamic";
-                out << ",\n" << JSONUtils::indent(indent) << "\"hasRigidBody\": true";
-                out << ",\n" << JSONUtils::indent(indent) << "\"rbType\": " << JSONUtils::quote(typeStr);
-                out << ",\n" << JSONUtils::indent(indent) << "\"rbMass\": " << rb->mass;
-                out << ",\n" << JSONUtils::indent(indent) << "\"rbVelX\": " << rb->velocity.x;
-                out << ",\n" << JSONUtils::indent(indent) << "\"rbVelY\": " << rb->velocity.y;
-                out << ",\n" << JSONUtils::indent(indent) << "\"rbVelZ\": " << rb->velocity.z;
-                out << ",\n" << JSONUtils::indent(indent) << "\"rbGravityScale\": " << rb->gravityScale;
-                out << ",\n" << JSONUtils::indent(indent) << "\"rbRestitution\": " << rb->restitution;
-                out << ",\n" << JSONUtils::indent(indent) << "\"rbFriction\": " << rb->friction;
-                out << ",\n" << JSONUtils::indent(indent) << "\"rbLinearDrag\": " << rb->linearDrag;
-                out << ",\n" << JSONUtils::indent(indent) << "\"rbAngularDrag\": " << rb->angularDrag;
-                out << ",\n" << JSONUtils::indent(indent) << "\"rbFreezePX\": " << (rb->freezePositionX ? 1.0f : 0.0f);
-                out << ",\n" << JSONUtils::indent(indent) << "\"rbFreezePY\": " << (rb->freezePositionY ? 1.0f : 0.0f);
-                out << ",\n" << JSONUtils::indent(indent) << "\"rbFreezePZ\": " << (rb->freezePositionZ ? 1.0f : 0.0f);
-                out << ",\n" << JSONUtils::indent(indent) << "\"rbFreezeRX\": " << (rb->freezeRotationX ? 1.0f : 0.0f);
-                out << ",\n" << JSONUtils::indent(indent) << "\"rbFreezeRY\": " << (rb->freezeRotationY ? 1.0f : 0.0f);
-                out << ",\n" << JSONUtils::indent(indent) << "\"rbFreezeRZ\": " << (rb->freezeRotationZ ? 1.0f : 0.0f);
-            }
-        },
-        [](Registry& registry, VulkanRenderer&, Entity entity, const std::string& json) {
-            float dummyVal = 0.0f;
-            if (JSONUtils::extractFloatValue(json, "rbMass", dummyVal) || json.find("\"hasRigidBody\": true") != std::string::npos || json.find("\"hasRigidBody\":true") != std::string::npos) {
-                RigidBodyComponent rb{};
-                std::string typeStr = JSONUtils::extractStringValue(json, "rbType");
-                rb.type = (typeStr == "Static") ? RigidBodyType::Static : RigidBodyType::Dynamic;
-                JSONUtils::extractFloatValue(json, "rbMass", rb.mass);
-                JSONUtils::extractFloatValue(json, "rbVelX", rb.velocity.x);
-                JSONUtils::extractFloatValue(json, "rbVelY", rb.velocity.y);
-                JSONUtils::extractFloatValue(json, "rbVelZ", rb.velocity.z);
-                JSONUtils::extractFloatValue(json, "rbGravityScale", rb.gravityScale);
-                JSONUtils::extractFloatValue(json, "rbRestitution", rb.restitution);
-                JSONUtils::extractFloatValue(json, "rbFriction", rb.friction);
-                JSONUtils::extractFloatValue(json, "rbLinearDrag", rb.linearDrag);
-                JSONUtils::extractFloatValue(json, "rbAngularDrag", rb.angularDrag);
-                
-                float fPX = 0.0f, fPY = 0.0f, fPZ = 0.0f;
-                float fRX = 0.0f, fRY = 0.0f, fRZ = 0.0f;
-                if (JSONUtils::extractFloatValue(json, "rbFreezePX", fPX)) rb.freezePositionX = (fPX > 0.5f);
-                if (JSONUtils::extractFloatValue(json, "rbFreezePY", fPY)) rb.freezePositionY = (fPY > 0.5f);
-                if (JSONUtils::extractFloatValue(json, "rbFreezePZ", fPZ)) rb.freezePositionZ = (fPZ > 0.5f);
-                if (JSONUtils::extractFloatValue(json, "rbFreezeRX", fRX)) rb.freezeRotationX = (fRX > 0.5f);
-                if (JSONUtils::extractFloatValue(json, "rbFreezeRY", fRY)) rb.freezeRotationY = (fRY > 0.5f);
-                if (JSONUtils::extractFloatValue(json, "rbFreezeRZ", fRZ)) rb.freezeRotationZ = (fRZ > 0.5f);
-
-                registry.emplace<RigidBodyComponent>(entity, std::move(rb));
-            }
-        }
-    );
+    // Reflected Components (RigidBody and PlayerController)
+    // Registered dynamically at the end of registerBuiltinComponents() via reflection
 
     // 9. Collider Component
     reg.registerComponent(
@@ -568,27 +517,7 @@ static bool registerBuiltinComponents() {
         }
     );
 
-    // 10. PlayerController Component
-    reg.registerComponent(
-        "PlayerController",
-        [](Registry& registry, Entity entity, std::ostream& out, int indent) {
-            if (auto* pc = registry.get<PlayerControllerComponent>(entity)) {
-                out << ",\n" << JSONUtils::indent(indent) << "\"playerSpeed\": " << pc->speed;
-                out << ",\n" << JSONUtils::indent(indent) << "\"playerJumpForce\": " << pc->jumpForce;
-                out << ",\n" << JSONUtils::indent(indent) << "\"playerInteractRange\": " << pc->interactRange;
-            }
-        },
-        [](Registry& registry, VulkanRenderer&, Entity entity, const std::string& json) {
-            float dummyVal = 0.0f;
-            if (JSONUtils::extractFloatValue(json, "playerSpeed", dummyVal)) {
-                PlayerControllerComponent pc{};
-                pc.speed = dummyVal;
-                JSONUtils::extractFloatValue(json, "playerJumpForce", pc.jumpForce);
-                JSONUtils::extractFloatValue(json, "playerInteractRange", pc.interactRange);
-                registry.emplace<PlayerControllerComponent>(entity, std::move(pc));
-            }
-        }
-    );
+    // PlayerController registered dynamically via reflection
 
     // 11. Animator Component
     reg.registerComponent(
@@ -661,6 +590,67 @@ static bool registerBuiltinComponents() {
             }
         }
     );
+
+    // Register all components from the reflection registry dynamically
+    auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
+    for (const auto& refl : reflReg.getReflections()) {
+        reg.registerComponent(
+            refl.name,
+            [refl](Registry& registry, Entity entity, std::ostream& out, int indent) {
+                if (refl.has(registry, entity)) {
+                    void* compPtr = refl.get(registry, entity);
+                    out << ",\n" << JSONUtils::indent(indent) << "\"has" << refl.name << "\": true";
+                    for (const auto& field : refl.fields) {
+                        char* fieldPtr = static_cast<char*>(compPtr) + field.offset;
+                        out << ",\n" << JSONUtils::indent(indent) << "\"" << field.name << "\": ";
+                        if (field.type == Engine::FieldType::Float) {
+                            out << *reinterpret_cast<float*>(fieldPtr);
+                        } else if (field.type == Engine::FieldType::Bool) {
+                            out << (*reinterpret_cast<bool*>(fieldPtr) ? "1.0" : "0.0");
+                        } else if (field.type == Engine::FieldType::Vec3) {
+                            out << JSONUtils::vec3ToJson(*reinterpret_cast<glm::vec3*>(fieldPtr));
+                        } else if (field.type == Engine::FieldType::RigidBodyType) {
+                            std::string typeStr = (*reinterpret_cast<RigidBodyType*>(fieldPtr) == RigidBodyType::Static) ? "Static" : "Dynamic";
+                            out << JSONUtils::quote(typeStr);
+                        }
+                    }
+                }
+            },
+            [refl](Registry& registry, VulkanRenderer&, Entity entity, const std::string& json) {
+                bool hasComp = (json.find("\"has" + refl.name + "\":") != std::string::npos);
+                if (!hasComp && !refl.fields.empty()) {
+                    hasComp = (json.find("\"" + refl.fields[0].name + "\":") != std::string::npos);
+                }
+                if (hasComp) {
+                    if (!refl.has(registry, entity)) {
+                        refl.add(registry, entity);
+                    }
+                    void* compPtr = refl.get(registry, entity);
+                    for (const auto& field : refl.fields) {
+                        char* fieldPtr = static_cast<char*>(compPtr) + field.offset;
+                        if (field.type == Engine::FieldType::Float) {
+                            JSONUtils::extractFloatValue(json, field.name, *reinterpret_cast<float*>(fieldPtr));
+                        } else if (field.type == Engine::FieldType::Bool) {
+                            float fVal = 0.0f;
+                            if (JSONUtils::extractFloatValue(json, field.name, fVal)) {
+                                *reinterpret_cast<bool*>(fieldPtr) = (fVal > 0.5f);
+                            }
+                        } else if (field.type == Engine::FieldType::Vec3) {
+                            float vals[3]{};
+                            if (JSONUtils::extractFloatArray(json, field.name, vals, 3)) {
+                                *reinterpret_cast<glm::vec3*>(fieldPtr) = glm::vec3(vals[0], vals[1], vals[2]);
+                            }
+                        } else if (field.type == Engine::FieldType::RigidBodyType) {
+                            std::string typeStr = JSONUtils::extractStringValue(json, field.name);
+                            if (!typeStr.empty()) {
+                                *reinterpret_cast<RigidBodyType*>(fieldPtr) = (typeStr == "Static") ? RigidBodyType::Static : RigidBodyType::Dynamic;
+                            }
+                        }
+                    }
+                }
+            }
+        );
+    }
 
     return true;
 }

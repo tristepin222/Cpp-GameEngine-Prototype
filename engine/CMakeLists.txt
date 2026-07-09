@@ -60,6 +60,7 @@ set(ENGINE_SOURCES
     src/scenes/SceneManager.cpp
     src/scenes/SceneSerializer.cpp
     src/renderer/ResourceManager.cpp
+    src/meta/ComponentReflection.cpp
     src/ufbx.cpp
 )
 

@@ -145,17 +145,13 @@ private:
      */
     void drawAnimationControllerEditor();
     /**
-     * @brief Renders inline controls for RigidBody component fields.
+     * @brief Renders inline controls for all reflected component fields dynamically.
      */
-    void drawRigidBodyEditor();
+    void drawReflectedComponentsEditor();
     /**
      * @brief Renders inline controls for Collider component fields.
      */
     void drawColliderEditor();
-    /**
-     * @brief Renders inline controls for PlayerController component fields.
-     */
-    void drawPlayerControllerEditor();
     /**
      * @brief Draws a styled banner title inside component panels.
      * @param title Header title text.

@@ -1,4 +1,5 @@
 #include "editor/EditorUI.hpp"
+#include "meta/ComponentReflection.hpp"
 #include "scenes/JSONUtils.hpp"
 #include "ufbx.h"
 #include "cgltf.h"
@@ -964,9 +965,8 @@ void EditorUI::drawInspectorPanel() {
     drawHierarchyEditor();
     drawIKSolverEditor();
     drawAnimationControllerEditor();
-    drawRigidBodyEditor();
+    drawReflectedComponentsEditor();
     drawColliderEditor();
-    drawPlayerControllerEditor();
     drawGridEditor();
     drawCameraEditor();
 
@@ -1014,17 +1014,21 @@ void EditorUI::drawInspectorPanel() {
             registry.emplace<HierarchyComponent>(selectedEntity, HierarchyComponent{});
             statusMessage = "Added Hierarchy Component.";
         }
-        if (!registry.has<RigidBodyComponent>(selectedEntity) && ImGui::MenuItem("RigidBody")) {
-            registry.emplace<RigidBodyComponent>(selectedEntity, RigidBodyComponent{});
-            statusMessage = "Added RigidBody component.";
-        }
         if (!registry.has<ColliderComponent>(selectedEntity) && ImGui::MenuItem("Collider")) {
             registry.emplace<ColliderComponent>(selectedEntity, ColliderComponent{});
             statusMessage = "Added Collider component.";
         }
-        if (!registry.has<PlayerControllerComponent>(selectedEntity) && ImGui::MenuItem("Player Controller")) {
-            registry.emplace<PlayerControllerComponent>(selectedEntity, PlayerControllerComponent{});
-            statusMessage = "Added Player Controller component.";
+
+        // Render reflected components dynamically
+        for (const auto& refl : Engine::ComponentReflectionRegistry::getInstance().getReflections()) {
+            if (!refl.has(registry, selectedEntity)) {
+                std::string menuName = refl.name;
+                if (menuName == "PlayerController") menuName = "Player Controller";
+                if (ImGui::MenuItem(menuName.c_str())) {
+                    refl.add(registry, selectedEntity);
+                    statusMessage = "Added " + refl.name + " component.";
+                }
+            }
         }
 
         // Render dynamic plugin component add options
@@ -2705,66 +2709,148 @@ void EditorUI::drawAnimationControllerEditor() {
     }
 }
 
-void EditorUI::drawRigidBodyEditor() {
-    RigidBodyComponent* rb = registry.get<RigidBodyComponent>(selectedEntity);
-    if (!rb) return;
+void EditorUI::drawReflectedComponentsEditor() {
+    auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
+    for (const auto& refl : reflReg.getReflections()) {
+        if (!refl.has(registry, selectedEntity)) continue;
 
-    bool visible = true;
-    bool open = CollapsingHeader("RigidBody", &visible, ImGuiTreeNodeFlags_DefaultOpen);
-    if (!visible) {
-        registry.remove<RigidBodyComponent>(selectedEntity);
-        statusMessage = "Removed RigidBody component.";
-        return;
-    }
+        void* compPtr = refl.get(registry, selectedEntity);
+        bool visible = true;
+        
+        std::string headerName = refl.name;
+        if (headerName == "PlayerController") headerName = "Player Controller";
 
-    if (!open) return;
+        bool open = CollapsingHeader(headerName.c_str(), &visible, ImGuiTreeNodeFlags_DefaultOpen);
+        if (!visible) {
+            refl.remove(registry, selectedEntity);
+            statusMessage = "Removed " + refl.name + " component.";
+            continue;
+        }
 
-    // Type selection
-    const char* types[] = { "Dynamic", "Static" };
-    int currentType = (rb->type == RigidBodyType::Static) ? 1 : 0;
-    if (Combo("Body Type", &currentType, types, 2)) {
-        rb->type = (currentType == 1) ? RigidBodyType::Static : RigidBodyType::Dynamic;
-    }
+        if (!open) continue;
 
-    if (DragFloat("Mass", &rb->mass, 0.05f, 0.001f, 1000.0f)) {
-        if (rb->mass < 0.001f) rb->mass = 0.001f;
-    }
-    DragFloat3("Velocity", &rb->velocity[0], 0.05f);
-    DragFloat3("Force Accumulator", &rb->force[0], 0.05f);
-    DragFloat("Gravity Scale", &rb->gravityScale, 0.05f, -10.0f, 10.0f);
-    if (SliderFloat("Restitution", &rb->restitution, 0.0f, 1.0f)) {
-        if (rb->restitution < 0.0f) rb->restitution = 0.0f;
-        if (rb->restitution > 1.0f) rb->restitution = 1.0f;
-    }
-    if (SliderFloat("Friction", &rb->friction, 0.0f, 1.0f)) {
-        if (rb->friction < 0.0f) rb->friction = 0.0f;
-        if (rb->friction > 1.0f) rb->friction = 1.0f;
-    }
-    if (DragFloat("Linear Drag", &rb->linearDrag, 0.01f, 0.0f, 10.0f)) {
-        if (rb->linearDrag < 0.0f) rb->linearDrag = 0.0f;
-    }
-    if (DragFloat("Angular Drag", &rb->angularDrag, 0.01f, 0.0f, 10.0f)) {
-        if (rb->angularDrag < 0.0f) rb->angularDrag = 0.0f;
-    }
+        for (const auto& field : refl.fields) {
+            char* fieldPtr = static_cast<char*>(compPtr) + field.offset;
 
-    Separator();
-    Text("Constraints");
-    
-    Text("Freeze Position");
-    SameLine(130.0f);
-    Checkbox("X##FreezePX", &rb->freezePositionX);
-    SameLine(190.0f);
-    Checkbox("Y##FreezePY", &rb->freezePositionY);
-    SameLine(250.0f);
-    Checkbox("Z##FreezePZ", &rb->freezePositionZ);
+            // Compute user-friendly label
+            std::string label = field.name;
+            if (label.rfind("rb", 0) == 0 && label.size() > 2 && std::isupper(label[2])) {
+                label = label.substr(2);
+            } else if (label.rfind("player", 0) == 0 && label.size() > 6 && std::isupper(label[6])) {
+                label = label.substr(6);
+            }
 
-    Text("Freeze Rotation");
-    SameLine(130.0f);
-    Checkbox("X##FreezeRX", &rb->freezeRotationX);
-    SameLine(190.0f);
-    Checkbox("Y##FreezeRY", &rb->freezeRotationY);
-    SameLine(250.0f);
-    Checkbox("Z##FreezeRZ", &rb->freezeRotationZ);
+            // Custom spacing/titles for RigidBody constraints
+            if (label == "FreezePX") {
+                Separator();
+                Text("Constraints");
+                Text("Freeze Position");
+                SameLine(130.0f);
+                Checkbox("X##FreezePX", reinterpret_cast<bool*>(fieldPtr));
+                continue;
+            }
+            if (label == "FreezePY") {
+                SameLine(190.0f);
+                Checkbox("Y##FreezePY", reinterpret_cast<bool*>(fieldPtr));
+                continue;
+            }
+            if (label == "FreezePZ") {
+                SameLine(250.0f);
+                Checkbox("Z##FreezePZ", reinterpret_cast<bool*>(fieldPtr));
+                continue;
+            }
+            if (label == "FreezeRX") {
+                Text("Freeze Rotation");
+                SameLine(130.0f);
+                Checkbox("X##FreezeRX", reinterpret_cast<bool*>(fieldPtr));
+                continue;
+            }
+            if (label == "FreezeRY") {
+                SameLine(190.0f);
+                Checkbox("Y##FreezeRY", reinterpret_cast<bool*>(fieldPtr));
+                continue;
+            }
+            if (label == "FreezeRZ") {
+                SameLine(250.0f);
+                Checkbox("Z##FreezeRZ", reinterpret_cast<bool*>(fieldPtr));
+                continue;
+            }
+
+            // Capitalize camelCase for cleaner drawing
+            std::string displayLabel;
+            for (size_t i = 0; i < label.size(); ++i) {
+                if (i > 0 && std::isupper(label[i]) && !std::isupper(label[i-1])) {
+                    displayLabel += " ";
+                }
+                displayLabel += label[i];
+            }
+            if (!displayLabel.empty()) displayLabel[0] = std::toupper(displayLabel[0]);
+
+            std::string imguiId = displayLabel + "##" + refl.name + "_" + field.name;
+
+            if (field.type == Engine::FieldType::Float) {
+                if (field.name == "rbVelX" || field.name == "rbVelY" || field.name == "rbVelZ") {
+                    DragFloat(imguiId.c_str(), reinterpret_cast<float*>(fieldPtr), 0.05f);
+                } else if (field.name == "rbRestitution" || field.name == "rbFriction") {
+                    SliderFloat(imguiId.c_str(), reinterpret_cast<float*>(fieldPtr), 0.0f, 1.0f);
+                } else {
+                    DragFloat(imguiId.c_str(), reinterpret_cast<float*>(fieldPtr), 0.05f);
+                }
+            } else if (field.type == Engine::FieldType::Bool) {
+                Checkbox(imguiId.c_str(), reinterpret_cast<bool*>(fieldPtr));
+            } else if (field.type == Engine::FieldType::RigidBodyType) {
+                const char* types[] = { "Dynamic", "Static" };
+                int currentType = (*reinterpret_cast<RigidBodyType*>(fieldPtr) == RigidBodyType::Static) ? 1 : 0;
+                if (Combo(imguiId.c_str(), &currentType, types, 2)) {
+                    *reinterpret_cast<RigidBodyType*>(fieldPtr) = (currentType == 1) ? RigidBodyType::Static : RigidBodyType::Dynamic;
+                }
+            }
+        }
+
+        // Draw runtime diagnostic section for PlayerController if playing
+        if (refl.name == "PlayerController" && editorMode.isPlaying) {
+            auto* pc = static_cast<PlayerControllerComponent*>(compPtr);
+            ImGui::Separator();
+            ImGui::Text("Runtime State:");
+            ImGui::Text("Debug Update Count: %d", pc->debugRunningCount);
+
+            // Compute camera direction exactly as in PlayerControllerSystem
+            glm::vec3 testForward(0.0f, 0.0f, -1.0f);
+            glm::vec3 testRight(1.0f, 0.0f, 0.0f);
+            int cameraCount = 0;
+            for (auto [camEntity, cam, camTransform] : registry.view<Camera, Transform>()) {
+                cameraCount++;
+                float yaw = camTransform.rotation.y;
+                testForward.x = cos(glm::radians(yaw));
+                testForward.y = 0.0f;
+                testForward.z = sin(glm::radians(yaw));
+                if (glm::length(testForward) > 1e-4f) {
+                    testForward = glm::normalize(testForward);
+                }
+                testRight = glm::normalize(glm::cross(testForward, glm::vec3(0.0f, 1.0f, 0.0f)));
+                break;
+            }
+            ImGui::Text("Cameras found: %d", cameraCount);
+            ImGui::Text("Cam Forward: (%.3f, %.3f)", testForward.x, testForward.z);
+            ImGui::Text("Cam Right: (%.3f, %.3f)", testRight.x, testRight.z);
+            ImGui::Text("MoveDir Length: %.4f", pc->debugMoveDirLength);
+            ImGui::Text("PC Set Velocity: (%.3f, %.3f, %.3f)", pc->debugRbVelocity.x, pc->debugRbVelocity.y, pc->debugRbVelocity.z);
+
+            if (auto* rb = registry.get<RigidBodyComponent>(selectedEntity)) {
+                ImGui::Text("Sleeping: %s", rb->sleeping ? "Yes" : "No");
+                ImGui::Text("Velocity: (%.3f, %.3f, %.3f)", rb->velocity.x, rb->velocity.y, rb->velocity.z);
+            } else {
+                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Warning: No RigidBodyComponent found!");
+            }
+
+            if (window) {
+                ImGui::Text("W pressed: %s", (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) ? "Yes" : "No");
+                ImGui::Text("A pressed: %s", (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) ? "Yes" : "No");
+                ImGui::Text("S pressed: %s", (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) ? "Yes" : "No");
+                ImGui::Text("D pressed: %s", (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) ? "Yes" : "No");
+            }
+        }
+    }
 }
 
 void EditorUI::drawColliderEditor() {
@@ -2818,67 +2904,7 @@ void EditorUI::drawColliderEditor() {
     DragFloat3("Center Offset", &col->offset[0], 0.05f);
 }
 
-void EditorUI::drawPlayerControllerEditor() {
-    PlayerControllerComponent* pc = registry.get<PlayerControllerComponent>(selectedEntity);
-    if (!pc) return;
 
-    bool visible = true;
-    bool open = CollapsingHeader("Player Controller", &visible, ImGuiTreeNodeFlags_DefaultOpen);
-    if (!visible) {
-        registry.remove<PlayerControllerComponent>(selectedEntity);
-        statusMessage = "Removed Player Controller component.";
-        return;
-    }
-
-    if (!open) return;
-
-    DragFloat("Speed##PlayerSpeed", &pc->speed, 0.05f, 0.1f, 100.0f);
-    DragFloat("Jump Force##PlayerJump", &pc->jumpForce, 0.05f, 0.1f, 100.0f);
-    DragFloat("Interact Range##PlayerInteract", &pc->interactRange, 0.05f, 0.1f, 10.0f);
-
-    // Draw real-time runtime state if playing
-    if (editorMode.isPlaying) {
-        ImGui::Separator();
-        ImGui::Text("Runtime State:");
-        ImGui::Text("Debug Update Count: %d", pc->debugRunningCount);
-
-        // Compute camera direction exactly as in PlayerControllerSystem
-        glm::vec3 testForward(0.0f, 0.0f, -1.0f);
-        glm::vec3 testRight(1.0f, 0.0f, 0.0f);
-        int cameraCount = 0;
-        for (auto [camEntity, cam, camTransform] : registry.view<Camera, Transform>()) {
-            cameraCount++;
-            float yaw = camTransform.rotation.y;
-            testForward.x = cos(glm::radians(yaw));
-            testForward.y = 0.0f;
-            testForward.z = sin(glm::radians(yaw));
-            if (glm::length(testForward) > 1e-4f) {
-                testForward = glm::normalize(testForward);
-            }
-            testRight = glm::normalize(glm::cross(testForward, glm::vec3(0.0f, 1.0f, 0.0f)));
-            break;
-        }
-        ImGui::Text("Cameras found: %d", cameraCount);
-        ImGui::Text("Cam Forward: (%.3f, %.3f)", testForward.x, testForward.z);
-        ImGui::Text("Cam Right: (%.3f, %.3f)", testRight.x, testRight.z);
-        ImGui::Text("MoveDir Length: %.4f", pc->debugMoveDirLength);
-        ImGui::Text("PC Set Velocity: (%.3f, %.3f, %.3f)", pc->debugRbVelocity.x, pc->debugRbVelocity.y, pc->debugRbVelocity.z);
-
-        if (auto* rb = registry.get<RigidBodyComponent>(selectedEntity)) {
-            ImGui::Text("Sleeping: %s", rb->sleeping ? "Yes" : "No");
-            ImGui::Text("Velocity: (%.3f, %.3f, %.3f)", rb->velocity.x, rb->velocity.y, rb->velocity.z);
-        } else {
-            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Warning: No RigidBodyComponent found!");
-        }
-
-        if (window) {
-            ImGui::Text("W pressed: %s", (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) ? "Yes" : "No");
-            ImGui::Text("A pressed: %s", (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) ? "Yes" : "No");
-            ImGui::Text("S pressed: %s", (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) ? "Yes" : "No");
-            ImGui::Text("D pressed: %s", (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) ? "Yes" : "No");
-        }
-    }
-}
 
 
 glm::mat4 EditorUI::getEntityWorldMatrix(Entity entity, int depth) {
