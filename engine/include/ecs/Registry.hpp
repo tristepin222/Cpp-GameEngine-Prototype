@@ -74,6 +74,17 @@ public:
     }
 
     /**
+     * @brief Destroys all entities and clears all component storages.
+     */
+    void clear() {
+        auto aliveCopy = entities.getAlive();
+        for (auto id : aliveCopy) {
+            destroy(Entity(id));
+        }
+        storages.clear();
+    }
+
+    /**
      * @brief Checks if an entity is alive and valid.
      * @param e Entity to check.
      * @return True if valid, false otherwise.

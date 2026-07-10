@@ -94,6 +94,19 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         // Serializer
         [](Registry& registry, Entity entity, std::ostream& out, int indent) {
             if (auto* vcam = registry.get<CinemachineVirtualCamera>(entity)) {
+                std::string followName = "";
+                if (vcam->followTarget.getId() != Entity::INVALID_ENTITY && registry.isValid(vcam->followTarget)) {
+                    if (auto* nameComp = registry.get<Name>(vcam->followTarget)) {
+                        followName = nameComp->value;
+                    }
+                }
+                std::string lookAtName = "";
+                if (vcam->lookAtTarget.getId() != Entity::INVALID_ENTITY && registry.isValid(vcam->lookAtTarget)) {
+                    if (auto* nameComp = registry.get<Name>(vcam->lookAtTarget)) {
+                        lookAtName = nameComp->value;
+                    }
+                }
+
                 out << ",\n";
                 out << JSONUtils::indent(indent) << "\"entityType\": \"CinemachineVirtualCamera\",\n";
                 out << JSONUtils::indent(indent) << "\"active\": " << (vcam->active ? "true" : "false") << ",\n";
@@ -101,6 +114,8 @@ PLUGIN_API void initPlugin(PluginContext* context) {
                 out << JSONUtils::indent(indent) << "\"fov\": " << vcam->fov << ",\n";
                 out << JSONUtils::indent(indent) << "\"followTarget\": " << static_cast<float>(vcam->followTarget.getId()) << ",\n";
                 out << JSONUtils::indent(indent) << "\"lookAtTarget\": " << static_cast<float>(vcam->lookAtTarget.getId()) << ",\n";
+                out << JSONUtils::indent(indent) << "\"followTargetName\": \"" << followName << "\",\n";
+                out << JSONUtils::indent(indent) << "\"lookAtTargetName\": \"" << lookAtName << "\",\n";
                 out << JSONUtils::indent(indent) << "\"followDamping\": " << vcam->followDamping << ",\n";
                 out << JSONUtils::indent(indent) << "\"lookAtDamping\": " << vcam->lookAtDamping << ",\n";
                 out << JSONUtils::indent(indent) << "\"followOffsetX\": " << vcam->followOffset.x << ",\n";
@@ -138,6 +153,9 @@ PLUGIN_API void initPlugin(PluginContext* context) {
                 if (JSONUtils::extractFloatValue(json, "lookAtTarget", lookAtIdVal)) {
                     vcam.lookAtTarget = Entity(static_cast<std::uint32_t>(lookAtIdVal));
                 }
+
+                vcam.followTargetName = JSONUtils::extractStringValue(json, "followTargetName");
+                vcam.lookAtTargetName = JSONUtils::extractStringValue(json, "lookAtTargetName");
             }
         }
     );

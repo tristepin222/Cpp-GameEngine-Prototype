@@ -1,7 +1,7 @@
 #pragma once
 #include <vector>
 #include "../ecs/components/mesh.hpp"
-#include "../../src/core/VulkanBuffer.hpp"
+#include "core/VulkanBuffer.hpp"
 
 /**
  * @struct MeshSoA
@@ -35,5 +35,22 @@ struct MeshSoA {
         indexBuffers.emplace_back();
 
         return ids.size() - 1;
+    }
+
+    /**
+     * @brief Safely destroys and clears all allocated Vulkan buffers.
+     */
+    void clear() {
+        for (auto& vb : vertexBuffers) {
+            vb.destroy();
+        }
+        for (auto& ib : indexBuffers) {
+            ib.destroy();
+        }
+        vertexBuffers.clear();
+        indexBuffers.clear();
+        ids.clear();
+        vertices.clear();
+        indices.clear();
     }
 };

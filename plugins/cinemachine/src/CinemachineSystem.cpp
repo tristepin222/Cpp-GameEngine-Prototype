@@ -6,10 +6,53 @@
 #include <iostream>
 #include <algorithm>
 
+#include "ecs/components/Name.hpp"
+
 CinemachineSystem::CinemachineSystem(Registry& reg, EditorModeState& mode)
     : registry(reg), editorMode(mode) {}
 
 void CinemachineSystem::update(float dt) {
+    // Resolve targets by name on load or if target IDs are invalid/incorrect
+    for (auto [entity, vcam] : registry.view<CinemachineVirtualCamera>()) {
+        // 1. Resolve follow target
+        bool needResolveFollow = false;
+        if (vcam.followTarget.getId() == Entity::INVALID_ENTITY || !registry.isValid(vcam.followTarget)) {
+            needResolveFollow = true;
+        } else {
+            auto* nameComp = registry.get<Name>(vcam.followTarget);
+            if (!nameComp || nameComp->value != vcam.followTargetName) {
+                needResolveFollow = true;
+            }
+        }
+        if (needResolveFollow && !vcam.followTargetName.empty()) {
+            for (auto [ent, nameComp] : registry.view<Name>()) {
+                if (nameComp.value == vcam.followTargetName) {
+                    vcam.followTarget = ent;
+                    break;
+                }
+            }
+        }
+
+        // 2. Resolve LookAt target
+        bool needResolveLookAt = false;
+        if (vcam.lookAtTarget.getId() == Entity::INVALID_ENTITY || !registry.isValid(vcam.lookAtTarget)) {
+            needResolveLookAt = true;
+        } else {
+            auto* nameComp = registry.get<Name>(vcam.lookAtTarget);
+            if (!nameComp || nameComp->value != vcam.lookAtTargetName) {
+                needResolveLookAt = true;
+            }
+        }
+        if (needResolveLookAt && !vcam.lookAtTargetName.empty()) {
+            for (auto [ent, nameComp] : registry.view<Name>()) {
+                if (nameComp.value == vcam.lookAtTargetName) {
+                    vcam.lookAtTarget = ent;
+                    break;
+                }
+            }
+        }
+    }
+
     // Only update and control the camera during Play Mode
     if (!editorMode.isPlaying) {
         return;

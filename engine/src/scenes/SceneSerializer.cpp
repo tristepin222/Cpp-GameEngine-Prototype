@@ -101,8 +101,8 @@ static bool registerBuiltinComponents() {
                 registry.emplace<Grid>(entity, Grid{ spacing, size, color });
                 
                 PipelineHandle gridPipeline = renderer.createPipelineForShaders(
-                    "build/shaders/grid.vert.spv",
-                    "build/shaders/grid.frag.spv"
+                    renderer.resolveShaderPath("build/shaders/grid.vert.spv"),
+                    renderer.resolveShaderPath("build/shaders/grid.frag.spv")
                 );
                 
                 if (Material* material = registry.get<Material>(entity)) {
@@ -244,8 +244,8 @@ static bool registerBuiltinComponents() {
                 
                 bool hasSkin = registry.has<SkeletonComponent>(entity);
                 PipelineHandle pipeline = renderer.createPipelineForShaders(
-                    hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
-                    "build/shaders/unlit.frag.spv"
+                    hasSkin ? renderer.resolveShaderPath("build/shaders/skinned.vert.spv") : renderer.resolveShaderPath("build/shaders/unlit.vert.spv"),
+                    renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
                 );
 
                 if (Material* material = registry.get<Material>(entity)) {

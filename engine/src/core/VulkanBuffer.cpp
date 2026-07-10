@@ -46,6 +46,7 @@ VulkanBuffer& VulkanBuffer::operator=(VulkanBuffer&& other) noexcept {
 void VulkanBuffer::create(VkDevice dev, VkPhysicalDevice phys,
     VkDeviceSize size, VkBufferUsageFlags usage,
     VkMemoryPropertyFlags properties) {
+    destroy();
     device = dev;
     physicalDevice = phys;
     bufferSize = size;

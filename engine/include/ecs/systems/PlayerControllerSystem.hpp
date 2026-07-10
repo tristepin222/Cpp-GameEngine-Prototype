@@ -1,12 +1,14 @@
 #pragma once
 #include "ecs/System.hpp"
 #include "ecs/Registry.hpp"
-#include "editor/EditorModeState.hpp"
 #include "renderer/VulkanRenderer.hpp"
+#include "editor/EditorModeState.hpp"
 
 /**
  * @class PlayerControllerSystem
- * @brief System that processes player inputs to drive movement, jumps, and interaction physics.
+ * @brief Built-in system that processes PlayerControllerComponent entities to drive
+ *        movement (WASD), jumping (Space), and interaction (E) via physics impulses.
+ *        Runs automatically in play mode when an entity has PlayerControllerComponent + RigidBodyComponent.
  */
 class PlayerControllerSystem : public System {
 public:

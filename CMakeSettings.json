@@ -1,0 +1,13 @@
+{
+  "configurations": [
+    {
+      "name": "x64-msvc-release",
+      "generator": "Visual Studio 17 2022",
+      "configurationType": "Release",
+      "architecture": "x64",
+      "toolset": "v143",
+      "buildRoot": "${workspaceRoot}/build/msvc",
+      "installRoot": "${workspaceRoot}/build/msvc/install"
+    }
+  ]
+}

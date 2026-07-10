@@ -55,8 +55,9 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(stb)
 
 # --- Add Subdirectories ---
+# sandbox_game is now a standalone project — build it with build_game.bat
 add_subdirectory(engine)
-add_subdirectory(sandbox_game)
 add_subdirectory(plugins)
 
 message(STATUS "Configured engine workspace subdirectories")
+

@@ -28,7 +28,7 @@ public:
      * @param sceneManager Reference to the Scene Manager.
      * @param editorMode Reference to the Editor Mode State.
      */
-    EditorUI(Registry& registry, VulkanRenderer& renderer, SceneManager& sceneManager, EditorModeState& editorMode);
+    EditorUI(Registry& registry, VulkanRenderer& renderer, SceneManager& sceneManager, EditorModeState& editorMode, const std::string& startScenePath = "assets/scenes/test_scene.json");
     /**
      * @brief Destroy the Editor UI object.
      */
@@ -178,6 +178,10 @@ private:
      */
     void drawGizmo();
     /**
+     * @brief Renders the Build Settings panel for packaging the game.
+     */
+    void drawBuildSettingsPanel();
+    /**
      * @brief Helper function to extract Euler transform fields from a 4x4 matrix.
      * @param mat Input matrix.
      * @param t Output transform parameters.
@@ -232,4 +236,12 @@ private:
     bool previousToggleKeyDown = false;
     /** @brief Flag to toggle drawing collider wireframes in the viewport. */
     bool showColliders = false;
+    /** @brief Whether the Build Settings panel is open. */
+    bool showBuildSettings = false;
+    /** @brief Output path for game builds. */
+    std::string buildOutputPath = "build/";
+    /** @brief Status message from last build attempt. */
+    std::string buildStatusMessage;
+    /** @brief Whether a build is currently in progress. */
+    bool buildInProgress = false;
 };

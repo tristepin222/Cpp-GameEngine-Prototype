@@ -2,6 +2,8 @@
 #include "ecs/Entity.hpp"
 #include <glm/glm.hpp>
 
+#include <string>
+
 /**
  * @struct CinemachineVirtualCamera
  * @brief Addon component that represents a virtual camera.
@@ -10,6 +12,9 @@
 struct CinemachineVirtualCamera {
     Entity followTarget = Entity();
     Entity lookAtTarget = Entity();
+
+    std::string followTargetName;
+    std::string lookAtTargetName;
 
     glm::vec3 followOffset = glm::vec3(0.0f, 4.0f, 8.0f);
     float followDamping = 2.0f; // Damping rate (higher = slower, 0.0f = instant)

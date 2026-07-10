@@ -24,9 +24,12 @@ target_link_libraries(cinemachine_plugin PRIVATE
     glfw
 )
 
-# Post-Build Step: Copy DLL directly to sandbox_game's executable plugins directory
+
+# Post-Build Step: Copy DLL to sdk/plugins/ so build_game.bat can pick it up
+set(PLUGIN_SDK_OUTPUT "${CMAKE_SOURCE_DIR}/sdk/plugins")
 add_custom_command(TARGET cinemachine_plugin POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:sandbox_game>/plugins"
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:cinemachine_plugin> "$<TARGET_FILE_DIR:sandbox_game>/plugins/"
-    COMMENT "Copying Cinemachine plugin DLL to sandbox plugins directory..."
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${PLUGIN_SDK_OUTPUT}"
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:cinemachine_plugin> "${PLUGIN_SDK_OUTPUT}/"
+    COMMENT "Copying Cinemachine plugin DLL to sdk/plugins/..."
 )
+

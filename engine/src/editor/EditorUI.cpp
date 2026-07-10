@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <fstream>
+#include <cstdlib>
 
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -223,8 +224,8 @@ static bool entityHasSkin(Registry& registry, Entity entity) {
  * @param sceneManager Reference to scene manager.
  * @param editorMode Reference to editor mode state.
  */
-EditorUI::EditorUI(Registry& registry, VulkanRenderer& renderer, SceneManager& sceneManager, EditorModeState& editorMode)
-    : registry(registry), renderer(renderer), sceneManager(sceneManager), editorMode(editorMode) {
+EditorUI::EditorUI(Registry& registry, VulkanRenderer& renderer, SceneManager& sceneManager, EditorModeState& editorMode, const std::string& startScenePath)
+    : registry(registry), renderer(renderer), sceneManager(sceneManager), editorMode(editorMode), scenePath(startScenePath) {
 }
 
 /**
@@ -421,6 +422,10 @@ void EditorUI::drawPanels() {
                 }
             }
             ImGui::Separator();
+            if (ImGui::MenuItem("Build Settings", "Ctrl+Shift+B")) {
+                showBuildSettings = true;
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("Exit", "Alt+F4")) {
                 glfwSetWindowShouldClose(window, GLFW_TRUE);
             }
@@ -495,6 +500,11 @@ void EditorUI::drawPanels() {
     
     // 7. Float Import Settings panel
     drawImportSettingsWindow();
+
+    // 8. Build Settings panel (floating modal)
+    if (showBuildSettings) {
+        drawBuildSettingsPanel();
+    }
 }
 
 /**
@@ -1280,8 +1290,8 @@ void EditorUI::drawMeshEditor() {
                         if (auto* material = registry.get<Material>(selectedEntity)) {
                             bool hasSkin = entityHasSkin(registry, selectedEntity);
                             PipelineHandle pipeline = renderer.createPipelineForShaders(
-                                hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
-                                "build/shaders/unlit.frag.spv"
+                                hasSkin ? renderer.resolveShaderPath("build/shaders/skinned.vert.spv") : renderer.resolveShaderPath("build/shaders/unlit.vert.spv"),
+                                renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
                             );
                             material->pipeline = pipeline.pipeline;
                             material->pipelineLayout = pipeline.layout;
@@ -1314,8 +1324,8 @@ void EditorUI::drawMeshEditor() {
                                 Material material{ color };
                                 bool hasSkin = entityHasSkin(registry, child);
                                 PipelineHandle pipeline = renderer.createPipelineForShaders(
-                                    hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
-                                    "build/shaders/unlit.frag.spv"
+                                    hasSkin ? renderer.resolveShaderPath("build/shaders/skinned.vert.spv") : renderer.resolveShaderPath("build/shaders/unlit.vert.spv"),
+                                    renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
                                 );
                                 material.pipeline = pipeline.pipeline;
                                 material.pipelineLayout = pipeline.layout;
@@ -1349,8 +1359,8 @@ void EditorUI::drawMeshEditor() {
                         if (auto* material = registry.get<Material>(selectedEntity)) {
                             bool hasSkin = entityHasSkin(registry, selectedEntity);
                             PipelineHandle pipeline = renderer.createPipelineForShaders(
-                                hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
-                                "build/shaders/unlit.frag.spv"
+                                hasSkin ? renderer.resolveShaderPath("build/shaders/skinned.vert.spv") : renderer.resolveShaderPath("build/shaders/unlit.vert.spv"),
+                                renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
                             );
                             material->pipeline = pipeline.pipeline;
                             material->pipelineLayout = pipeline.layout;
@@ -1389,8 +1399,8 @@ void EditorUI::drawMeshEditor() {
                 if (auto* material = registry.get<Material>(selectedEntity)) {
                     bool hasSkin = entityHasSkin(registry, selectedEntity);
                     PipelineHandle pipeline = renderer.createPipelineForShaders(
-                        hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
-                        "build/shaders/unlit.frag.spv"
+                        hasSkin ? renderer.resolveShaderPath("build/shaders/skinned.vert.spv") : renderer.resolveShaderPath("build/shaders/unlit.vert.spv"),
+                        renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
                     );
                     material->pipeline = pipeline.pipeline;
                     material->pipelineLayout = pipeline.layout;
@@ -1659,8 +1669,8 @@ void EditorUI::drawAssetBrowser() {
                                         if (auto* material = registry.get<Material>(selectedEntity)) {
                                             bool hasSkin = entityHasSkin(registry, selectedEntity);
                                             PipelineHandle pipeline = renderer.createPipelineForShaders(
-                                                hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
-                                                "build/shaders/unlit.frag.spv"
+                                                hasSkin ? renderer.resolveShaderPath("build/shaders/skinned.vert.spv") : renderer.resolveShaderPath("build/shaders/unlit.vert.spv"),
+                                                renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
                                             );
                                             material->pipeline = pipeline.pipeline;
                                             material->pipelineLayout = pipeline.layout;
@@ -1682,15 +1692,15 @@ void EditorUI::drawAssetBrowser() {
                                             childMesh.gltfPath = pathStr;
                                             childMesh.primitiveIndex = i;
                                             try {
-                                                Mesh loaded = renderer.resourceManager->loadMesh(pathStr, renderer, i);
-                                                childMesh.vertices = loaded.vertices;
-                                                childMesh.indices = loaded.indices;
-                                                childMesh.vertexBuffer = loaded.vertexBuffer;
-                                                childMesh.indexBuffer = loaded.indexBuffer;
-                                                childMesh.id = loaded.id;
-                                                childMesh.nodeName = loaded.nodeName;
+                                                Mesh loadedChild = renderer.resourceManager->loadMesh(pathStr, renderer, i);
+                                                childMesh.vertices = loadedChild.vertices;
+                                                childMesh.indices = loadedChild.indices;
+                                                childMesh.vertexBuffer = loadedChild.vertexBuffer;
+                                                childMesh.indexBuffer = loadedChild.indexBuffer;
+                                                childMesh.id = loadedChild.id;
+                                                childMesh.nodeName = loadedChild.nodeName;
 
-                                                std::string childName = loaded.nodeName.empty() ? (baseName + "_part" + std::to_string(i)) : loaded.nodeName;
+                                                std::string childName = loadedChild.nodeName.empty() ? (baseName + "_part" + std::to_string(i)) : loadedChild.nodeName;
                                                 registry.emplace<Name>(child, Name{ childName });
                                                 
                                                 registry.emplace<Mesh>(child, std::move(childMesh));
@@ -1699,8 +1709,8 @@ void EditorUI::drawAssetBrowser() {
                                                 Material material{ color };
                                                 bool hasSkin = entityHasSkin(registry, child);
                                                 PipelineHandle pipeline = renderer.createPipelineForShaders(
-                                                    hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
-                                                    "build/shaders/unlit.frag.spv"
+                                                    hasSkin ? renderer.resolveShaderPath("build/shaders/skinned.vert.spv") : renderer.resolveShaderPath("build/shaders/unlit.vert.spv"),
+                                                    renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
                                                 );
                                                 material.pipeline = pipeline.pipeline;
                                                 material.pipelineLayout = pipeline.layout;
@@ -1739,8 +1749,8 @@ void EditorUI::drawAssetBrowser() {
                                         if (auto* material = registry.get<Material>(selectedEntity)) {
                                             bool hasSkin = entityHasSkin(registry, selectedEntity);
                                             PipelineHandle pipeline = renderer.createPipelineForShaders(
-                                                hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
-                                                "build/shaders/unlit.frag.spv"
+                                                hasSkin ? renderer.resolveShaderPath("build/shaders/skinned.vert.spv") : renderer.resolveShaderPath("build/shaders/unlit.vert.spv"),
+                                                renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
                                             );
                                             material->pipeline = pipeline.pipeline;
                                             material->pipelineLayout = pipeline.layout;
@@ -2342,8 +2352,8 @@ void EditorUI::drawAnimatorEditor() {
                     if (auto* material = registry.get<Material>(selectedEntity)) {
                         bool hasSkin = entityHasSkin(registry, selectedEntity);
                         PipelineHandle pipeline = renderer.createPipelineForShaders(
-                            hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
-                            "build/shaders/unlit.frag.spv"
+                            hasSkin ? renderer.resolveShaderPath("build/shaders/skinned.vert.spv") : renderer.resolveShaderPath("build/shaders/unlit.vert.spv"),
+                            renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
                         );
                         material->pipeline = pipeline.pipeline;
                         material->pipelineLayout = pipeline.layout;
@@ -2370,8 +2380,8 @@ void EditorUI::drawAnimatorEditor() {
             if (auto* material = registry.get<Material>(selectedEntity)) {
                 bool hasSkin = entityHasSkin(registry, selectedEntity);
                 PipelineHandle pipeline = renderer.createPipelineForShaders(
-                    hasSkin ? "build/shaders/skinned.vert.spv" : "build/shaders/unlit.vert.spv",
-                    "build/shaders/unlit.frag.spv"
+                    hasSkin ? renderer.resolveShaderPath("build/shaders/skinned.vert.spv") : renderer.resolveShaderPath("build/shaders/unlit.vert.spv"),
+                    renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
                 );
                 material->pipeline = pipeline.pipeline;
                 material->pipelineLayout = pipeline.layout;
@@ -3313,7 +3323,6 @@ void EditorUI::drawImportSettingsWindow() {
                 }
             }
         }
-        
         s_openImportSettingsWindow = false;
     }
     SameLine();
@@ -3342,3 +3351,124 @@ std::vector<std::pair<std::string, EditorUI::ComponentAddCallback>>& EditorUI::g
     return s_callbacks;
 }
 
+void EditorUI::drawBuildSettingsPanel() {
+    ImGui::SetNextWindowSize(ImVec2(520, 420), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(
+        ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 260.0f,
+               ImGui::GetIO().DisplaySize.y * 0.5f - 210.0f),
+        ImGuiCond_FirstUseEver
+    );
+
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse;
+    if (!ImGui::Begin("Build Settings", &showBuildSettings, flags)) {
+        ImGui::End();
+        return;
+    }
+
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.75f, 0.2f, 1.0f));
+    ImGui::Text("[ Build Settings ]");
+    ImGui::PopStyleColor();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+    ImGui::Text("Platform");
+    ImGui::PopStyleColor();
+    ImGui::SameLine(120);
+    ImGui::Text("Windows x64");
+    ImGui::Spacing();
+
+    ImGui::Text("Output Path");
+    ImGui::SameLine(120);
+    ImGui::SetNextItemWidth(260);
+    static char outputBuf[512];
+    strncpy_s(outputBuf, buildOutputPath.c_str(), sizeof(outputBuf) - 1);
+    if (ImGui::InputText("##build_output", outputBuf, sizeof(outputBuf))) {
+        buildOutputPath = outputBuf;
+    }
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.25f, 0.25f, 0.28f, 1.0f));
+    if (ImGui::Button("...##browse")) {
+        // Future: open folder browser dialog
+    }
+    ImGui::PopStyleColor();
+    ImGui::Spacing();
+
+    ImGui::Separator();
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+    ImGui::Text("Included in build:");
+    ImGui::PopStyleColor();
+    ImGui::BulletText("game_runtime.exe -> game.exe");
+    ImGui::BulletText("engine.dll");
+    ImGui::BulletText("plugins/  (engine plugins)");
+    ImGui::BulletText("scripts/  (compiled user script DLLs)");
+    ImGui::BulletText("assets/");
+    ImGui::BulletText("scenes/");
+    ImGui::BulletText("shaders/");
+    ImGui::BulletText("project.settings");
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    if (!buildStatusMessage.empty()) {
+        bool isError = buildStatusMessage.find("[ERROR]") != std::string::npos ||
+                       buildStatusMessage.find("FAIL") != std::string::npos;
+        ImVec4 statusColor = isError
+            ? ImVec4(0.9f, 0.3f, 0.3f, 1.0f)
+            : ImVec4(0.3f, 0.85f, 0.3f, 1.0f);
+        ImGui::PushStyleColor(ImGuiCol_Text, statusColor);
+        ImGui::TextWrapped("%s", buildStatusMessage.c_str());
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
+    }
+
+    float buttonWidth = 180.0f;
+    ImGui::SetCursorPosX((ImGui::GetWindowSize().x - buttonWidth) * 0.5f);
+
+    if (buildInProgress) {
+        ImGui::BeginDisabled();
+        ImGui::Button("Building...", ImVec2(buttonWidth, 32));
+        ImGui::EndDisabled();
+    } else {
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.15f, 0.45f, 0.8f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f,  0.55f, 0.95f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.1f,  0.35f, 0.65f, 1.0f));
+
+        if (ImGui::Button("Build Game", ImVec2(buttonWidth, 32))) {
+            buildInProgress = true;
+            buildStatusMessage = "Building...";
+
+            std::string projectPath = ".";
+            std::filesystem::path outPath = std::filesystem::absolute(buildOutputPath);
+
+            // Resolve the path of build_game_package.bat relative to the executable directory
+            std::string batchPath = "build_game_package.bat";
+            std::string exeDir = renderer.getExeDir();
+            if (!exeDir.empty()) {
+                std::filesystem::path p = std::filesystem::path(exeDir) / "build_game_package.bat";
+                if (std::filesystem::exists(p)) {
+                    batchPath = p.string();
+                }
+            }
+            std::string cmd = "\"\"" + batchPath + "\" \"" + projectPath + "\" \"" + outPath.string() + "\"\"";
+            std::cout << "[BuildSystem] Running: " << cmd << std::endl;
+
+            int result = std::system(cmd.c_str());
+
+            if (result == 0) {
+                buildStatusMessage = "[OK] Build succeeded -> " + outPath.string();
+                std::cout << "[BuildSystem] Build completed successfully." << std::endl;
+            } else {
+                buildStatusMessage = "[ERROR] Build failed (exit code " + std::to_string(result) + ")";
+                std::cerr << "[BuildSystem] Build failed with exit code: " << result << std::endl;
+            }
+
+            buildInProgress = false;
+        }
+        ImGui::PopStyleColor(3);
+    }
+
+    ImGui::Spacing();
+    ImGui::End();
+}

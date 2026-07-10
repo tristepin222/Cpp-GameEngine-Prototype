@@ -27,13 +27,17 @@ public:
     ~PluginManager();
 
     void loadPlugins();
+    void loadScripts(const std::string& projectPath);
+    void setExeDirectory(const std::string& dir);
     void unloadPlugins();
 
 private:
+    void scanDirectory(const std::string& dir);
     Registry& registry;
     SystemManager& systemManager;
     VulkanRenderer& renderer;
     EditorModeState& editorMode;
+    std::string exeDir;
 
     std::vector<LoadedPlugin> loadedPlugins;
 };

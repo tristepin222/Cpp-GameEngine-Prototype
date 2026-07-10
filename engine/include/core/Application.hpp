@@ -25,6 +25,10 @@ namespace Engine {
         int height = 720;
         bool enableEditor = true;
         std::string startScenePath = "assets/scenes/test_scene.json";
+        /** @brief Path to the game project directory. Scripts in <projectPath>/scripts/ are loaded automatically. */
+        std::string projectPath = ".";
+        /** @brief Directory where the editor/runtime executable lives. Used to locate engine plugins. */
+        std::string exeDir;
     };
 
     /**

@@ -67,37 +67,61 @@ Dependencies are managed automatically through the CMake configuration:
 
 ### Setup & Compilation
 
+The project is structured with a clean architectural separation between the **Engine SDK** and game-specific targets:
+- **Engine SDK**: Compiled once, producing a packaged SDK at `./sdk/` with public headers, DLLs, pre-built static libraries (GLFW, GLM, ImGui, ImGuizmo), and `EngineConfig.cmake`.
+- **Game Project**: A completely standalone CMake project that references the pre-built Engine SDK (no engine source compilation required).
+
 1.  **Clone the Repository**:
     ```bash
     git clone https://github.com/tristepin222/Cpp-GameEngine-Prototype.git
     cd Cpp-GameEngine-Prototype
     ```
-2.  **Configure and Build (Using Utility Script)**:
-    The provided **`build.bat`** script at the repository root automatically configures, compiles shaders, builds libraries, and compiles the game:
+2.  **Configure and Build**:
+    You can build the entire project (SDK + game) using the main utility script at the repository root:
     ```bash
-    # Simple build
+    # Automatically builds the Engine SDK first, then compiles the game
     build.bat
 
-    # Clean existing build directory first
+    # Fresh configuration: clean all build & SDK folders and rebuild
     build.bat --clean
 
-    # Compile and launch the game immediately
+    # Compile everything and launch the game immediately
     build.bat --run
     ```
 
-    Alternatively, run the standard CMake commands manually:
-    ```bash
-    # Configure workspace
-    cmake -B build -DCMAKE_BUILD_TYPE=Release
+### Packaging a Standalone Game
 
-    # Compile targets
-    cmake --build build --config Release
-    ```
+Just like in Unity, you can package a standalone, redistributable build of your game directly within the editor's interface:
+1. Open your project in the editor:
+   ```bash
+   .\sdk\bin\editor.exe sandbox_game
+   ```
+2. Open the **Build Settings** panel in the editor.
+3. Set your target **Build Output Path** (e.g. `sandbox_game/build/Test/`).
+4. Click **Build Game**. The build system will package:
+   - The headless game runtime executable (`game.exe`, which runs your startup scene without any editor UI).
+   - The core engine binary (`engine.dll`) and active plugin DLLs (like `plugins/cinemachine_plugin.dll`).
+   - Compiled built-in shaders (`shaders/`).
+   - Your project's assets, scenes, and settings (`assets/`, `scenes/`, and `project.settings`).
+5. Open the target directory and run `game.exe` to play the standalone game.
+
+Alternatively, you can manually build the standalone game from the command line:
+```bash
+# Build the Sandbox Game standalone (requires the SDK to be built first)
+build_game.bat
+```
+
+For manual CMake execution (from the repository root):
+```bash
+# Configure and build the Game (referencing the SDK)
+cmake -S sandbox_game -B build_game -DCMAKE_BUILD_TYPE=Release -DENGINE_SDK_PATH="./sdk"
+cmake --build build_game --config Release
+```
+
 3.  **Run the Game**:
-    The compiled binary, copied assets, and compiled shaders are located in the `build/sandbox_game/` output directory. Run it using:
+    The standalone game binary, asset directories, and compiled shaders are located in the `build_game/` output directory. Run the game using:
     ```bash
-    cd build/sandbox_game/Release
-    ./game.exe
+    ./build_game/Release/game.exe
     ```
 
 ### Generating API Documentation
@@ -110,7 +134,7 @@ The codebase is fully documented using Doxygen-compliant comments. To compile th
    ```
 3. Open `docs/html/index.html` in any browser to inspect the full class hierarchies and documented members.
 
-> **Visual Studio / CLion Users**: Open the repository root folder directly in an IDE (via **File -> Open -> Folder**), and the IDE will automatically configure the workspace targets.
+> **Visual Studio / CLion Users**: Open the repository root folder directly in an IDE (via **File -> Open -> Folder**). Visual Studio will automatically detect the CMake project. To work on the game standalone, you can open the `sandbox_game` folder directly.
 
 ---
 

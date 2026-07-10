@@ -27,6 +27,15 @@ public:
         }
     }
 
+    /**
+     * @brief Removes and releases all registered systems.
+     * Call this before destroying Vulkan resources to ensure systems
+     * (which may own GPU pipelines or descriptors) are shut down first.
+     */
+    void clear() {
+        systems.clear();
+    }
+
 private:
     /** @brief Collection of registered systems. */
     std::vector<std::shared_ptr<System>> systems;

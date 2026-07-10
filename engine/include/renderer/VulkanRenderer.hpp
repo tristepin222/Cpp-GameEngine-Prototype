@@ -6,13 +6,13 @@
 #include <stdexcept>
 #include <glm/glm.hpp>
 
-#include "../../src/core/VulkanDevice.hpp"
-#include "../../src/core/VulkanSwapchain.hpp"
-#include "../../src/core/VulkanPipeline.hpp"
-#include "../../src/core/VulkanBuffer.hpp"
-#include "../../src/core/VulkanDescriptors.hpp"
-#include "../../src/core/VulkanCommandManager.hpp"
-#include "../../src/core/VulkanFrameSync.hpp"
+#include "core/VulkanDevice.hpp"
+#include "core/VulkanSwapchain.hpp"
+#include "core/VulkanPipeline.hpp"
+#include "core/VulkanBuffer.hpp"
+#include "core/VulkanDescriptors.hpp"
+#include "core/VulkanCommandManager.hpp"
+#include "core/VulkanFrameSync.hpp"
 
 #include "../ecs/components/Mesh.hpp"
 #include "../ecs/components/Material.hpp"
@@ -122,16 +122,23 @@ class ResourceManager;
  */
 class VulkanRenderer {
 public:
-    /**
-     * @brief Construct a new Vulkan Renderer object.
-     * @param win Pointer to GLFW window.
-     * @param enableValidationLayers Flag to enable validation debug layers.
-     */
-    VulkanRenderer(GLFWwindow* win, bool enableValidationLayers = true);
+    VulkanRenderer(GLFWwindow* win, const std::string& exeDir = "", bool enableValidationLayers = true);
     /**
      * @brief Destroy the Vulkan Renderer object and free resources.
      */
     ~VulkanRenderer();
+
+    /**
+     * @brief Resolves a shader path relative to the executable or CWD to support packaged/SDK builds.
+     * @param originalPath The hardcoded shader path to resolve.
+     * @return The resolved absolute or relative path to the shader file.
+     */
+    std::string resolveShaderPath(const std::string& originalPath) const;
+
+    /**
+     * @brief Gets the directory where the active executable resides.
+     */
+    const std::string& getExeDir() const { return exeDir; }
 
     /**
      * @brief Starts render pass recording for the current frame.
@@ -351,6 +358,8 @@ public:
 private:
     /** @brief Pointer to GLFW window. */
     GLFWwindow* window = nullptr;
+    /** @brief Directory where the executable is located. */
+    std::string exeDir;
 
 
     /** @brief Debug messenger handle for validation layer callbacks. */

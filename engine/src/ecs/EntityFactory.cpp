@@ -79,8 +79,8 @@ namespace EntityFactory {
         registry.emplace<Material>(entity, Material{ defaultColor });
 
         PipelineHandle pipeline = renderer.createPipelineForShaders(
-            "build/shaders/unlit.vert.spv",
-            "build/shaders/unlit.frag.spv"
+            renderer.resolveShaderPath("build/shaders/unlit.vert.spv"),
+            renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
         );
 
         if (Material* material = registry.get<Material>(entity)) {
@@ -161,8 +161,8 @@ namespace EntityFactory {
         registry.emplace<Grid>(grid, Grid{ spacing, size, color });
 
         PipelineHandle gridPipeline = renderer.createPipelineForShaders(
-            "build/shaders/grid.vert.spv",
-            "build/shaders/grid.frag.spv"
+            renderer.resolveShaderPath("build/shaders/grid.vert.spv"),
+            renderer.resolveShaderPath("build/shaders/grid.frag.spv")
         );
 
         if (Material* material = registry.get<Material>(grid)) {
@@ -196,15 +196,15 @@ namespace EntityFactory {
         PipelineHandle pipeline;
         if (hasSkin) {
             pipeline = renderer.createPipelineForShaders(
-                "build/shaders/skinned.vert.spv",
-                "build/shaders/unlit.frag.spv"
+                renderer.resolveShaderPath("build/shaders/skinned.vert.spv"),
+                renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
             );
             registry.emplace<SkeletonComponent>(entity, std::move(skeleton));
             registry.emplace<AnimatorComponent>(entity, std::move(animator));
         } else {
             pipeline = renderer.createPipelineForShaders(
-                "build/shaders/unlit.vert.spv",
-                "build/shaders/unlit.frag.spv"
+                renderer.resolveShaderPath("build/shaders/unlit.vert.spv"),
+                renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
             );
         }
         material.pipeline = pipeline.pipeline;

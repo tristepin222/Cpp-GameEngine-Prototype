@@ -53,6 +53,7 @@ set(ENGINE_SOURCES
     src/ecs/EntityFactory.cpp
     src/ecs/EntityCloner.cpp
     src/ecs/Registry.cpp
+    src/ecs/systems/PlayerControllerSystem.cpp
     src/editor/EditorUI.cpp
     src/scenes/Scene.cpp
     src/scenes/JSONUtils.cpp
@@ -65,7 +66,14 @@ set(ENGINE_SOURCES
 )
 
 add_library(engine SHARED ${ENGINE_SOURCES})
-set_target_properties(engine PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+set_target_properties(engine PROPERTIES
+    WINDOWS_EXPORT_ALL_SYMBOLS ON
+    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+)
+if(MSVC)
+    target_compile_options(engine PRIVATE /Zi)
+    target_link_options(engine PRIVATE /DEBUG)
+endif()
 
 # Public include directories (include/ and src/ are exported to linking targets)
 target_include_directories(engine PUBLIC
@@ -116,3 +124,21 @@ add_custom_target(compile_builtin_shaders ALL DEPENDS ${BUILTIN_SHADERS_SPV})
 add_dependencies(engine compile_builtin_shaders)
 
 message(STATUS "Configured engine static library")
+
+# --- Editor Executable ---
+add_executable(editor editor/main.cpp)
+target_link_libraries(editor PRIVATE engine)
+set_target_properties(editor PROPERTIES OUTPUT_NAME "editor")
+target_include_directories(editor PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+if(MSVC)
+    target_compile_options(editor PRIVATE /Zi)
+    target_link_options(editor PRIVATE /DEBUG)
+endif()
+
+# --- Headless Game Runtime Executable (no editor UI) ---
+add_executable(game_runtime runtime/main.cpp)
+target_link_libraries(game_runtime PRIVATE engine)
+set_target_properties(game_runtime PROPERTIES OUTPUT_NAME "game_runtime")
+target_include_directories(game_runtime PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+message(STATUS "Configured editor and game_runtime executables")

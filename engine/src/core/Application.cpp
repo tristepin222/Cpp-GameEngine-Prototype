@@ -4,11 +4,13 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <filesystem>
 #include "ecs/systems/RenderSystem.hpp"
 #include "ecs/systems/CameraSystem.hpp"
 #include "ecs/systems/InputSystem.hpp"
 #include "ecs/systems/AnimationSystem.hpp"
 #include "ecs/systems/PhysicsSystem.hpp"
+#include "ecs/systems/PlayerControllerSystem.hpp"
 #include "scenes/Scene.hpp"
 #include "scenes/JSONUtils.hpp"
 #include "scenes/DefaultScene.hpp"
@@ -23,6 +25,16 @@
 namespace Engine {
 
     Application::Application(const ApplicationConfig& cfg) : config(cfg) {
+        // Resolve the project path and change CWD to it so that all relative asset
+        // paths (assets/, scenes/, shaders/) work regardless of where the exe lives.
+        std::filesystem::path projectPath = std::filesystem::absolute(config.projectPath);
+        if (std::filesystem::is_directory(projectPath)) {
+            std::filesystem::current_path(projectPath);
+            config.projectPath = projectPath.string();
+            std::cout << "[Application] Working directory set to project: " << projectPath.string() << std::endl;
+        } else {
+            std::cerr << "[Application] WARNING: projectPath does not exist: " << projectPath.string() << std::endl;
+        }
         loadConfig();
         initEngine();
     }
@@ -45,11 +57,7 @@ namespace Engine {
             if (JSONUtils::extractFloatValue(content, "width", w)) config.width = static_cast<int>(w);
             if (JSONUtils::extractFloatValue(content, "height", h)) config.height = static_cast<int>(h);
 
-            if (content.find("\"enableEditor\": false") != std::string::npos) {
-                config.enableEditor = false;
-            } else if (content.find("\"enableEditor\": true") != std::string::npos) {
-                config.enableEditor = true;
-            }
+            // The editor state (enableEditor) is strictly determined by the entry point binary (editor.exe or game_runtime.exe) and shouldn't be overridden by project settings.
 
             std::string sceneVal = JSONUtils::extractStringValue(content, "startScenePath");
             if (!sceneVal.empty()) config.startScenePath = sceneVal;
@@ -63,6 +71,8 @@ namespace Engine {
     void Application::initEngine() {
         JobSystem::getInstance().initialize(); // Initialize Job System thread pool
 
+        std::cout << "[Application] Job System initialized successfully" << std::endl;
+
         if (!glfwInit()) {
             throw std::runtime_error("Failed to initialize GLFW");
         }
@@ -72,8 +82,11 @@ namespace Engine {
             throw std::runtime_error("Failed to create GLFW window");
         }
 
-        renderer = std::make_unique<VulkanRenderer>(window);
-        renderer->createInstanceBuffer(10000);
+        std::cout << "[Application] GLFW window created successfully" << std::endl;
+
+        renderer = std::make_unique<VulkanRenderer>(window, config.exeDir);
+
+        std::cout << "[Application] VulkanRenderer initialized successfully" << std::endl;
 
         // Instantiate standard engine systems
         renderSystem = std::make_shared<RenderSystem>(registry, *renderer);
@@ -81,11 +94,13 @@ namespace Engine {
         auto inputSystem = std::make_shared<InputSystem>(registry, *renderer, editorMode);
         auto animationSystem = std::make_shared<AnimationSystem>(registry, *renderer, editorMode);
         auto physicsSystem = std::make_shared<PhysicsSystem>(registry, editorMode);
+        auto playerControllerSystem = std::make_shared<PlayerControllerSystem>(registry, *renderer, editorMode);
 
         systemManager.addSystem(inputSystem);
         systemManager.addSystem(cameraSystem);
         systemManager.addSystem(physicsSystem);
         systemManager.addSystem(animationSystem);
+        systemManager.addSystem(playerControllerSystem);
         systemManager.addSystem(renderSystem);
 
         // Spawn persistent Editor Camera
@@ -98,6 +113,7 @@ namespace Engine {
 
         // Setup initial editor fly mode based on whether editor UI is present
         if (!config.enableEditor) {
+            editorMode.isPlaying = true;
             editorMode.flyMode = true;
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         } else {
@@ -105,35 +121,54 @@ namespace Engine {
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 
             // Initialize editor UI overlay
-            editorUI = std::make_unique<EditorUI>(registry, *renderer, sceneManager, editorMode);
+            editorUI = std::make_unique<EditorUI>(registry, *renderer, sceneManager, editorMode, config.startScenePath);
             editorUI->initialize(window);
         }
 
-        // Load generic data-driven scene automatically
+        // Load engine-level plugins, then project-level scripts
         pluginManager = std::make_unique<PluginManager>(registry, systemManager, *renderer, editorMode);
+        pluginManager->setExeDirectory(config.exeDir);
         pluginManager->loadPlugins();
+        pluginManager->loadScripts(config.projectPath);
 
         sceneManager.changeScene(std::make_unique<DefaultScene>(registry, *renderer, config.startScenePath));
 
         running = true;
+
+        std::cout << "[Application] Engine initialized successfully" << std::endl;
     }
 
     void Application::cleanupEngine() {
+        // 1. Stop the game loop / flush pending work first
+        JobSystem::getInstance().shutdown();
+
+        // 2. Unload scripts/plugins (they may reference Vulkan objects via systems)
         if (pluginManager) {
             pluginManager->unloadPlugins();
             pluginManager.reset();
         }
 
-        JobSystem::getInstance().shutdown(); // Shutdown Job System thread pool
+        // 3. Shut down all ECS systems (they hold Vulkan pipelines, descriptors, etc.)
+        systemManager.clear();
+        renderSystem.reset();
 
+        // 4. Unload current scene and destroy all entities/components (releases any Vulkan-backed resources)
+        sceneManager.changeScene(nullptr);
+        registry.clear();
+
+        // 5. Shut down the editor UI (destroys ImGui Vulkan backend, descriptor sets)
         if (editorUI) {
             editorUI->shutdown();
             editorUI.reset();
         }
+
+        // 6. Destroy the Vulkan renderer (device, swapchain, instance)
         if (renderer) {
             renderer->cleanup();
             renderer.reset();
         }
+
+        // 7. Destroy the window and GLFW
         if (window) {
             glfwDestroyWindow(window);
             window = nullptr;
@@ -150,7 +185,7 @@ namespace Engine {
             if (editorMode.pendingPlay) {
                 editorMode.pendingPlay = false;
                 if (Scene* currentScene = sceneManager.getCurrentScene()) {
-                    currentScene->saveToFile("sandbox_game/assets/scenes/.play_temp.json");
+                    currentScene->saveToFile("assets/scenes/.play_temp.json");
                 }
                 editorMode.isPlaying = true;
                 editorMode.flyMode = true;
@@ -162,9 +197,8 @@ namespace Engine {
                 editorMode.flyMode = false;
                 glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
                 if (Scene* currentScene = sceneManager.getCurrentScene()) {
-                    currentScene->loadFromFile("sandbox_game/assets/scenes/.play_temp.json");
+                    currentScene->loadFromFile("assets/scenes/.play_temp.json");
                     try {
-                        std::filesystem::remove("sandbox_game/assets/scenes/.play_temp.json");
                         std::filesystem::remove("assets/scenes/.play_temp.json");
                     } catch (...) {}
                 }

@@ -7,8 +7,8 @@
  * @param win Reference window.
  * @param enableValidation True to configure validation layers, false otherwise.
  */
-VulkanRenderer::VulkanRenderer(GLFWwindow* win, bool enableValidation)
-    : window(win), enableValidationLayers(enableValidation)
+VulkanRenderer::VulkanRenderer(GLFWwindow* win, const std::string& exeDirectory, bool enableValidation)
+    : window(win), exeDir(exeDirectory), enableValidationLayers(enableValidation)
 {
     resourceManager = std::make_unique<ResourceManager>();
 
@@ -30,6 +30,43 @@ VulkanRenderer::VulkanRenderer(GLFWwindow* win, bool enableValidation)
  */
 VulkanRenderer::~VulkanRenderer() {
     cleanup();
+}
+
+#include <filesystem>
+
+std::string VulkanRenderer::resolveShaderPath(const std::string& originalPath) const {
+    // 1. If path exists directly, return it
+    if (std::filesystem::exists(originalPath)) {
+        return originalPath;
+    }
+
+    // 2. Extract shader filename (e.g. unlit.vert.spv)
+    std::filesystem::path p(originalPath);
+    std::string filename = p.filename().string();
+
+    // 3. Try sibling "shaders" folder next to exe (packaged app)
+    if (!exeDir.empty()) {
+        std::filesystem::path localShader = std::filesystem::path(exeDir) / "shaders" / filename;
+        if (std::filesystem::exists(localShader)) {
+            return localShader.string();
+        }
+        
+        // 4. Try parent "shaders" folder (SDK/editor structure: bin/ is sibling to shaders/)
+        std::filesystem::path parentShader = std::filesystem::path(exeDir) / ".." / "shaders" / filename;
+        if (std::filesystem::exists(parentShader)) {
+            return parentShader.string();
+        }
+    }
+
+    // 5. Try relative "shaders/" and "build/shaders/" in CWD
+    std::filesystem::path cwdShader1 = std::filesystem::path("shaders") / filename;
+    if (std::filesystem::exists(cwdShader1)) return cwdShader1.string();
+
+    std::filesystem::path cwdShader2 = std::filesystem::path("build/shaders") / filename;
+    if (std::filesystem::exists(cwdShader2)) return cwdShader2.string();
+
+    // Fallback to original
+    return originalPath;
 }
 
 //
@@ -140,8 +177,8 @@ void VulkanRenderer::createCommandsAndSync() {
  * @brief Builds the default graphics pipeline configuration.
  */
 void VulkanRenderer::createPipeline() {
-    const std::string vert = "build/shaders/grid.vert.spv";
-    const std::string frag = "build/shaders/grid.frag.spv";
+    std::string vert = resolveShaderPath("build/shaders/grid.vert.spv");
+    std::string frag = resolveShaderPath("build/shaders/grid.frag.spv");
     std::vector<VkDescriptorSetLayout> layouts = { descriptors.getCameraDescriptorSetLayout() };
 
     pipeline.create(device.getDevice(), swapchain.getExtent(), swapchain.getRenderPass(), vert, frag, layouts);
@@ -339,21 +376,42 @@ void VulkanRenderer::recreateSwapchain() {
  * @brief releases allocated Vulkan resources.
  */
 void VulkanRenderer::cleanup() {
-    vkDeviceWaitIdle(device.getDevice());
+    if (device.getDevice() != VK_NULL_HANDLE) {
+        vkDeviceWaitIdle(device.getDevice());
+    }
 
-    destroyDebugMessenger();
+    // 1. Clear custom pipelines vector to destroy them using the device
+    pipelines.clear();
 
+    // 2. Clear mesh database to destroy vertex/index buffers using the device
+    meshSoA.clear();
+
+    // 3. Cleanup default texture and cached textures in resource manager
     if (resourceManager) {
         resourceManager->cleanup(device.getDevice());
     }
 
+    // 4. Destroy standard render buffers, pipelines, commands, and sync fences
     pipeline.destroy();
     descriptors.destroy();
     instanceBuffer.destroy();
     cameraBuffer.destroy();
     frameSync.destroy();
     cmdManager.destroy();
+
+    // 5. Cleanup swapchain (contains framebuffers, renderpass, depth views/images)
     swapchain.cleanup();
+
+    // 6. Destroy validation debug messenger
+    destroyDebugMessenger();
+
+    // 7. Destroy window surface (must be destroyed before instance is destroyed)
+    if (surface != VK_NULL_HANDLE) {
+        vkDestroySurfaceKHR(device.getInstance(), surface, nullptr);
+        surface = VK_NULL_HANDLE;
+    }
+
+    // 8. Cleanup device and instance
     device.cleanup();
 }
 
