@@ -4,6 +4,12 @@
 
 #include <string>
 
+enum class CinemachineMode {
+    ThirdPersonFollow = 0,
+    FirstPerson = 1,
+    FixedLookAt = 2
+};
+
 /**
  * @struct CinemachineVirtualCamera
  * @brief Addon component that represents a virtual camera.
@@ -15,6 +21,16 @@ struct CinemachineVirtualCamera {
 
     std::string followTargetName;
     std::string lookAtTargetName;
+    std::string lockToBone = "Head";
+
+    CinemachineMode mode = CinemachineMode::ThirdPersonFollow;
+    bool mouseOrbit = true;
+    bool mouseLook = true;
+    float orbitSensitivity = 0.1f;
+    float orbitYaw = 0.0f;
+    float orbitPitch = 0.0f;
+    float cameraYaw = 0.0f;
+    float cameraPitch = 0.0f;
 
     glm::vec3 followOffset = glm::vec3(0.0f, 4.0f, 8.0f);
     float followDamping = 2.0f; // Damping rate (higher = slower, 0.0f = instant)

@@ -22,59 +22,75 @@ PLUGIN_API void initPlugin(PluginContext* context) {
             ImGui::Separator();
             ImGui::TextUnformatted("Tracking Configuration");
 
-            // Follow Target Dropdown
-            std::string followLabel = "None";
-            if (vcam->followTarget.getId() != Entity::INVALID_ENTITY && registry.isValid(vcam->followTarget)) {
-                if (auto* nameComp = registry.get<Name>(vcam->followTarget)) {
-                    followLabel = nameComp->value;
-                } else {
-                    followLabel = "Entity " + std::to_string(vcam->followTarget.getId());
-                }
+            const char* modes[] = { "Third Person Follow", "First Person", "Fixed LookAt" };
+            int currentModeIdx = static_cast<int>(vcam->mode);
+            if (ImGui::Combo("Camera Mode", &currentModeIdx, modes, IM_ARRAYSIZE(modes))) {
+                vcam->mode = static_cast<CinemachineMode>(currentModeIdx);
             }
 
-            if (ImGui::BeginCombo("Follow Target", followLabel.c_str())) {
-                if (ImGui::Selectable("None", vcam->followTarget.getId() == Entity::INVALID_ENTITY)) {
-                    vcam->followTarget = Entity();
-                }
-                for (auto [ent, nameComp] : registry.view<Name>()) {
-                    if (ent != entity) { // Prevent self-targeting
-                        bool isSelected = (ent == vcam->followTarget);
-                        if (ImGui::Selectable(nameComp.value.c_str(), isSelected)) {
-                            vcam->followTarget = ent;
-                        }
+            // Helper lambda for Target selection dropdown
+            auto drawTargetSelector = [&](const char* label, Entity& target) {
+                std::string targetLabel = "None";
+                if (target.getId() != Entity::INVALID_ENTITY && registry.isValid(target)) {
+                    if (auto* nameComp = registry.get<Name>(target)) {
+                        targetLabel = nameComp->value;
+                    } else {
+                        targetLabel = "Entity " + std::to_string(target.getId());
                     }
                 }
-                ImGui::EndCombo();
-            }
 
-            // LookAt Target Dropdown
-            std::string lookAtLabel = "None";
-            if (vcam->lookAtTarget.getId() != Entity::INVALID_ENTITY && registry.isValid(vcam->lookAtTarget)) {
-                if (auto* nameComp = registry.get<Name>(vcam->lookAtTarget)) {
-                    lookAtLabel = nameComp->value;
-                } else {
-                    lookAtLabel = "Entity " + std::to_string(vcam->lookAtTarget.getId());
-                }
-            }
-
-            if (ImGui::BeginCombo("LookAt Target", lookAtLabel.c_str())) {
-                if (ImGui::Selectable("None", vcam->lookAtTarget.getId() == Entity::INVALID_ENTITY)) {
-                    vcam->lookAtTarget = Entity();
-                }
-                for (auto [ent, nameComp] : registry.view<Name>()) {
-                    if (ent != entity) { // Prevent self-targeting
-                        bool isSelected = (ent == vcam->lookAtTarget);
-                        if (ImGui::Selectable(nameComp.value.c_str(), isSelected)) {
-                            vcam->lookAtTarget = ent;
+                if (ImGui::BeginCombo(label, targetLabel.c_str())) {
+                    if (ImGui::Selectable("None", target.getId() == Entity::INVALID_ENTITY)) {
+                        target = Entity();
+                    }
+                    for (auto [ent, nameComp] : registry.view<Name>()) {
+                        if (ent != entity) { // Prevent self-targeting
+                            bool isSelected = (ent == target);
+                            if (ImGui::Selectable(nameComp.value.c_str(), isSelected)) {
+                                target = ent;
+                            }
                         }
                     }
+                    ImGui::EndCombo();
                 }
-                ImGui::EndCombo();
-            }
+            };
 
-            ImGui::DragFloat3("Follow Offset", &vcam->followOffset[0], 0.05f);
-            ImGui::SliderFloat("Follow Damping", &vcam->followDamping, 0.0f, 10.0f, "%.2f");
-            ImGui::SliderFloat("LookAt Damping", &vcam->lookAtDamping, 0.0f, 10.0f, "%.2f");
+            if (vcam->mode == CinemachineMode::ThirdPersonFollow) {
+                drawTargetSelector("Follow Target", vcam->followTarget);
+                drawTargetSelector("LookAt Target (Optional)", vcam->lookAtTarget);
+
+                ImGui::DragFloat3("Follow Offset", &vcam->followOffset[0], 0.05f);
+                ImGui::SliderFloat("Follow Damping", &vcam->followDamping, 0.0f, 10.0f, "%.2f");
+                ImGui::SliderFloat("LookAt Damping", &vcam->lookAtDamping, 0.0f, 10.0f, "%.2f");
+
+                ImGui::Checkbox("Enable Mouse Orbit", &vcam->mouseOrbit);
+                if (vcam->mouseOrbit) {
+                    ImGui::SliderFloat("Orbit Sensitivity", &vcam->orbitSensitivity, 0.01f, 1.0f, "%.2f");
+                    ImGui::DragFloat("Orbit Yaw", &vcam->orbitYaw, 0.5f);
+                    ImGui::DragFloat("Orbit Pitch", &vcam->orbitPitch, 0.5f, -80.0f, 80.0f);
+                }
+            } else if (vcam->mode == CinemachineMode::FirstPerson) {
+                drawTargetSelector("Follow Target (Player)", vcam->followTarget);
+
+                char boneBuf[128];
+                snprintf(boneBuf, sizeof(boneBuf), "%s", vcam->lockToBone.c_str());
+                if (ImGui::InputText("Lock to Bone", boneBuf, sizeof(boneBuf))) {
+                    vcam->lockToBone = boneBuf;
+                }
+
+                ImGui::DragFloat3("Eye Offset", &vcam->followOffset[0], 0.05f);
+                ImGui::SliderFloat("Follow Damping", &vcam->followDamping, 0.0f, 10.0f, "%.2f");
+
+                ImGui::Checkbox("Enable Mouse Look", &vcam->mouseLook);
+                if (vcam->mouseLook) {
+                    ImGui::SliderFloat("Look Sensitivity", &vcam->orbitSensitivity, 0.01f, 1.0f, "%.2f");
+                    ImGui::DragFloat("Camera Yaw", &vcam->cameraYaw, 0.5f);
+                    ImGui::DragFloat("Camera Pitch", &vcam->cameraPitch, 0.5f, -89.0f, 89.0f);
+                }
+            } else if (vcam->mode == CinemachineMode::FixedLookAt) {
+                drawTargetSelector("LookAt Target", vcam->lookAtTarget);
+                ImGui::SliderFloat("LookAt Damping", &vcam->lookAtDamping, 0.0f, 10.0f, "%.2f");
+            }
 
             ImGui::Spacing();
             if (ImGui::Button("Remove Component", ImVec2(-1, 24))) {
@@ -112,10 +128,19 @@ PLUGIN_API void initPlugin(PluginContext* context) {
                 out << JSONUtils::indent(indent) << "\"active\": " << (vcam->active ? "true" : "false") << ",\n";
                 out << JSONUtils::indent(indent) << "\"priority\": " << static_cast<float>(vcam->priority) << ",\n";
                 out << JSONUtils::indent(indent) << "\"fov\": " << vcam->fov << ",\n";
+                out << JSONUtils::indent(indent) << "\"mode\": " << static_cast<float>(vcam->mode) << ",\n";
+                out << JSONUtils::indent(indent) << "\"mouseOrbit\": " << (vcam->mouseOrbit ? "true" : "false") << ",\n";
+                out << JSONUtils::indent(indent) << "\"mouseLook\": " << (vcam->mouseLook ? "true" : "false") << ",\n";
+                out << JSONUtils::indent(indent) << "\"orbitSensitivity\": " << vcam->orbitSensitivity << ",\n";
+                out << JSONUtils::indent(indent) << "\"orbitYaw\": " << vcam->orbitYaw << ",\n";
+                out << JSONUtils::indent(indent) << "\"orbitPitch\": " << vcam->orbitPitch << ",\n";
+                out << JSONUtils::indent(indent) << "\"cameraYaw\": " << vcam->cameraYaw << ",\n";
+                out << JSONUtils::indent(indent) << "\"cameraPitch\": " << vcam->cameraPitch << ",\n";
                 out << JSONUtils::indent(indent) << "\"followTarget\": " << static_cast<float>(vcam->followTarget.getId()) << ",\n";
                 out << JSONUtils::indent(indent) << "\"lookAtTarget\": " << static_cast<float>(vcam->lookAtTarget.getId()) << ",\n";
                 out << JSONUtils::indent(indent) << "\"followTargetName\": \"" << followName << "\",\n";
                 out << JSONUtils::indent(indent) << "\"lookAtTargetName\": \"" << lookAtName << "\",\n";
+                out << JSONUtils::indent(indent) << "\"lockToBone\": \"" << vcam->lockToBone << "\",\n";
                 out << JSONUtils::indent(indent) << "\"followDamping\": " << vcam->followDamping << ",\n";
                 out << JSONUtils::indent(indent) << "\"lookAtDamping\": " << vcam->lookAtDamping << ",\n";
                 out << JSONUtils::indent(indent) << "\"followOffsetX\": " << vcam->followOffset.x << ",\n";
@@ -136,6 +161,29 @@ PLUGIN_API void initPlugin(PluginContext* context) {
                     vcam.priority = static_cast<int>(priorityVal);
                 }
                 
+                float modeVal = 0.0f;
+                if (JSONUtils::extractFloatValue(json, "mode", modeVal)) {
+                    vcam.mode = static_cast<CinemachineMode>(static_cast<int>(modeVal));
+                }
+
+                if (json.find("\"mouseOrbit\"") != std::string::npos) {
+                    vcam.mouseOrbit = (json.find("\"mouseOrbit\": true") != std::string::npos || json.find("\"mouseOrbit\":true") != std::string::npos);
+                } else {
+                    vcam.mouseOrbit = true;
+                }
+
+                if (json.find("\"mouseLook\"") != std::string::npos) {
+                    vcam.mouseLook = (json.find("\"mouseLook\": true") != std::string::npos || json.find("\"mouseLook\":true") != std::string::npos);
+                } else {
+                    vcam.mouseLook = true;
+                }
+
+                JSONUtils::extractFloatValue(json, "orbitSensitivity", vcam.orbitSensitivity);
+                JSONUtils::extractFloatValue(json, "orbitYaw", vcam.orbitYaw);
+                JSONUtils::extractFloatValue(json, "orbitPitch", vcam.orbitPitch);
+                JSONUtils::extractFloatValue(json, "cameraYaw", vcam.cameraYaw);
+                JSONUtils::extractFloatValue(json, "cameraPitch", vcam.cameraPitch);
+
                 JSONUtils::extractFloatValue(json, "fov", vcam.fov);
                 JSONUtils::extractFloatValue(json, "followDamping", vcam.followDamping);
                 JSONUtils::extractFloatValue(json, "lookAtDamping", vcam.lookAtDamping);
@@ -156,6 +204,10 @@ PLUGIN_API void initPlugin(PluginContext* context) {
 
                 vcam.followTargetName = JSONUtils::extractStringValue(json, "followTargetName");
                 vcam.lookAtTargetName = JSONUtils::extractStringValue(json, "lookAtTargetName");
+                vcam.lockToBone = JSONUtils::extractStringValue(json, "lockToBone");
+                if (vcam.lockToBone.empty() && json.find("\"lockToBone\"") == std::string::npos) {
+                    vcam.lockToBone = "Head"; // Default fallback if not defined in older scene files
+                }
             }
         }
     );

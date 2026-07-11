@@ -9,6 +9,9 @@ struct PlayerControllerComponent {
     float jumpForce = 6.0f;
     float interactRange = 3.0f;
 
+    // Configuration flags
+    bool orientToMovement = true;
+
     // Transient input state
     bool wasJumpPressed = false;
     bool wasInteractPressed = false;

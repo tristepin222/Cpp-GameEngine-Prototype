@@ -17,6 +17,7 @@ private:
 
     // Blending state
     Entity lastActiveCameraEntity = Entity();
+    Entity lastHiddenEntity = Entity();
     glm::vec3 blendStartPos = glm::vec3(0.0f);
     glm::vec3 blendStartRot = glm::vec3(0.0f);
     float blendTimer = 0.0f;

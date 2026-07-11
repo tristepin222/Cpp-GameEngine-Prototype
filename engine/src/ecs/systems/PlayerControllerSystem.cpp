@@ -4,6 +4,7 @@
 #include "ecs/components/Transform.hpp"
 #include "ecs/components/RigidBody.hpp"
 #include "ecs/components/Name.hpp"
+#include "ecs/components/EditorCamera.hpp"
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <cmath>
@@ -24,6 +25,8 @@ void PlayerControllerSystem::update(float dt) {
     glm::vec3 camRight(1.0f, 0.0f, 0.0f);
 
     for (auto [camEntity, cam, camTransform] : registry.view<Camera, Transform>()) {
+        if (registry.has<EditorCamera>(camEntity)) continue; // Skip editor camera in play mode
+        
         float yaw = camTransform.rotation.y;
         camForward.x = cos(glm::radians(yaw));
         camForward.y = 0.0f;
@@ -32,13 +35,24 @@ void PlayerControllerSystem::update(float dt) {
             camForward = glm::normalize(camForward);
         }
         camRight = glm::normalize(glm::cross(camForward, glm::vec3(0.0f, 1.0f, 0.0f)));
-        break; // Use the first camera found
+        break; // Use the first gameplay camera found
     }
 
     // Process all entities with PlayerControllerComponent + Transform
     for (auto [entity, pc, transform] : registry.view<PlayerControllerComponent, Transform>()) {
         auto* rb = registry.get<RigidBodyComponent>(entity);
         if (!rb) continue;
+
+        // Force character transform to stay perfectly upright (0 pitch and roll) to prevent toppling/wobbling
+        transform.rotation.x = 0.0f;
+        transform.rotation.z = 0.0f;
+
+
+
+        // Freeze physics rotation to prevent tipping over or spinning due to contact friction
+        rb->freezeRotationX = true;
+        rb->freezeRotationY = true;
+        rb->freezeRotationZ = true;
 
         pc.debugRunningCount++;
 
@@ -58,6 +72,16 @@ void PlayerControllerSystem::update(float dt) {
             rb->velocity.z = targetVel.z;
             rb->sleeping = false;
             rb->sleepTimer = 0.0f;
+
+            if (pc.orientToMovement) {
+                float targetPhysicsYaw = glm::degrees(atan2(moveDir.z, moveDir.x));
+                float targetMeshYaw = -targetPhysicsYaw + 90.0f;
+                float currentYaw = transform.rotation.y;
+                float diff = targetMeshYaw - currentYaw;
+                while (diff < -180.0f) diff += 360.0f;
+                while (diff > 180.0f) diff -= 360.0f;
+                transform.rotation.y = currentYaw + diff * std::min(1.0f, 10.0f * dt);
+            }
         } else {
             // Decay horizontal velocity when no keys held
             rb->velocity.x *= std::exp(-15.0f * dt);

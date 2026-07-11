@@ -193,6 +193,7 @@ private:
         for (auto [entity, mesh, transform, material] :
             registry.view<Mesh, Transform, Material>()) {
             if (registry.get<Grid>(entity)) continue;
+            if (!mesh.visible) continue;
             renderableEntities.push_back(entity);
         }
 

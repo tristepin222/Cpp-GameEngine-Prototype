@@ -123,6 +123,9 @@ struct Mesh {
     /** @brief Whether this mesh has skin weights and is deformed on GPU. */
     bool isSkinned = false;
 
+    /** @brief Whether this mesh should be rendered. */
+    bool visible = true;
+
     /**
      * @brief Construct a new Mesh object.
      * @param verts List of vertices.
@@ -140,6 +143,6 @@ struct Mesh {
         VkBuffer iBuf = VK_NULL_HANDLE,
         VkDeviceMemory iMem = VK_NULL_HANDLE
     ) : vertices(verts), indices(inds), vertexBuffer(vBuf), vertexBufferMemory(vMem),
-        indexBuffer(iBuf), indexBufferMemory(iMem), isSkinned(false) {
+        indexBuffer(iBuf), indexBufferMemory(iMem), isSkinned(false), visible(true) {
     }
 };

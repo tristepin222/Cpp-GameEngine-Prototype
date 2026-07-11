@@ -146,10 +146,6 @@ namespace Engine {
                 // Update Euler rotation (degrees)
                 transform.rotation += glm::degrees(rb.angularVelocity) * dt;
 
-                if (rb.freezeRotationX) transform.rotation.x = 0.0f;
-                if (rb.freezeRotationY) transform.rotation.y = 0.0f;
-                if (rb.freezeRotationZ) transform.rotation.z = 0.0f;
-
                 // Keep rotation angles within clean range to prevent Euler drift
                 transform.rotation.x = std::fmod(transform.rotation.x, 360.0f);
                 transform.rotation.y = std::fmod(transform.rotation.y, 360.0f);
@@ -912,6 +908,11 @@ namespace Engine {
                 if (!staticA) {
                     transA.position -= invMassA * C_p;
                     glm::vec3 deltaThetaA = -invInertiaWorldA * glm::cross(rA, C_p);
+                    if (rbA) {
+                        if (rbA->freezeRotationX) deltaThetaA.x = 0.0f;
+                        if (rbA->freezeRotationY) deltaThetaA.y = 0.0f;
+                        if (rbA->freezeRotationZ) deltaThetaA.z = 0.0f;
+                    }
                     transA.rotation += glm::degrees(deltaThetaA);
                     transA.rotation.x = std::fmod(transA.rotation.x, 360.0f);
                     transA.rotation.y = std::fmod(transA.rotation.y, 360.0f);
@@ -920,6 +921,11 @@ namespace Engine {
                 if (!staticB) {
                     transB.position += invMassB * C_p;
                     glm::vec3 deltaThetaB = invInertiaWorldB * glm::cross(rB, C_p);
+                    if (rbB) {
+                        if (rbB->freezeRotationX) deltaThetaB.x = 0.0f;
+                        if (rbB->freezeRotationY) deltaThetaB.y = 0.0f;
+                        if (rbB->freezeRotationZ) deltaThetaB.z = 0.0f;
+                    }
                     transB.rotation += glm::degrees(deltaThetaB);
                     transB.rotation.x = std::fmod(transB.rotation.x, 360.0f);
                     transB.rotation.y = std::fmod(transB.rotation.y, 360.0f);
