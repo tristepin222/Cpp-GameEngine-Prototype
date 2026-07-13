@@ -56,9 +56,10 @@ REM Copy engine DLL and import lib
 copy /Y %BUILD_DIR%\engine\%CONFIG%\engine.dll %SDK_DIR%\bin\
 copy /Y %BUILD_DIR%\engine\%CONFIG%\engine.lib %SDK_DIR%\lib\
 
-REM Copy editor and game_runtime executables
-copy /Y %BUILD_DIR%\engine\%CONFIG%\editor.exe      %SDK_DIR%\bin\
-copy /Y %BUILD_DIR%\engine\%CONFIG%\game_runtime.exe %SDK_DIR%\bin\
+REM Copy editor, game_runtime, and reflection_generator executables
+copy /Y %BUILD_DIR%\engine\%CONFIG%\editor.exe               %SDK_DIR%\bin\
+copy /Y %BUILD_DIR%\engine\%CONFIG%\game_runtime.exe         %SDK_DIR%\bin\
+copy /Y %BUILD_DIR%\engine\%CONFIG%\reflection_generator.exe %SDK_DIR%\bin\
 
 REM Copy pre-built static libs (imgui, imguizmo, glfw)
 copy /Y %BUILD_DIR%\engine\%CONFIG%\imgui.lib    %SDK_DIR%\lib\

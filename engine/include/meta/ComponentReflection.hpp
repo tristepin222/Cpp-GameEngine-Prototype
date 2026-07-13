@@ -17,7 +17,8 @@ namespace Engine {
         Float,
         Bool,
         Vec3,
-        RigidBodyType
+        RigidBodyType,
+        Entity
     };
 
     /**

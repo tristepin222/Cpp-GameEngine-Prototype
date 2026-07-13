@@ -1,28 +1,43 @@
 #pragma once
 #include "ecs/Entity.hpp"
-
+#include "ecs/System.hpp"
 #include <glm/glm.hpp>
 
-namespace Engine {
+class Registry;
+class VulkanRenderer;
+struct EditorModeState;
 
-    struct PhysgunScript {
-        float Kp = 450.0f;
-        float Kd = 25.0f;
-        float holdDistance = 5.0f;
+// @reflect
+struct PhysgunScript {
+    float Kp = 450.0f; // @reflect
+    float Kd = 25.0f; // @reflect
+    float holdDistance = 5.0f; // @reflect
 
-        // Diagnostic fields exposed in the inspector
-        bool isHolding = false;
-        float currentHoldDistance = 0.0f;
-        bool debugShowRay = false;
-        Entity originEntity;
+    // Diagnostic fields exposed in the inspector
+    bool isHolding = false; // @reflect
+    float currentHoldDistance = 0.0f; // @reflect
+    bool debugShowRay = false; // @reflect
+    Entity originEntity; // @reflect
 
-        glm::vec3 rayOrigin{ 0.0f };
-        glm::vec3 rayDirection{ 0.0f, 0.0f, -1.0f };
+    glm::vec3 rayOrigin{ 0.0f };
+    glm::vec3 rayDirection{ 0.0f, 0.0f, -1.0f };
 
-        int updateCount = 0;
+    int updateCount = 0;
 
-        // Internal non-reflected state
-        Entity heldEntity;
-    };
+    // Internal non-reflected state
+    Entity heldEntity;
+};
 
-} // namespace Engine
+// @reflect
+class PhysgunSystem : public System {
+private:
+    Registry& registry;
+    VulkanRenderer& renderer;
+    EditorModeState& editorMode;
+    bool fKeyPressed = false;
+    bool rKeyPressed = false;
+
+public:
+    PhysgunSystem(Registry& reg, VulkanRenderer& rend, EditorModeState& mode);
+    void update(float dt) override;
+};

@@ -1151,10 +1151,9 @@ void EditorUI::drawDebugPanel() {
     Separator();
 
     bool hasPhysgun = false;
-    for (auto [ent, script] : registry.view<Engine::PhysgunScript>()) {
+    for (auto [ent, script] : registry.view<PhysgunScript>()) {
         hasPhysgun = true;        
         Text("Entity ID: %d", ent.getId());
-        Text("isHolding: %s", script.isHolding ? "YES" : "NO");
         if (script.isHolding) {
             Text("Held Entity ID: %d", script.heldEntity.getId());
             Text("Current Hold Distance: %.2f", script.currentHoldDistance);
@@ -2901,38 +2900,31 @@ void EditorUI::drawReflectedComponentsEditor() {
                 if (Combo(imguiId.c_str(), &currentType, types, 2)) {
                     *reinterpret_cast<RigidBodyType*>(fieldPtr) = (currentType == 1) ? RigidBodyType::Static : RigidBodyType::Dynamic;
                 }
-            }
-        }
-
-        if (refl.name == "PhysgunScript") {
-            auto* script = static_cast<Engine::PhysgunScript*>(compPtr);
-            auto drawTargetSelector = [&](const char* label, Entity& target) {
-                std::string targetLabel = "None (Player Chest)";
-                if (target.getId() != Entity::INVALID_ENTITY && registry.isValid(target)) {
-                    if (auto* nameComp = registry.get<Name>(target)) {
+            } else if (field.type == Engine::FieldType::Entity) {
+                auto* target = reinterpret_cast<Entity*>(fieldPtr);
+                std::string targetLabel = "None";
+                if (target->getId() != Entity::INVALID_ENTITY && registry.isValid(*target)) {
+                    if (auto* nameComp = registry.get<Name>(*target)) {
                         targetLabel = nameComp->value;
                     } else {
-                        targetLabel = "Entity " + std::to_string(target.getId());
+                        targetLabel = "Entity " + std::to_string(target->getId());
                     }
                 }
-                if (ImGui::BeginCombo(label, targetLabel.c_str())) {
-                    if (ImGui::Selectable("None (Player Chest)", target.getId() == Entity::INVALID_ENTITY)) {
-                        target = Entity();
+                if (ImGui::BeginCombo(imguiId.c_str(), targetLabel.c_str())) {
+                    if (ImGui::Selectable("None", target->getId() == Entity::INVALID_ENTITY)) {
+                        *target = Entity();
                     }
                     for (auto [ent, nameComp] : registry.view<Name>()) {
                         if (ent != selectedEntity) {
-                            bool isSelected = (ent == target);
+                            bool isSelected = (ent == *target);
                             if (ImGui::Selectable(nameComp.value.c_str(), isSelected)) {
-                                target = ent;
+                                *target = ent;
                             }
                         }
                     }
                     ImGui::EndCombo();
                 }
-            };
-
-            ImGui::Separator();
-            drawTargetSelector("Origin Object", script->originEntity);
+            }
         }
 
         // Draw runtime diagnostic section for PlayerController if playing
@@ -3260,7 +3252,7 @@ void EditorUI::drawPhysgunDebugOverlay() {
 
     ImDrawList* drawList = ImGui::GetForegroundDrawList();
 
-    for (auto [ent, script] : registry.view<Engine::PhysgunScript>()) {
+    for (auto [ent, script] : registry.view<PhysgunScript>()) {
         if (!script.debugShowRay) continue;
 
         glm::vec3 start = script.rayOrigin;

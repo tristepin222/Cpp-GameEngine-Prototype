@@ -91,13 +91,18 @@ void PluginManager::loadPlugins() {
 }
 
 void PluginManager::loadScripts(const std::string& projectPath) {
+    std::string binDir = projectPath + "/bin";
     std::string scriptsDir = projectPath + "/scripts";
-    if (!std::filesystem::exists(scriptsDir)) {
-        std::cout << "[PluginManager] No scripts/ folder found at: " << scriptsDir << std::endl;
-        return;
+
+    if (std::filesystem::exists(binDir)) {
+        std::cout << "[PluginManager] Loading user scripts from bin: " << binDir << std::endl;
+        scanDirectory(binDir);
+    } else if (std::filesystem::exists(scriptsDir)) {
+        std::cout << "[PluginManager] Loading user scripts from scripts folder: " << scriptsDir << std::endl;
+        scanDirectory(scriptsDir);
+    } else {
+        std::cout << "[PluginManager] No scripts/ or bin/ folder found at: " << projectPath << std::endl;
     }
-    std::cout << "[PluginManager] Loading user scripts from: " << scriptsDir << std::endl;
-    scanDirectory(scriptsDir);
 }
 
 void PluginManager::unloadPlugins() {

@@ -19,7 +19,6 @@
 #include "ecs/components/RigidBody.hpp"
 #include "ecs/components/Collider.hpp"
 #include "ecs/components/PlayerControllerComponent.hpp"
-#include "ecs/components/PhysgunScript.hpp"
 #include "meta/ComponentReflection.hpp"
 
 
@@ -613,11 +612,9 @@ static bool registerBuiltinComponents() {
                         } else if (field.type == Engine::FieldType::RigidBodyType) {
                             std::string typeStr = (*reinterpret_cast<RigidBodyType*>(fieldPtr) == RigidBodyType::Static) ? "Static" : "Dynamic";
                             out << JSONUtils::quote(typeStr);
+                        } else if (field.type == Engine::FieldType::Entity) {
+                            out << static_cast<float>(reinterpret_cast<Entity*>(fieldPtr)->getId());
                         }
-                    }
-                    if (refl.name == "PhysgunScript") {
-                        auto* script = static_cast<Engine::PhysgunScript*>(compPtr);
-                        out << ",\n" << JSONUtils::indent(indent) << "\"originEntity\": " << static_cast<float>(script->originEntity.getId());
                     }
                 }
             },
@@ -650,13 +647,11 @@ static bool registerBuiltinComponents() {
                             if (!typeStr.empty()) {
                                 *reinterpret_cast<RigidBodyType*>(fieldPtr) = (typeStr == "Static") ? RigidBodyType::Static : RigidBodyType::Dynamic;
                             }
-                        }
-                    }
-                    if (refl.name == "PhysgunScript") {
-                        float originIdVal = 0.0f;
-                        if (JSONUtils::extractFloatValue(json, "originEntity", originIdVal)) {
-                            auto* script = static_cast<Engine::PhysgunScript*>(compPtr);
-                            script->originEntity = Entity(static_cast<std::uint32_t>(originIdVal));
+                        } else if (field.type == Engine::FieldType::Entity) {
+                            float idVal = 0.0f;
+                            if (JSONUtils::extractFloatValue(json, field.name, idVal)) {
+                                *reinterpret_cast<Entity*>(fieldPtr) = Entity(static_cast<std::uint32_t>(idVal));
+                            }
                         }
                     }
                 }

@@ -141,4 +141,8 @@ target_link_libraries(game_runtime PRIVATE engine)
 set_target_properties(game_runtime PROPERTIES OUTPUT_NAME "game_runtime")
 target_include_directories(game_runtime PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-message(STATUS "Configured editor and game_runtime executables")
+# --- Reflection Generator Host Tool ---
+add_executable(reflection_generator src/tools/reflection_generator.cpp)
+set_target_properties(reflection_generator PROPERTIES OUTPUT_NAME "reflection_generator")
+
+message(STATUS "Configured editor, game_runtime, and reflection_generator executables")
