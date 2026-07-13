@@ -1,6 +1,8 @@
 #pragma once
 #include <glm/glm.hpp>
 
+#include "core/EngineAPI.hpp"
+
 enum class RigidBodyType {
     Dynamic,
     Static
@@ -10,7 +12,7 @@ enum class RigidBodyType {
  * @struct RigidBodyComponent
  * @brief Holds mass, velocity, acceleration, forces, restitution, bounciness, and gravity settings.
  */
-struct RigidBodyComponent {
+struct ENGINE_API RigidBodyComponent {
     RigidBodyType type = RigidBodyType::Dynamic;
     float mass = 1.0f;
     glm::vec3 velocity = glm::vec3(0.0f);

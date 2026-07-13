@@ -1,6 +1,8 @@
 #pragma once
 #include <glm/glm.hpp>
 
+#include "core/EngineAPI.hpp"
+
 enum class ColliderShape {
     Sphere,
     AABB,
@@ -12,7 +14,7 @@ enum class ColliderShape {
  * @struct ColliderComponent
  * @brief Represents a collision volume (Sphere, Axis-Aligned Bounding Box, Oriented Bounding Box, or Capsule).
  */
-struct ColliderComponent {
+struct ENGINE_API ColliderComponent {
     ColliderShape shape = ColliderShape::AABB;
     float radius = 1.0f;                       // Used for Sphere and Capsule colliders
     float height = 2.0f;                       // Total height (including caps) for Capsule colliders

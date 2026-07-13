@@ -87,7 +87,9 @@ public:
                 if (!registry.has<EditorCamera>(entity)) {
                     cam.aspect = aspect;
                     // Note: Scene cameras are animated/controlled by scripts/physics, not editor controls
+                    glm::mat4 vp = cam.projection() * cam.view(transform);
                     renderer.setActiveCamera(cam.projection(), transform.position, cam.view(transform));
+                    renderer.setGameplayCamera(vp, transform.position);
                     return; // Done
                 } else {
                     fallbackCam = entity;
@@ -100,7 +102,9 @@ public:
                 auto* transform = registry.get<Transform>(fallbackCam);
                 if (cam && transform) {
                     cam->aspect = aspect;
+                    glm::mat4 vp = cam->projection() * cam->view(*transform);
                     renderer.setActiveCamera(cam->projection(), transform->position, cam->view(*transform));
+                    renderer.setGameplayCamera(vp, transform->position);
                 }
             }
         }

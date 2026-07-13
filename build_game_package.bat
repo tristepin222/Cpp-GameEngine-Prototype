@@ -66,6 +66,18 @@ if exist "%PROJECT_PATH%\project.settings" (
     copy /Y "%PROJECT_PATH%\project.settings" "%OUTPUT_PATH%\"
 )
 
+REM Compile user scripts on build
+if exist "%PROJECT_PATH%\scripts\CMakeLists.txt" (
+    echo [Build] Compiling project user scripts...
+    if not exist "%PROJECT_PATH%\scripts\build" mkdir "%PROJECT_PATH%\scripts\build"
+    cmake -S "%PROJECT_PATH%\scripts" -B "%PROJECT_PATH%\scripts\build" -G "Visual Studio 17 2022" -A x64 -T v143 -DCMAKE_BUILD_TYPE=Release
+    cmake --build "%PROJECT_PATH%\scripts\build" --config Release
+    if %ERRORLEVEL% NEQ 0 (
+        echo [ERROR] Project user scripts compilation failed.
+        exit /b %ERRORLEVEL%
+    )
+)
+
 REM Copy compiled user script DLLs (if any)
 if exist "%PROJECT_PATH%\scripts" (
     for /r "%PROJECT_PATH%\scripts" %%f in (*.dll) do (

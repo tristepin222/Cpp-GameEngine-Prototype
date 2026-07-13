@@ -19,6 +19,7 @@
 #include "ecs/components/RigidBody.hpp"
 #include "ecs/components/Collider.hpp"
 #include "ecs/components/PlayerControllerComponent.hpp"
+#include "ecs/components/PhysgunScript.hpp"
 #include "meta/ComponentReflection.hpp"
 
 
@@ -614,6 +615,10 @@ static bool registerBuiltinComponents() {
                             out << JSONUtils::quote(typeStr);
                         }
                     }
+                    if (refl.name == "PhysgunScript") {
+                        auto* script = static_cast<Engine::PhysgunScript*>(compPtr);
+                        out << ",\n" << JSONUtils::indent(indent) << "\"originEntity\": " << static_cast<float>(script->originEntity.getId());
+                    }
                 }
             },
             [refl](Registry& registry, VulkanRenderer&, Entity entity, const std::string& json) {
@@ -645,6 +650,13 @@ static bool registerBuiltinComponents() {
                             if (!typeStr.empty()) {
                                 *reinterpret_cast<RigidBodyType*>(fieldPtr) = (typeStr == "Static") ? RigidBodyType::Static : RigidBodyType::Dynamic;
                             }
+                        }
+                    }
+                    if (refl.name == "PhysgunScript") {
+                        float originIdVal = 0.0f;
+                        if (JSONUtils::extractFloatValue(json, "originEntity", originIdVal)) {
+                            auto* script = static_cast<Engine::PhysgunScript*>(compPtr);
+                            script->originEntity = Entity(static_cast<std::uint32_t>(originIdVal));
                         }
                     }
                 }

@@ -36,6 +36,7 @@
 #include "ecs/components/RigidBody.hpp"
 #include "ecs/components/Collider.hpp"
 #include "ecs/components/PlayerControllerComponent.hpp"
+#include "ecs/components/PhysgunScript.hpp"
 #include <functional>
 #include "renderer/VulkanRenderer.hpp"
 #include "scenes/Scene.hpp"
@@ -496,6 +497,7 @@ void EditorUI::drawPanels() {
     // 6. Draw Gizmo and Viewport overlay controls (drawn on top of clear center area)
     drawGizmo();
     drawColliderDebugOverlay();
+    drawPhysgunDebugOverlay();
     handleViewportPicking();
     
     // 7. Float Import Settings panel
@@ -756,6 +758,7 @@ void EditorUI::drawHierarchyPanel() {
         ImGui::Separator();
         if (ImGui::MenuItem("Camera"))        { if (currentScene) { auto e = currentScene->createEntityOfType("Camera"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
         if (ImGui::MenuItem("Grid"))          { if (currentScene) { auto e = currentScene->createEntityOfType("Grid");   selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+        if (ImGui::MenuItem("Empty GameObject")) { if (currentScene) { auto e = currentScene->createEntityOfType("Empty");  selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
         ImGui::EndPopup();
     }
 
@@ -830,6 +833,55 @@ void EditorUI::drawHierarchyPanel() {
                         hasSelection = true;
                         if (auto* n = registry.get<Name>(dup)) renameBuffer = n->value;
                         statusMessage = "Duplicated entity.";
+                    }
+                }
+            }
+
+            if (ImGui::MenuItem("Create Empty Child")) {
+                if (currentScene) {
+                    Entity child = registry.create();
+                    registry.emplace<Name>(child, Name{ currentScene->makeUniqueEntityName("Empty GameObject") });
+                    registry.emplace<Transform>(child, Transform{ glm::vec3(0.0f) });
+                    registry.emplace<HierarchyComponent>(child, HierarchyComponent{ entity });
+                    currentScene->trackEntity(child);
+                    selectedEntity = child;
+                    hasSelection = true;
+                    renameBuffer = "Empty GameObject";
+                    statusMessage = "Created empty child object.";
+                }
+            }
+
+            if (auto* hc = registry.get<HierarchyComponent>(entity)) {
+                if (hc->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hc->parent)) {
+                    if (ImGui::MenuItem("Unparent (Make Root)")) {
+                        hc->parent = Entity();
+                        statusMessage = "Unparented entity to root.";
+                    }
+                }
+            }
+
+            if (hasSelection && selectedEntity != entity) {
+                bool isDescendant = false;
+                Entity check = entity;
+                while (check.getId() != Entity::INVALID_ENTITY && registry.isValid(check)) {
+                    if (auto* checkHierarchy = registry.get<HierarchyComponent>(check)) {
+                        if (checkHierarchy->parent == selectedEntity) {
+                            isDescendant = true;
+                            break;
+                        }
+                        check = checkHierarchy->parent;
+                    } else {
+                        break;
+                    }
+                }
+                if (!isDescendant) {
+                    if (ImGui::MenuItem("Parent Selected to This")) {
+                        if (auto* hc = registry.get<HierarchyComponent>(selectedEntity)) {
+                            hc->parent = entity;
+                        } else {
+                            registry.emplace<HierarchyComponent>(selectedEntity, HierarchyComponent{ entity });
+                        }
+                        statusMessage = "Parented selected entity.";
                     }
                 }
             }
@@ -1092,7 +1144,42 @@ void EditorUI::drawDebugPanel() {
     Spacing();
     Separator();
     TextUnformatted("Clip Depth Mode: OpenGL-style (-1..1)");
-    
+
+    Spacing();
+    Separator();
+    TextUnformatted("Physgun System Debug");
+    Separator();
+
+    bool hasPhysgun = false;
+    for (auto [ent, script] : registry.view<Engine::PhysgunScript>()) {
+        hasPhysgun = true;        
+        Text("Entity ID: %d", ent.getId());
+        Text("isHolding: %s", script.isHolding ? "YES" : "NO");
+        if (script.isHolding) {
+            Text("Held Entity ID: %d", script.heldEntity.getId());
+            Text("Current Hold Distance: %.2f", script.currentHoldDistance);
+        }
+        Text("Script Ray Origin: (%.2f, %.2f, %.2f)", script.rayOrigin.x, script.rayOrigin.y, script.rayOrigin.z);
+        Text("Script Ray Direction: (%.2f, %.2f, %.2f)", script.rayDirection.x, script.rayDirection.y, script.rayDirection.z);
+        Text("Script Update Count: %d", script.updateCount);
+        Text("Debug Show Ray: %s (Press R to toggle)", script.debugShowRay ? "ON" : "OFF");
+        Text("Kp (Stiffness): %.1f", script.Kp);
+        Text("Kd (Damping): %.1f", script.Kd);
+        Text("Default Hold Dist: %.1f", script.holdDistance);
+    }
+    if (!hasPhysgun) {
+        TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "No active PhysgunScript found in scene.");
+    }
+
+    Spacing();
+    Separator();
+    TextUnformatted("Gameplay Camera Matrices from Renderer:");
+    Text("Det(VP): %.4f", glm::determinant(renderer.getGameplayCameraViewProj()));
+    Text("Pos: (%.2f, %.2f, %.2f)", 
+         renderer.getGameplayCameraPosition().x, 
+         renderer.getGameplayCameraPosition().y, 
+         renderer.getGameplayCameraPosition().z);
+
     Spacing();
     Separator();
     Checkbox("Show Colliders", &showColliders);
@@ -2817,6 +2904,37 @@ void EditorUI::drawReflectedComponentsEditor() {
             }
         }
 
+        if (refl.name == "PhysgunScript") {
+            auto* script = static_cast<Engine::PhysgunScript*>(compPtr);
+            auto drawTargetSelector = [&](const char* label, Entity& target) {
+                std::string targetLabel = "None (Player Chest)";
+                if (target.getId() != Entity::INVALID_ENTITY && registry.isValid(target)) {
+                    if (auto* nameComp = registry.get<Name>(target)) {
+                        targetLabel = nameComp->value;
+                    } else {
+                        targetLabel = "Entity " + std::to_string(target.getId());
+                    }
+                }
+                if (ImGui::BeginCombo(label, targetLabel.c_str())) {
+                    if (ImGui::Selectable("None (Player Chest)", target.getId() == Entity::INVALID_ENTITY)) {
+                        target = Entity();
+                    }
+                    for (auto [ent, nameComp] : registry.view<Name>()) {
+                        if (ent != selectedEntity) {
+                            bool isSelected = (ent == target);
+                            if (ImGui::Selectable(nameComp.value.c_str(), isSelected)) {
+                                target = ent;
+                            }
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+            };
+
+            ImGui::Separator();
+            drawTargetSelector("Origin Object", script->originEntity);
+        }
+
         // Draw runtime diagnostic section for PlayerController if playing
         if (refl.name == "PlayerController" && editorMode.isPlaying) {
             auto* pc = static_cast<PlayerControllerComponent*>(compPtr);
@@ -3121,6 +3239,41 @@ void EditorUI::drawColliderDebugOverlay() {
             drawLine(glm::vec3(-radius, 0.0f, 0.0f));
             drawLine(glm::vec3(0.0f, 0.0f, radius));
             drawLine(glm::vec3(0.0f, 0.0f, -radius));
+        }
+    }
+}
+
+void EditorUI::drawPhysgunDebugOverlay() {
+    if (!editorMode.isPlaying) return;
+
+    ImGuiIO& io = ImGui::GetIO();
+    glm::mat4 viewProj = renderer.getActiveCameraViewProj();
+
+    auto projectToScreen = [&](const glm::vec3& worldPos, ImVec2& screenPos) -> bool {
+        glm::vec4 clipPos = viewProj * glm::vec4(worldPos, 1.0f);
+        if (clipPos.w < 0.0001f) return false;
+        glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
+        screenPos.x = (ndc.x + 1.0f) * 0.5f * io.DisplaySize.x;
+        screenPos.y = (ndc.y + 1.0f) * 0.5f * io.DisplaySize.y;
+        return true;
+    };
+
+    ImDrawList* drawList = ImGui::GetForegroundDrawList();
+
+    for (auto [ent, script] : registry.view<Engine::PhysgunScript>()) {
+        if (!script.debugShowRay) continue;
+
+        glm::vec3 start = script.rayOrigin;
+        float lineDist = script.isHolding ? script.currentHoldDistance : 40.0f;
+        glm::vec3 end = start + script.rayDirection * lineDist;
+
+        ImVec2 pStart, pEnd;
+        if (projectToScreen(start, pStart) && projectToScreen(end, pEnd)) {
+            // Draw glowing cyan line if not holding, or orange if holding
+            ImU32 color = script.isHolding ? ImColor(255, 69, 0, 255) : ImColor(0, 255, 255, 255);
+            drawList->AddLine(pStart, pEnd, color, 3.0f);
+            drawList->AddCircleFilled(pEnd, 6.0f, color);
+            drawList->AddCircle(pEnd, 10.0f, ImColor(255, 255, 255, 180), 0, 1.5f);
         }
     }
 }

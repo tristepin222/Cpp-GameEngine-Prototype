@@ -139,6 +139,10 @@ Entity Scene::createEntityOfType(const std::string& entityType) {
             1.0f,
             100.0f
         );
+    } else if (entityType == "Empty") {
+        entity = registry.create();
+        registry.emplace<Name>(entity, Name{ makeUniqueEntityName("Empty GameObject") });
+        registry.emplace<Transform>(entity, Transform{ glm::vec3(0.0f) });
     } else {
         return Entity();
     }

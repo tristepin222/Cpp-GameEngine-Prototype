@@ -2,12 +2,13 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "../components/Transform.hpp"
+#include "core/EngineAPI.hpp"
 
 /**
  * @struct Camera
  * @brief Represents a camera component for rendering and viewing.
  */
-struct Camera {
+struct ENGINE_API Camera {
     /** @brief Field of view in degrees. */
     float fov = 45.f;
     /** @brief Aspect ratio (width / height). */

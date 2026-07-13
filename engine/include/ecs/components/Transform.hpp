@@ -3,11 +3,12 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include "core/EngineAPI.hpp"
 /**
  * @struct Transform
  * @brief Represents the position, rotation, and scale of an entity in 3D space.
  */
-struct Transform {
+struct ENGINE_API Transform {
 
     /** @brief Position of the entity in 3D space. */
     glm::vec3 position{ 0.0f };

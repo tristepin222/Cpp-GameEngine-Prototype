@@ -10,3 +10,4 @@ option(BUILD_PLUGIN_CINEMACHINE "Build Cinemachine camera tracking addon plugin"
 if (BUILD_PLUGIN_CINEMACHINE)
     add_subdirectory(cinemachine)
 endif()
+

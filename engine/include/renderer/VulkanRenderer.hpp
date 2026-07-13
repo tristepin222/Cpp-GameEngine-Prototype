@@ -224,6 +224,24 @@ public:
      */
     bool getKey(int key) const;
     /**
+     * @brief Checks if a mouse button is currently pressed (executes within engine.dll context).
+     * @param button GLFW mouse button code.
+     * @return True if pressed.
+     */
+    bool getMouseButton(int button) const;
+    /**
+     * @brief Gets the mouse cursor position (executes within engine.dll context).
+     * @param xpos Output X position.
+     * @param ypos Output Y position.
+     */
+    void getMousePosition(double* xpos, double* ypos) const;
+    /**
+     * @brief Gets the window size (executes within engine.dll context).
+     * @param width Output width.
+     * @param height Output height.
+     */
+    void getWindowSize(int* width, int* height) const;
+    /**
      * @brief Gets Vulkan RenderPass.
      * @return RenderPass handle.
      */
@@ -335,6 +353,16 @@ public:
      * @return Mat4.
      */
     const glm::mat4& getActiveCameraProjection() const { return activeCameraProjection; }
+
+    glm::mat4 gameplayCameraViewProj = glm::mat4(1.0f);
+    glm::vec3 gameplayCameraPosition = glm::vec3(0.0f);
+
+    void setGameplayCamera(const glm::mat4& viewProj, const glm::vec3& position) {
+        gameplayCameraViewProj = viewProj;
+        gameplayCameraPosition = position;
+    }
+    const glm::mat4& getGameplayCameraViewProj() const { return gameplayCameraViewProj; }
+    const glm::vec3& getGameplayCameraPosition() const { return gameplayCameraPosition; }
     
     /** @brief Storage vector of created custom Vulkan pipelines. */
     std::vector<std::unique_ptr<VulkanPipeline>> pipelines;

@@ -1,10 +1,12 @@
 #pragma once
 
+#include "core/EngineAPI.hpp"
+
 /**
  * @struct PlayerControllerComponent
  * @brief Component to mark and control player movement and interaction.
  */
-struct PlayerControllerComponent {
+struct ENGINE_API PlayerControllerComponent {
     float speed = 5.0f;
     float jumpForce = 6.0f;
     float interactRange = 3.0f;

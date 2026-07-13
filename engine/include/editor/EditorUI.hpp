@@ -195,6 +195,10 @@ private:
      * @brief Draws wireframe overlays for all active colliders when enabled.
      */
     void drawColliderDebugOverlay();
+    /**
+     * @brief Draws physics gun debug rays when activated by the user.
+     */
+    void drawPhysgunDebugOverlay();
 
     /** @brief Reference to registry. */
     Registry& registry;

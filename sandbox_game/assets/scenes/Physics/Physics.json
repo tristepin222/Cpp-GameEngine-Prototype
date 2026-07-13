@@ -19,10 +19,19 @@
       "active": true,
       "priority": 10,
       "fov": 45,
+      "mode": 0,
+      "mouseOrbit": true,
+      "mouseLook": true,
+      "orbitSensitivity": 0.1,
+      "orbitYaw": 0,
+      "orbitPitch": 0,
+      "cameraYaw": 0,
+      "cameraPitch": 0,
       "followTarget": 9995,
       "lookAtTarget": 9995,
       "followTargetName": "Player",
       "lookAtTargetName": "Player",
+      "lockToBone": "Head",
       "followDamping": 2,
       "lookAtDamping": 1,
       "followOffsetX": 0,
@@ -94,7 +103,15 @@
       "hasPlayerController": true,
       "playerSpeed": 5,
       "playerJumpForce": 6,
-      "playerInteractRange": 3
+      "playerInteractRange": 3,
+      "hasPhysgunScript": true,
+      "Kp": 450,
+      "Kd": 25,
+      "holdDistance": 5,
+      "isHolding": 0.0,
+      "currentHoldDistance": 0,
+      "debugShowRay": 0.0,
+      "originEntity": 9992
     },
     {
       "name": "Cube 2",
@@ -150,6 +167,14 @@
       "rbFreezeRX": 0.0,
       "rbFreezeRY": 0.0,
       "rbFreezeRZ": 0.0
+    },
+    {
+      "name": "Empty GameObject",
+      "position": [-1.13249e-06, 1.55424, 2.6226e-06],
+      "rotation": [0, 0, 0],
+      "scale": [1, 1, 1],
+      "entityType": "Hierarchy",
+      "parentName": "Player"
     }
   ]
 }

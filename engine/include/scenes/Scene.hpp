@@ -87,6 +87,12 @@ public:
      * @param entity Entity to untrack.
      */
     void untrackEntity(Entity entity);
+    /**
+     * @brief Generates a unique name for an entity by appending indices if duplicate.
+     * @param baseName Intended name.
+     * @return Unique name.
+     */
+    std::string makeUniqueEntityName(const std::string& baseName) const;
 
 protected:
     
@@ -96,12 +102,6 @@ protected:
      * @return Entity handle if found, invalid Entity otherwise.
      */
     Entity findEntityByName(const std::string& name) const;
-    /**
-     * @brief Generates a unique name for an entity by appending indices if duplicate.
-     * @param baseName Intended name.
-     * @return Unique name.
-     */
-    std::string makeUniqueEntityName(const std::string& baseName) const;
 
     /** @brief Reference to registry. */
     Registry& registry;

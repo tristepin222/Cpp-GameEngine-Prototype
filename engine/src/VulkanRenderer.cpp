@@ -462,6 +462,29 @@ bool VulkanRenderer::getKey(int key) const {
     return glfwGetKey(window, key) == GLFW_PRESS;
 }
 
+bool VulkanRenderer::getMouseButton(int button) const {
+    if (!window) return false;
+    return glfwGetMouseButton(window, button) == GLFW_PRESS;
+}
+
+void VulkanRenderer::getMousePosition(double* xpos, double* ypos) const {
+    if (window) {
+        glfwGetCursorPos(window, xpos, ypos);
+    } else {
+        if (xpos) *xpos = 0.0;
+        if (ypos) *ypos = 0.0;
+    }
+}
+
+void VulkanRenderer::getWindowSize(int* width, int* height) const {
+    if (window) {
+        glfwGetWindowSize(window, width, height);
+    } else {
+        if (width) *width = 0;
+        if (height) *height = 0;
+    }
+}
+
 /**
  * @brief Uploads mesh data to vertex and index buffers.
  * @param meshID ID of target mesh.
