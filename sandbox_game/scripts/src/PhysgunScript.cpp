@@ -190,7 +190,10 @@ void PhysgunSystem::update(float dt) {
                         if (auto* trans = registry.get<Transform>(script.heldEntity)) {
                             if (auto* rb = registry.get<RigidBodyComponent>(script.heldEntity)) {
                                 // Adjust distance with scroll wheel or keyboard keys (Q/E)
-                                float wheel = ImGui::GetIO().MouseWheel;
+                                float wheel = 0.0f;
+                                if (ImGui::GetCurrentContext() != nullptr) {
+                                    wheel = ImGui::GetIO().MouseWheel;
+                                }
                                 script.currentHoldDistance += wheel * 1.5f;
 
                                 if (renderer.getKey(GLFW_KEY_Q)) {
