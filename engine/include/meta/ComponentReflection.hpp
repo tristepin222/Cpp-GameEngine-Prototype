@@ -18,7 +18,8 @@ namespace Engine {
         Bool,
         Vec3,
         RigidBodyType,
-        Entity
+        Entity,
+        String
     };
 
     /**

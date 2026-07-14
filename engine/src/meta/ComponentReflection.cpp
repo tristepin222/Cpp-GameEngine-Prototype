@@ -1,6 +1,8 @@
 #include "meta/ComponentReflection.hpp"
 #include "ecs/components/RigidBody.hpp"
 #include "ecs/components/PlayerControllerComponent.hpp"
+#include "ecs/components/AudioSource.hpp"
+#include "ecs/components/AudioListener.hpp"
 #include <cstddef>
 
 namespace Engine {
@@ -51,6 +53,37 @@ namespace Engine {
             pcRefl.remove = [](Registry& reg, Entity e) { reg.remove<PlayerControllerComponent>(e); };
             pcRefl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<PlayerControllerComponent>(e)); };
             instance.registerComponent(pcRefl);
+
+            // 3. AudioSourceComponent Reflection
+            ComponentReflection audioSrcRefl;
+            audioSrcRefl.name = "AudioSource";
+            audioSrcRefl.fields = {
+                { "clipPath", FieldType::String, offsetof(AudioSourceComponent, clipPath) },
+                { "volume", FieldType::Float, offsetof(AudioSourceComponent, volume) },
+                { "pitch", FieldType::Float, offsetof(AudioSourceComponent, pitch) },
+                { "loop", FieldType::Bool, offsetof(AudioSourceComponent, loop) },
+                { "playOnAwake", FieldType::Bool, offsetof(AudioSourceComponent, playOnAwake) },
+                { "spatialized", FieldType::Bool, offsetof(AudioSourceComponent, spatialized) },
+                { "minDistance", FieldType::Float, offsetof(AudioSourceComponent, minDistance) },
+                { "maxDistance", FieldType::Float, offsetof(AudioSourceComponent, maxDistance) }
+            };
+            audioSrcRefl.add = [](Registry& reg, Entity e) { reg.emplace<AudioSourceComponent>(e, AudioSourceComponent{}); };
+            audioSrcRefl.has = [](Registry& reg, Entity e) { return reg.has<AudioSourceComponent>(e); };
+            audioSrcRefl.remove = [](Registry& reg, Entity e) { reg.remove<AudioSourceComponent>(e); };
+            audioSrcRefl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<AudioSourceComponent>(e)); };
+            instance.registerComponent(audioSrcRefl);
+
+            // 4. AudioListenerComponent Reflection
+            ComponentReflection audioListRefl;
+            audioListRefl.name = "AudioListener";
+            audioListRefl.fields = {
+                { "active", FieldType::Bool, offsetof(AudioListenerComponent, active) }
+            };
+            audioListRefl.add = [](Registry& reg, Entity e) { reg.emplace<AudioListenerComponent>(e, AudioListenerComponent{}); };
+            audioListRefl.has = [](Registry& reg, Entity e) { return reg.has<AudioListenerComponent>(e); };
+            audioListRefl.remove = [](Registry& reg, Entity e) { reg.remove<AudioListenerComponent>(e); };
+            audioListRefl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<AudioListenerComponent>(e)); };
+            instance.registerComponent(audioListRefl);
         }
         return instance;
     }

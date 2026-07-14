@@ -11,6 +11,7 @@
 #include "ecs/systems/AnimationSystem.hpp"
 #include "ecs/systems/PhysicsSystem.hpp"
 #include "ecs/systems/PlayerControllerSystem.hpp"
+#include "ecs/systems/AudioSystem.hpp"
 #include "scenes/Scene.hpp"
 #include "scenes/JSONUtils.hpp"
 #include "scenes/DefaultScene.hpp"
@@ -95,12 +96,14 @@ namespace Engine {
         auto animationSystem = std::make_shared<AnimationSystem>(registry, *renderer, editorMode);
         auto physicsSystem = std::make_shared<PhysicsSystem>(registry, editorMode);
         auto playerControllerSystem = std::make_shared<PlayerControllerSystem>(registry, *renderer, editorMode);
+        auto audioSystem = std::make_shared<AudioSystem>(registry, editorMode);
 
         systemManager.addSystem(inputSystem);
         systemManager.addSystem(cameraSystem);
         systemManager.addSystem(physicsSystem);
         systemManager.addSystem(animationSystem);
         systemManager.addSystem(playerControllerSystem);
+        systemManager.addSystem(audioSystem);
         systemManager.addSystem(renderSystem);
 
         // Spawn persistent Editor Camera

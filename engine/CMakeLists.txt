@@ -63,6 +63,8 @@ set(ENGINE_SOURCES
     src/renderer/ResourceManager.cpp
     src/meta/ComponentReflection.cpp
     src/ufbx.cpp
+    src/miniaudio.cpp
+    src/ecs/systems/AudioSystem.cpp
 )
 
 add_library(engine SHARED ${ENGINE_SOURCES})
@@ -81,6 +83,7 @@ target_include_directories(engine PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${cgltf_SOURCE_DIR}
     ${stb_SOURCE_DIR}
+    ${miniaudio_SOURCE_DIR}
 )
 
 target_link_libraries(engine PUBLIC

@@ -5,6 +5,7 @@
 #include "cgltf.h"
 
 #include <limits>
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 #include <fstream>
@@ -3288,6 +3289,25 @@ void EditorUI::drawReflectedComponentsEditor() {
                 int currentType = (*reinterpret_cast<RigidBodyType*>(fieldPtr) == RigidBodyType::Static) ? 1 : 0;
                 if (Combo(imguiId.c_str(), &currentType, types, 2)) {
                     *reinterpret_cast<RigidBodyType*>(fieldPtr) = (currentType == 1) ? RigidBodyType::Static : RigidBodyType::Dynamic;
+                }
+            } else if (field.type == Engine::FieldType::String) {
+                auto* strVal = reinterpret_cast<std::string*>(fieldPtr);
+                char buf[512];
+                strncpy(buf, strVal->c_str(), sizeof(buf));
+                buf[sizeof(buf) - 1] = '\0';
+                if (InputText(imguiId.c_str(), buf, sizeof(buf))) {
+                    *strVal = buf;
+                }
+                if (BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+                        const char* path = (const char*)payload->Data;
+                        std::string pathStr(path);
+                        std::replace(pathStr.begin(), pathStr.end(), '\\', '/');
+                        if (pathStr.find(".wav") != std::string::npos || pathStr.find(".mp3") != std::string::npos || pathStr.find(".ogg") != std::string::npos) {
+                            *strVal = pathStr;
+                        }
+                    }
+                    EndDragDropTarget();
                 }
             } else if (field.type == Engine::FieldType::Entity) {
                 auto* target = reinterpret_cast<Entity*>(fieldPtr);

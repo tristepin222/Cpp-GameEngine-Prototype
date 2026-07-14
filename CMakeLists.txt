@@ -54,6 +54,15 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(stb)
 
+# Fetch miniaudio
+FetchContent_Declare(
+    miniaudio
+    GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+    GIT_TAG master
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(miniaudio)
+
 # --- Add Subdirectories ---
 # sandbox_game is now a standalone project — build it with build_game.bat
 add_subdirectory(engine)

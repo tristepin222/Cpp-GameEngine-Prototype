@@ -795,6 +795,8 @@ static bool registerBuiltinComponents() {
                             out << JSONUtils::quote(typeStr);
                         } else if (field.type == Engine::FieldType::Entity) {
                             out << static_cast<float>(reinterpret_cast<Entity*>(fieldPtr)->getId());
+                        } else if (field.type == Engine::FieldType::String) {
+                            out << JSONUtils::quote(*reinterpret_cast<std::string*>(fieldPtr));
                         }
                     }
                 }
@@ -832,6 +834,10 @@ static bool registerBuiltinComponents() {
                             float idVal = 0.0f;
                             if (JSONUtils::extractFloatValue(json, field.name, idVal)) {
                                 *reinterpret_cast<Entity*>(fieldPtr) = Entity(static_cast<std::uint32_t>(idVal));
+                            }
+                        } else if (field.type == Engine::FieldType::String) {
+                            if (json.find("\"" + field.name + "\":") != std::string::npos) {
+                                *reinterpret_cast<std::string*>(fieldPtr) = JSONUtils::extractStringValue(json, field.name);
                             }
                         }
                     }
