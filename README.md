@@ -34,8 +34,11 @@ For a comprehensive explanation of execution flow and frame sequence, see the [A
 6.  **3D Viewport Gizmos (ImGuizmo)**: Supports real-time translation, rotation, and scaling directly on selected entities in the 3D viewport, with automatic matrix decomposition back to ECS component transforms.
 7.  **Raycast Viewport Picking**: Mathematical unprojection of 2D screen-space mouse coordinates to 3D world-space picking rays, resolving bounding sphere intersects to select entities directly in the viewport.
 8.  **Generic Scene Serialization**: A component-agnostic serialization registry allowing dynamic registration of custom components so they save/load to JSON automatically without modifying core engine logic.
-9.  **VRAM Resource Manager & Asset Pipeline** [NEW]: Integrated asset importer utilizing `cgltf` (glTF models) and `stb_image` (textures). Features automatic layout transitions, staging upload buffers, 1x1 color fallbacks, and reference caching to avoid duplicate VRAM allocations.
-10. **Application Lifecycle Encapsulation & Standalone Mode** [NEW]: Fully wraps Vulkan/GLFW bootstrapping and tick updates inside an `Engine::Application` base class. Supports standalone fullscreen play mode and project settings overrides via a simple `project.settings` configuration.
+9.  **VRAM Resource Manager & Asset Pipeline**: Integrated asset importer utilizing `cgltf` (glTF models) and `stb_image` (textures). Features automatic layout transitions, staging upload buffers, 1x1 color fallbacks, and reference caching to avoid duplicate VRAM allocations.
+10. **Application Lifecycle Encapsulation & Standalone Mode**: Fully wraps Vulkan/GLFW bootstrapping and tick updates inside an `Engine::Application` base class. Supports standalone fullscreen play mode and project settings overrides via a simple `project.settings` configuration.
+11. **Skeletal Animation, 2D Blend Trees & IK Solvers**: Linear Blend Skinning (LBS) math executed in Vulkan vertex shaders, Forward Kinematics, analytical 2-bone and FABRIK IK solvers, interactive 1D/2D animation blend trees, custom binary `.anim` baking pipeline, and direct WASD controller mapping.
+12. **Static Reflection Engine**: Uses a custom parser and code generator (`reflection_generator`) that scans source file annotations to generate static reflection descriptors. This enables automatic JSON serialization and dynamic editor UI property fields without manual code mapping.
+13. **Physics & Animation Showcase Game**: An interactive sandbox play mode demonstrating rigid body physics, collision resolution (using SAT and impulses), a fully controllable character utilizing 2D blend trees, and a physics gravity gun script.
 
 ---
 
@@ -47,7 +50,8 @@ To understand the engineering behind this prototype, explore the detailed docume
 *   **[Custom ECS Engine](docs/ecs_system.md)**: Registry, EntityManager, dense `ComponentStorage` vectors, swap-remove mechanics, compile-time views, and Structure of Arrays (SoA) memory optimizations.
 *   **[Vulkan Graphics Pipeline](docs/vulkan_renderer.md)**: Custom API wrappers, double-buffered frame synchronization (fences/semaphores), pipeline assembly, instanced drawing batch loop, and push constant parameters.
 *   **[Editor UI & Viewport Raycasting](docs/editor_ui.md)**: ImGui backend integration, viewport coordinate translation math (unprojecting NDC space), ray-sphere intersection solver, and JSON scene parser.
-*   **[Skeletal Animation & Skinning](docs/animation_system.md)** [PLAN]: Linear Blend Skinning (LBS) math, keyframe translation/rotation (SLERP) interpolation, hierarchical forward kinematics (FK), and Inverse Kinematics (IK) solvers.
+*   **[Skeletal Animation & Skinning](docs/animation_system.md)**: Linear Blend Skinning (LBS) math, keyframe translation/rotation (SLERP) interpolation, hierarchical forward kinematics (FK), 1D and 2D Freeform Cartesian blend trees, and Inverse Kinematics (IK) solvers.
+*   **[Static Reflection & Serialization](docs/reflection_system.md)**: Compile-time pre-processor code generator parsing source annotations, static type descriptors, automatic scene serialization, and dynamic ImGui property drawers.
 
 ---
 

@@ -84,21 +84,35 @@ layout(set = 2, binding = 0) uniform JointPalette {
 
 ---
 
-## 5. Locomotion State Machines & 1D Blend Trees
+## 5. Locomotion State Machines, 1D & 2D Blend Trees
 
 To implement complex movement animations (like walking, running, and turning), the engine features a locomotion state machine and pose-blending system.
 
 ### Locomotion State Machine
 Managed by the `AnimationControllerComponent`, the state machine tracks:
 *   **States**: Defined animation clips with custom speed coefficients.
-*   **Parameters**: Input floats (e.g. `speed`, `direction`) evaluated to trigger transitions.
-*   **Transitions**: Directed state connections containing condition arrays (e.g., transition from `Idle` to `Walk` if `speed > 0.1`).
-*   **Crossfading**: Smooth linear interpolation (LERP) of bone translations/scales and spherical linear interpolation (SLERP) of bone orientations between the outgoing and incoming states over a configurable duration (e.g., `0.3` seconds).
+*   **Parameters**: Input floats (e.g. `velocityX`, `velocityY`, `speed`) evaluated to drive blend trees or trigger transitions.
+*   **Transitions**: Directed state connections containing condition arrays (e.g., transition from `Idle` to `Movement` if `speed > 0.05`).
+*   **Crossfading**: Smooth linear interpolation (LERP) of bone translations/scales and spherical linear interpolation (SLERP) of bone orientations between the outgoing and incoming states over a configurable duration (e.g., `0.25` seconds).
 
 ### 1D Blend Trees
 States can point to 1D Blend Trees, which blend multiple keyframe clips together based on an input parameter. For example:
 *   A `Movement` state contains clips for `Walk` (threshold `0.2`) and `Run` (threshold `0.8`).
 *   If `speed` is `0.5`, the system samples keyframes from both clips at the same timeline offset and interpolates their joint transforms linearly using the blending weight \(\beta = \frac{0.5 - 0.2}{0.8 - 0.2} = 0.5\).
+
+### 2D Freeform Cartesian Blend Trees
+For complex locomotion systems (like directional strafing or backwards walking), states can use 2D Blend Trees driven by two parameters (such as `velocityX` and `velocityY` mapped to horizontal/vertical axes):
+*   **Weight Calculation**: The system implements a **2D Freeform Cartesian (Gradient Band)** blending algorithm. For any input parameter position \(p\), the weight of each node \(i\) is computed relative to all neighboring nodes \(j \neq i\):
+    \[w_i = \max\left(0, 1 - \max_{j \neq i} \frac{(p - p_i) \cdot (p_j - p_i)}{\|p_j - p_i\|^2}\right)\]
+    The weights are then normalized to sum to \(1.0\).
+*   **Multi-Pose Blending**: The system samples keyframes from all blend nodes with a non-zero weight and performs sequential hierarchical pose blending using their normalized weights.
+
+### Automatic Player Locomotion Binding
+During play mode, the `PlayerControllerSystem` maps the player's keyboard WASD inputs directly to the `AnimationControllerComponent` parameters:
+*   Pressing **W** or **S** slides the target `velocityY` parameter smoothly towards `1.0` or `-1.0` (with **W** representing forward and **S** representing backward).
+*   Pressing **D** or **A** slides the target `velocityX` parameter smoothly towards `1.0` or `-1.0` (strafing right/left).
+*   The `speed` parameter is continuously set to the magnitude of the horizontal velocity vector: \(\sqrt{\text{velocityX}^2 + \text{velocityY}^2}\).
+*   An exponential decay filter smooths inputs over time to guarantee fluid, seamless animation blending transitions in all directions.
 
 ---
 
@@ -187,6 +201,14 @@ Instead of relying on external pre-conversion scripts, the engine integrates the
 ### Animation Evaluation & Baking
 * **Skeletal Joint Mapping**: Collects the FBX node hierarchy tree and matches bone indices. If a bone is referenced in a skin cluster, its bind pose is configured using the cluster's `geometry_to_bone` matrix; otherwise, it defaults to the inverse of the node's global bind pose.
 * **Animation Baking**: Rather than manually parsing complex, layered FBX animation curves (Bezier, Hermite, Linear, Step), the engine queries `ufbx_evaluate_transform` at a constant 30 FPS rate across each anim stack. This automatically bakes the correct interpolated local translations, rotations, and scales.
+
+---
+
+## 10. Drag-and-Drop Editor Mapping & Append Loading
+
+To streamline state machine authoring, the editor supports direct drag-and-drop mapping of `.anim` and `.fbx` files onto animation states and blend tree nodes:
+*   **Non-destructive Appending**: The `ResourceManager` supports an `append` loading flag. Instead of clearing the animator's cached clips when loading a file, it appends or overwrites the newly loaded clips, allowing multiple separate animation files to be loaded into the same animator.
+*   **DND Asset Binding**: Dragging any `.anim` or `.fbx` asset file from the content browser and dropping it onto the **Animation Clip** slot of a single clip state or the **Clip Name** slot of a blend tree node immediately triggers the non-destructive importer and binds the loaded clip to that slot.
 
 ---
 
