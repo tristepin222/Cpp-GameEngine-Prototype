@@ -15,6 +15,7 @@
 #include "ecs/components/Hierarchy.hpp"
 #include "ecs/components/PlayerControllerComponent.hpp"
 #include "ecs/components/CinemachineComponent.hpp"
+#include "ecs/components/AudioSource.hpp"
 
 // Math & Utility
 #include <glm/glm.hpp>

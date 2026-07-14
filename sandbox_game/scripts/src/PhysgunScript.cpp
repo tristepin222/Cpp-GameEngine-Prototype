@@ -183,6 +183,11 @@ void PhysgunSystem::update(float dt) {
                         script.heldEntity = hitEntity;
                         script.currentHoldDistance = script.holdDistance;
                         std::cout << "[PhysgunScript] Grabbed entity ID: " << hitEntity.getId() << " at distance: " << script.currentHoldDistance << std::endl;
+
+                        // Play the audio source on the grabbed entity if it has one
+                        if (auto* audio = registry.get<AudioSourceComponent>(hitEntity)) {
+                            audio->isPlaying = true;
+                        }
                     }
                 } else {
                     // Carrying the entity
@@ -225,6 +230,13 @@ void PhysgunSystem::update(float dt) {
             } else {
                 if (script.isHolding) {
                     std::cout << "[PhysgunScript] Dropped entity" << std::endl;
+
+                    // Stop the audio source on the dropped entity if it has one
+                    if (registry.isValid(script.heldEntity)) {
+                        if (auto* audio = registry.get<AudioSourceComponent>(script.heldEntity)) {
+                            audio->isPlaying = false;
+                        }
+                    }
                 }
                 script.isHolding = false;
             }
