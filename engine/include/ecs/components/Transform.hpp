@@ -35,19 +35,22 @@ private:
 
     void syncEulerFromQuat() {
         glm::mat3 R = glm::mat3_cast(q);
+
+        // Pitch (x)
+        float sinX = -R[2][1];
         float thetaX = 0.0f;
         float thetaY = 0.0f;
         float thetaZ = 0.0f;
 
-        float sinY = -R[0][2];
-        if (sinY < 0.9999f && sinY > -0.9999f) {
-            thetaY = std::asin(sinY);
-            thetaX = std::atan2(R[1][2], R[2][2]);
-            thetaZ = std::atan2(R[0][1], R[0][0]);
+        if (sinX < 0.9999f && sinX > -0.9999f) {
+            thetaX = std::asin(sinX);
+            thetaY = std::atan2(R[2][0], R[2][2]);
+            thetaZ = std::atan2(R[0][1], R[1][1]);
         } else {
-            thetaY = (sinY >= 0.0f) ? (3.14159265f * 0.5f) : (-3.14159265f * 0.5f);
-            thetaX = 0.0f;
-            thetaZ = std::atan2(-R[1][0], R[1][1]);
+            // Gimbal lock case
+            thetaX = (sinX >= 0.0f) ? (3.14159265f * 0.5f) : (-3.14159265f * 0.5f);
+            thetaY = std::atan2(-R[0][2], R[0][0]);
+            thetaZ = 0.0f;
         }
 
         x = glm::degrees(thetaX);

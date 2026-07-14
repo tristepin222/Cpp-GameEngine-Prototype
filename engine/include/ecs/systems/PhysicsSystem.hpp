@@ -51,37 +51,15 @@ namespace Engine {
         void applyAngularDisplacement(Transform& transform, const glm::vec3& deltaTheta) {
             if (glm::length(deltaTheta) < 1e-6f) return;
 
-            // 1. Convert current Euler rotation (in degrees) to quaternion
-            glm::quat qx = glm::angleAxis(glm::radians(transform.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-            glm::quat qy = glm::angleAxis(glm::radians(transform.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-            glm::quat qz = glm::angleAxis(glm::radians(transform.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-            glm::quat qCurrent = glm::normalize(qz * qy * qx);
+            // 1. Get current native quaternion directly from transform
+            glm::quat qCurrent = transform.rotation.getQuat();
 
             // 2. Compute incremental rotation quaternion in world space (deltaTheta is in world coordinates)
             float angle = glm::length(deltaTheta);
             glm::quat qDelta = glm::angleAxis(angle, glm::normalize(deltaTheta));
 
-            // 3. Pre-multiply since deltaTheta is in world coordinates
-            glm::quat qFinal = glm::normalize(qDelta * qCurrent);
-
-            // 4. Convert final quaternion back to Euler angles (pitch, yaw, roll) in degrees and write back
-            glm::mat3 R = glm::mat3_cast(qFinal);
-            float thetaX = 0.0f;
-            float thetaY = 0.0f;
-            float thetaZ = 0.0f;
-
-            float sinY = -R[0][2];
-            if (sinY < 0.9999f && sinY > -0.9999f) {
-                thetaY = std::asin(sinY);
-                thetaX = std::atan2(R[1][2], R[2][2]);
-                thetaZ = std::atan2(R[0][1], R[0][0]);
-            } else {
-                thetaY = (sinY >= 0.0f) ? (3.14159265f * 0.5f) : (-3.14159265f * 0.5f);
-                thetaX = 0.0f;
-                thetaZ = std::atan2(-R[1][0], R[1][1]);
-            }
-
-            transform.rotation = glm::vec3(glm::degrees(thetaX), glm::degrees(thetaY), glm::degrees(thetaZ));
+            // 3. Pre-multiply since deltaTheta is in world coordinates and assign directly
+            transform.rotation = glm::normalize(qDelta * qCurrent);
         }
 
         void update(float dt) override {
