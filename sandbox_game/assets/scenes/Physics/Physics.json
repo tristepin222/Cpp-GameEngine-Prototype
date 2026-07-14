@@ -68,6 +68,24 @@
       "gltfPath": "assets/Meshes/Physics/Ch36_nonPBR.fbx",
       "color": [1, 1, 1, 1],
       "texturePath": "assets/Textures/Ch36_1001_Diffuse.png",
+      "entityType": "AnimationController",
+      "currentState": "Idle",
+      "hasLocomotionSetup": true,
+      "parameters": {"velocityX": 0, "velocityY": 0, "speed": 0},
+      "states": [{
+        "name": "Idle", "clipName": "mixamo.com", "isBlendTree": false, "isLooping": true, "speed": 1, "blendTree": {
+          "is2D": false, "parameterName": "", "parameterYName": "", "nodes": []
+        }
+      }, {
+        "name": "Movement", "clipName": "", "isBlendTree": true, "isLooping": true, "speed": 1, "blendTree": {
+          "is2D": true, "parameterName": "velocityX", "parameterYName": "velocityY", "nodes": [{"clipName": "mixamo.com", "threshold": 0, "threshold2D_x": 0, "threshold2D_y": 0}, {"clipName": "mixamo.com", "threshold": 0, "threshold2D_x": 0, "threshold2D_y": 1}, {"clipName": "mixamo.com", "threshold": 0, "threshold2D_x": 0, "threshold2D_y": -1}, {"clipName": "mixamo.com", "threshold": 0, "threshold2D_x": -1, "threshold2D_y": 0}, {"clipName": "mixamo.com", "threshold": 0, "threshold2D_x": 1, "threshold2D_y": 0}]
+        }
+      }],
+      "transitions": [{
+        "fromState": "Idle", "toState": "Movement", "crossfadeDuration": 0.25, "conditions": [{"parameterName": "speed", "op": ">", "value": 0.05}]
+      }, {
+        "fromState": "Movement", "toState": "Idle", "crossfadeDuration": 0.25, "conditions": [{"parameterName": "speed", "op": "<", "value": 0.05}]
+      }],
       "hasCollider": true,
       "colShape": "Capsule",
       "colRadius": 0.351,

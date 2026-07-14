@@ -228,41 +228,123 @@ public:
                     paramVal = it->second;
                 }
 
-                // Sort nodes by threshold for robust linear 1D interpolation
-                std::vector<BlendNode> sortedNodes = tree.nodes;
-                std::sort(sortedNodes.begin(), sortedNodes.end(), [](const BlendNode& a, const BlendNode& b) {
-                    return a.threshold < b.threshold;
-                });
-
-                if (paramVal <= sortedNodes.front().threshold) {
-                    if (const AnimationClip* clip = findClip(animator, sortedNodes.front().clipName)) {
-                        sampleClip(*clip, stateTime, skeleton, outPose);
+                if (tree.is2D) {
+                    float paramX = 0.0f;
+                    auto itX = controller.parameters.find(tree.parameterName);
+                    if (itX != controller.parameters.end()) {
+                        paramX = itX->second;
                     }
-                } else if (paramVal >= sortedNodes.back().threshold) {
-                    if (const AnimationClip* clip = findClip(animator, sortedNodes.back().clipName)) {
-                        sampleClip(*clip, stateTime, skeleton, outPose);
+
+                    float paramY = 0.0f;
+                    auto itY = controller.parameters.find(tree.parameterYName);
+                    if (itY != controller.parameters.end()) {
+                        paramY = itY->second;
+                    }
+
+                    glm::vec2 p(paramX, paramY);
+                    size_t numNodes = tree.nodes.size();
+                    std::vector<float> weights(numNodes, 0.0f);
+                    float totalWeight = 0.0f;
+
+                    // 2D Freeform Cartesian / Gradient Band Blending algorithm
+                    for (size_t i = 0; i < numNodes; ++i) {
+                        glm::vec2 pi = tree.nodes[i].threshold2D;
+                        float minVal = 1.0f;
+
+                        for (size_t j = 0; j < numNodes; ++j) {
+                            if (i == j) continue;
+                            glm::vec2 pj = tree.nodes[j].threshold2D;
+                            glm::vec2 v = pj - pi;
+                            float lenSq = glm::dot(v, v);
+                            if (lenSq < 1e-5f) continue;
+
+                            glm::vec2 u = p - pi;
+                            float t = glm::dot(u, v) / lenSq;
+                            float val = 1.0f - t;
+                            if (val < minVal) {
+                                minVal = val;
+                            }
+                        }
+
+                        weights[i] = std::max(0.0f, minVal);
+                        totalWeight += weights[i];
+                    }
+
+                    // Normalize weights and sample/blend poses
+                    if (totalWeight > 1e-5f) {
+                        for (size_t i = 0; i < numNodes; ++i) {
+                            weights[i] /= totalWeight;
+                        }
+
+                        std::vector<JointPose> blendedPose(skeleton.joints.size());
+                        for (size_t j = 0; j < skeleton.joints.size(); ++j) {
+                            blendedPose[j] = { skeleton.joints[j].bindTranslation, skeleton.joints[j].bindRotation, skeleton.joints[j].bindScale };
+                        }
+
+                        float cumulativeWeight = 0.0f;
+                        bool firstPoseSet = false;
+
+                        for (size_t i = 0; i < numNodes; ++i) {
+                            float w = weights[i];
+                            if (w < 1e-4f) continue;
+
+                            if (const AnimationClip* clip = findClip(animator, tree.nodes[i].clipName)) {
+                                std::vector<JointPose> tempPose(skeleton.joints.size());
+                                for (size_t j = 0; j < skeleton.joints.size(); ++j) {
+                                    tempPose[j] = { skeleton.joints[j].bindTranslation, skeleton.joints[j].bindRotation, skeleton.joints[j].bindScale };
+                                }
+                                sampleClip(*clip, stateTime, skeleton, tempPose);
+
+                                if (!firstPoseSet) {
+                                    blendedPose = tempPose;
+                                    cumulativeWeight = w;
+                                    firstPoseSet = true;
+                                } else {
+                                    float blendFactor = w / (cumulativeWeight + w);
+                                    blendPoses(blendedPose, tempPose, blendFactor, blendedPose);
+                                    cumulativeWeight += w;
+                                }
+                            }
+                        }
+                        outPose = blendedPose;
                     }
                 } else {
-                    for (size_t i = 0; i < sortedNodes.size() - 1; ++i) {
-                        if (paramVal >= sortedNodes[i].threshold && paramVal <= sortedNodes[i+1].threshold) {
-                            float t = (paramVal - sortedNodes[i].threshold) / (sortedNodes[i+1].threshold - sortedNodes[i].threshold);
-                            
-                            std::vector<JointPose> poseA(skeleton.joints.size());
-                            std::vector<JointPose> poseB(skeleton.joints.size());
-                            for (size_t j = 0; j < skeleton.joints.size(); ++j) {
-                                poseA[j] = { skeleton.joints[j].bindTranslation, skeleton.joints[j].bindRotation, skeleton.joints[j].bindScale };
-                                poseB[j] = poseA[j];
-                            }
+                    // Sort nodes by threshold for robust linear 1D interpolation
+                    std::vector<BlendNode> sortedNodes = tree.nodes;
+                    std::sort(sortedNodes.begin(), sortedNodes.end(), [](const BlendNode& a, const BlendNode& b) {
+                        return a.threshold < b.threshold;
+                    });
 
-                            if (const AnimationClip* clipA = findClip(animator, sortedNodes[i].clipName)) {
-                                sampleClip(*clipA, stateTime, skeleton, poseA);
-                            }
-                            if (const AnimationClip* clipB = findClip(animator, sortedNodes[i+1].clipName)) {
-                                sampleClip(*clipB, stateTime, skeleton, poseB);
-                            }
+                    if (paramVal <= sortedNodes.front().threshold) {
+                        if (const AnimationClip* clip = findClip(animator, sortedNodes.front().clipName)) {
+                            sampleClip(*clip, stateTime, skeleton, outPose);
+                        }
+                    } else if (paramVal >= sortedNodes.back().threshold) {
+                        if (const AnimationClip* clip = findClip(animator, sortedNodes.back().clipName)) {
+                            sampleClip(*clip, stateTime, skeleton, outPose);
+                        }
+                    } else {
+                        for (size_t i = 0; i < sortedNodes.size() - 1; ++i) {
+                            if (paramVal >= sortedNodes[i].threshold && paramVal <= sortedNodes[i+1].threshold) {
+                                float t = (paramVal - sortedNodes[i].threshold) / (sortedNodes[i+1].threshold - sortedNodes[i].threshold);
+                                
+                                std::vector<JointPose> poseA(skeleton.joints.size());
+                                std::vector<JointPose> poseB(skeleton.joints.size());
+                                for (size_t j = 0; j < skeleton.joints.size(); ++j) {
+                                    poseA[j] = { skeleton.joints[j].bindTranslation, skeleton.joints[j].bindRotation, skeleton.joints[j].bindScale };
+                                    poseB[j] = poseA[j];
+                                }
 
-                            blendPoses(poseA, poseB, t, outPose);
-                            break;
+                                if (const AnimationClip* clipA = findClip(animator, sortedNodes[i].clipName)) {
+                                    sampleClip(*clipA, stateTime, skeleton, poseA);
+                                }
+                                if (const AnimationClip* clipB = findClip(animator, sortedNodes[i+1].clipName)) {
+                                    sampleClip(*clipB, stateTime, skeleton, poseB);
+                                }
+
+                                blendPoses(poseA, poseB, t, outPose);
+                                break;
+                            }
                         }
                     }
                 }

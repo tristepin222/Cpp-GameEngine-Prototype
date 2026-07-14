@@ -2743,16 +2743,321 @@ void EditorUI::drawAnimationControllerEditor() {
         ProgressBar(controller->crossfadeProgress / controller->crossfadeDuration);
     }
 
-    // Parameters management
+    AnimatorComponent* animator = registry.get<AnimatorComponent>(selectedEntity);
+    std::vector<const char*> clipNames;
+    if (animator) {
+        for (const auto& anim : animator->animations) {
+            clipNames.push_back(anim.name.c_str());
+        }
+    }
+
+    // 1. Parameters management
     if (TreeNode("Parameters")) {
+        static char newParamName[64] = "";
+        InputText("New Parameter Name", newParamName, sizeof(newParamName));
+        SameLine();
+        if (Button("Add Parameter")) {
+            if (strlen(newParamName) > 0) {
+                controller->parameters[newParamName] = 0.0f;
+                newParamName[0] = '\0';
+            }
+        }
+
+        std::vector<std::string> paramsToDelete;
         for (auto& [paramName, paramVal] : controller->parameters) {
-            SliderFloat(paramName.c_str(), &paramVal, 0.0f, 1.0f);
+            SliderFloat(paramName.c_str(), &paramVal, -2.0f, 2.0f);
+            SameLine();
+            std::string btnLabel = "Delete##" + paramName;
+            if (Button(btnLabel.c_str())) {
+                paramsToDelete.push_back(paramName);
+            }
+        }
+
+        for (const auto& pName : paramsToDelete) {
+            controller->parameters.erase(pName);
         }
         TreePop();
     }
 
-    // Quick State Setup Demo buttons
-    if (auto* animator = registry.get<AnimatorComponent>(selectedEntity)) {
+    // 2. States management
+    if (TreeNode("States")) {
+        static char newStateName[64] = "";
+        InputText("New State Name", newStateName, sizeof(newStateName));
+        SameLine();
+        if (Button("Add State")) {
+            if (strlen(newStateName) > 0) {
+                AnimationState state;
+                state.name = newStateName;
+                state.clipName = !clipNames.empty() ? clipNames[0] : "idle";
+                state.isBlendTree = false;
+                controller->states.push_back(state);
+                newStateName[0] = '\0';
+            }
+        }
+
+        for (size_t sIdx = 0; sIdx < controller->states.size(); ++sIdx) {
+            auto& state = controller->states[sIdx];
+            std::string stateHeader = state.name + " (" + (state.isBlendTree ? "Blend Tree" : "Single Clip") + ")##state_" + std::to_string(sIdx);
+            if (TreeNode(stateHeader.c_str())) {
+                char stateName[64];
+                strcpy_s(stateName, state.name.c_str());
+                if (InputText("State Name", stateName, sizeof(stateName))) {
+                    state.name = stateName;
+                }
+
+                Checkbox("Is Blend Tree", &state.isBlendTree);
+
+                if (!state.isBlendTree) {
+                    int currentClipIdx = 0;
+                    for (size_t i = 0; i < clipNames.size(); ++i) {
+                        if (clipNames[i] == state.clipName) {
+                            currentClipIdx = static_cast<int>(i);
+                            break;
+                        }
+                    }
+                    if (Combo("Animation Clip", &currentClipIdx, clipNames.data(), static_cast<int>(clipNames.size()))) {
+                        state.clipName = clipNames[currentClipIdx];
+                    }
+                    if (BeginDragDropTarget()) {
+                        if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+                            const char* droppedPath = (const char*)payload->Data;
+                            std::string pathStr(droppedPath);
+                            auto ext = std::filesystem::path(pathStr).extension().string();
+                            if (ext == ".anim" || ext == ".fbx" || ext == ".FBX") {
+                                SkeletonComponent* skeleton = registry.get<SkeletonComponent>(selectedEntity);
+                                if (!skeleton) {
+                                    SkeletonComponent newSkel{};
+                                    registry.emplace<SkeletonComponent>(selectedEntity, std::move(newSkel));
+                                    skeleton = registry.get<SkeletonComponent>(selectedEntity);
+                                }
+                                if (!animator) {
+                                    AnimatorComponent newAnim{};
+                                    registry.emplace<AnimatorComponent>(selectedEntity, std::move(newAnim));
+                                    animator = registry.get<AnimatorComponent>(selectedEntity);
+                                }
+                                if (skeleton && animator && renderer.resourceManager->loadSkeletonAndAnimations(pathStr, *skeleton, *animator, true)) {
+                                    if (!animator->animations.empty()) {
+                                        state.clipName = animator->animations.back().name;
+                                    }
+                                    statusMessage = "Appended animation clip successfully.";
+                                }
+                            }
+                        }
+                        EndDragDropTarget();
+                    }
+
+                    Checkbox("Looping", &state.isLooping);
+                    SliderFloat("Playback Speed", &state.speed, 0.1f, 5.0f);
+                } else {
+                    Checkbox("Is 2D", &state.blendTree.is2D);
+
+                    std::vector<const char*> paramNames;
+                    int paramXIdx = 0;
+                    int paramYIdx = 0;
+                    for (const auto& [pName, pVal] : controller->parameters) {
+                        paramNames.push_back(pName.c_str());
+                    }
+
+                    if (!paramNames.empty()) {
+                        for (size_t i = 0; i < paramNames.size(); ++i) {
+                            if (paramNames[i] == state.blendTree.parameterName) paramXIdx = static_cast<int>(i);
+                            if (paramNames[i] == state.blendTree.parameterYName) paramYIdx = static_cast<int>(i);
+                        }
+                        if (Combo("Parameter X", &paramXIdx, paramNames.data(), static_cast<int>(paramNames.size()))) {
+                            state.blendTree.parameterName = paramNames[paramXIdx];
+                        }
+                        if (state.blendTree.is2D) {
+                            if (Combo("Parameter Y", &paramYIdx, paramNames.data(), static_cast<int>(paramNames.size()))) {
+                                state.blendTree.parameterYName = paramNames[paramYIdx];
+                            }
+                        }
+                    } else {
+                        TextDisabled("No parameters defined. Add parameters first.");
+                    }
+
+                    if (TreeNode("Blend Nodes")) {
+                        if (Button("Add Blend Node")) {
+                            BlendNode node;
+                            node.clipName = !clipNames.empty() ? clipNames[0] : "";
+                            node.threshold = 0.0f;
+                            node.threshold2D = glm::vec2(0.0f);
+                            state.blendTree.nodes.push_back(node);
+                        }
+
+                        for (size_t nIdx = 0; nIdx < state.blendTree.nodes.size(); ++nIdx) {
+                            auto& node = state.blendTree.nodes[nIdx];
+                            std::string nodeHeader = "Node " + std::to_string(nIdx) + ": " + node.clipName + "##node_" + std::to_string(nIdx);
+                            if (TreeNode(nodeHeader.c_str())) {
+                                int nodeClipIdx = 0;
+                                for (size_t i = 0; i < clipNames.size(); ++i) {
+                                    if (clipNames[i] == node.clipName) {
+                                        nodeClipIdx = static_cast<int>(i);
+                                        break;
+                                    }
+                                }
+                                if (Combo("Clip Name", &nodeClipIdx, clipNames.data(), static_cast<int>(clipNames.size()))) {
+                                    node.clipName = clipNames[nodeClipIdx];
+                                }
+                                if (BeginDragDropTarget()) {
+                                    if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+                                        const char* droppedPath = (const char*)payload->Data;
+                                        std::string pathStr(droppedPath);
+                                        auto ext = std::filesystem::path(pathStr).extension().string();
+                                        if (ext == ".anim" || ext == ".fbx" || ext == ".FBX") {
+                                            SkeletonComponent* skeleton = registry.get<SkeletonComponent>(selectedEntity);
+                                            if (!skeleton) {
+                                                SkeletonComponent newSkel{};
+                                                registry.emplace<SkeletonComponent>(selectedEntity, std::move(newSkel));
+                                                skeleton = registry.get<SkeletonComponent>(selectedEntity);
+                                            }
+                                            if (!animator) {
+                                                AnimatorComponent newAnim{};
+                                                registry.emplace<AnimatorComponent>(selectedEntity, std::move(newAnim));
+                                                animator = registry.get<AnimatorComponent>(selectedEntity);
+                                            }
+                                            if (skeleton && animator && renderer.resourceManager->loadSkeletonAndAnimations(pathStr, *skeleton, *animator, true)) {
+                                                if (!animator->animations.empty()) {
+                                                    node.clipName = animator->animations.back().name;
+                                                }
+                                                statusMessage = "Appended animation clip successfully.";
+                                            }
+                                        }
+                                    }
+                                    EndDragDropTarget();
+                                }
+
+                                if (state.blendTree.is2D) {
+                                    DragFloat2("Threshold 2D", &node.threshold2D.x, 0.05f);
+                                } else {
+                                    DragFloat("Threshold 1D", &node.threshold, 0.05f);
+                                }
+
+                                if (Button("Remove Node")) {
+                                    state.blendTree.nodes.erase(state.blendTree.nodes.begin() + nIdx);
+                                    --nIdx;
+                                }
+                                TreePop();
+                            }
+                        }
+                        TreePop();
+                    }
+                }
+
+                if (Button("Delete State")) {
+                    controller->states.erase(controller->states.begin() + sIdx);
+                    --sIdx;
+                }
+                TreePop();
+            }
+        }
+        TreePop();
+    }
+
+    // 3. Transitions management
+    if (TreeNode("Transitions")) {
+        if (Button("Add Transition")) {
+            AnimationTransition trans;
+            if (!controller->states.empty()) {
+                trans.fromState = controller->states[0].name;
+                trans.toState = controller->states[0].name;
+            }
+            trans.crossfadeDuration = 0.25f;
+            controller->transitions.push_back(trans);
+        }
+
+        for (size_t tIdx = 0; tIdx < controller->transitions.size(); ++tIdx) {
+            auto& trans = controller->transitions[tIdx];
+            std::string transHeader = "Transition: " + trans.fromState + " -> " + trans.toState + "##trans_" + std::to_string(tIdx);
+            if (TreeNode(transHeader.c_str())) {
+                std::vector<const char*> stateNames;
+                int fromStateIdx = 0;
+                int toStateIdx = 0;
+                for (const auto& st : controller->states) {
+                    stateNames.push_back(st.name.c_str());
+                }
+
+                if (!stateNames.empty()) {
+                    for (size_t i = 0; i < stateNames.size(); ++i) {
+                        if (stateNames[i] == trans.fromState) fromStateIdx = static_cast<int>(i);
+                        if (stateNames[i] == trans.toState) toStateIdx = static_cast<int>(i);
+                    }
+                    if (Combo("From State", &fromStateIdx, stateNames.data(), static_cast<int>(stateNames.size()))) {
+                        trans.fromState = stateNames[fromStateIdx];
+                    }
+                    if (Combo("To State", &toStateIdx, stateNames.data(), static_cast<int>(stateNames.size()))) {
+                        trans.toState = stateNames[toStateIdx];
+                    }
+                }
+
+                DragFloat("Crossfade Duration (s)", &trans.crossfadeDuration, 0.01f, 0.0f, 2.0f);
+
+                if (TreeNode("Conditions")) {
+                    if (Button("Add Condition")) {
+                        TransitionCondition cond;
+                        if (!controller->parameters.empty()) {
+                            cond.parameterName = controller->parameters.begin()->first;
+                        }
+                        cond.op = ">";
+                        cond.value = 0.0f;
+                        trans.conditions.push_back(cond);
+                    }
+
+                    for (size_t cIdx = 0; cIdx < trans.conditions.size(); ++cIdx) {
+                        auto& cond = trans.conditions[cIdx];
+                        std::string condHeader = "Condition " + std::to_string(cIdx) + ": " + cond.parameterName + "##cond_" + std::to_string(cIdx);
+                        if (TreeNode(condHeader.c_str())) {
+                            std::vector<const char*> paramNames;
+                            int paramIdx = 0;
+                            for (const auto& [pName, pVal] : controller->parameters) {
+                                paramNames.push_back(pName.c_str());
+                            }
+
+                            if (!paramNames.empty()) {
+                                for (size_t i = 0; i < paramNames.size(); ++i) {
+                                    if (paramNames[i] == cond.parameterName) {
+                                        paramIdx = static_cast<int>(i);
+                                        break;
+                                    }
+                                }
+                                if (Combo("Parameter", &paramIdx, paramNames.data(), static_cast<int>(paramNames.size()))) {
+                                    cond.parameterName = paramNames[paramIdx];
+                                }
+                            }
+
+                            const char* ops[] = { ">", "<", "==" };
+                            int opIdx = 0;
+                            for (int i = 0; i < 3; ++i) {
+                                if (cond.op == ops[i]) opIdx = i;
+                            }
+                            if (Combo("Operator", &opIdx, ops, 3)) {
+                                cond.op = ops[opIdx];
+                            }
+
+                            DragFloat("Value", &cond.value, 0.05f);
+
+                            if (Button("Remove Condition")) {
+                                trans.conditions.erase(trans.conditions.begin() + cIdx);
+                                --cIdx;
+                            }
+                            TreePop();
+                        }
+                    }
+                    TreePop();
+                }
+
+                if (Button("Remove Transition")) {
+                    controller->transitions.erase(controller->transitions.begin() + tIdx);
+                    --tIdx;
+                }
+                TreePop();
+            }
+        }
+        TreePop();
+    }
+
+    // 4. Quick State Setup Demo buttons
+    if (animator) {
+        Separator();
         if (Button("Setup Idle/Walk State Machine")) {
             controller->states.clear();
             
@@ -2795,6 +3100,90 @@ void EditorUI::drawAnimationControllerEditor() {
             toIdle.conditions = { condIdle2 };
             
             controller->transitions = { toMove, toIdle };
+            controller->parameters["speed"] = 0.0f;
+            controller->currentState = "Idle";
+            controller->currentStateTime = 0.0f;
+            controller->isCrossfading = false;
+        }
+
+        SameLine();
+
+        if (Button("Setup 2D Locomotion Blend Tree")) {
+            controller->states.clear();
+
+            AnimationState idleState;
+            idleState.name = "Idle";
+            idleState.clipName = "idle";
+            idleState.isBlendTree = false;
+
+            for (const auto& clip : animator->animations) {
+                std::string lower = clip.name;
+                std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+                if (lower.find("idle") != std::string::npos) {
+                    idleState.clipName = clip.name;
+                    break;
+                }
+            }
+            if (idleState.clipName == "idle" && !animator->animations.empty()) {
+                idleState.clipName = animator->animations[0].name;
+            }
+
+            AnimationState moveState;
+            moveState.name = "Movement";
+            moveState.isBlendTree = true;
+            moveState.blendTree.parameterName = "velocityX";
+            moveState.blendTree.parameterYName = "velocityY";
+            moveState.blendTree.is2D = true;
+
+            std::string defaultClip = !animator->animations.empty() ? animator->animations[0].name : "";
+
+            BlendNode nodeIdle{ defaultClip, 0.0f, glm::vec2(0.0f, 0.0f) };
+            BlendNode nodeForward{ defaultClip, 0.0f, glm::vec2(0.0f, 1.0f) };
+            BlendNode nodeBackward{ defaultClip, 0.0f, glm::vec2(0.0f, -1.0f) };
+            BlendNode nodeLeft{ defaultClip, 0.0f, glm::vec2(-1.0f, 0.0f) };
+            BlendNode nodeRight{ defaultClip, 0.0f, glm::vec2(1.0f, 0.0f) };
+
+            for (const auto& clip : animator->animations) {
+                std::string lower = clip.name;
+                std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+                if (lower.find("idle") != std::string::npos) {
+                    nodeIdle.clipName = clip.name;
+                } else if (lower.find("run") != std::string::npos || lower.find("walk") != std::string::npos || lower.find("walking") != std::string::npos) {
+                    if (lower.find("back") != std::string::npos) {
+                        nodeBackward.clipName = clip.name;
+                    } else {
+                        nodeForward.clipName = clip.name;
+                    }
+                } else if (lower.find("strafe") != std::string::npos) {
+                    if (lower.find("left") != std::string::npos) {
+                        nodeLeft.clipName = clip.name;
+                    } else if (lower.find("right") != std::string::npos) {
+                        nodeRight.clipName = clip.name;
+                    }
+                }
+            }
+
+            moveState.blendTree.nodes = { nodeIdle, nodeForward, nodeBackward, nodeLeft, nodeRight };
+            controller->states = { idleState, moveState };
+
+            controller->transitions.clear();
+
+            AnimationTransition toMove;
+            toMove.fromState = "Idle";
+            toMove.toState = "Movement";
+            toMove.crossfadeDuration = 0.25f;
+            toMove.conditions = { TransitionCondition{ "speed", ">", 0.05f } };
+
+            AnimationTransition toIdle;
+            toIdle.fromState = "Movement";
+            toIdle.toState = "Idle";
+            toIdle.crossfadeDuration = 0.25f;
+            toIdle.conditions = { TransitionCondition{ "speed", "<", 0.05f } };
+
+            controller->transitions = { toMove, toIdle };
+            controller->parameters["velocityX"] = 0.0f;
+            controller->parameters["velocityY"] = 0.0f;
             controller->parameters["speed"] = 0.0f;
             controller->currentState = "Idle";
             controller->currentStateTime = 0.0f;

@@ -84,16 +84,17 @@ public:
      * @param animator Target AnimatorComponent to populate.
      * @return True if skin/animations were loaded successfully.
      */
-    bool loadSkeletonAndAnimations(const std::string& path, SkeletonComponent& skeleton, AnimatorComponent& animator);
+    bool loadSkeletonAndAnimations(const std::string& path, SkeletonComponent& skeleton, AnimatorComponent& animator, bool append = false);
 
     /**
      * @brief Loads skeletal skin and animations from a custom binary animation file (.anim).
      * @param path File path of the binary animation.
      * @param skeleton Target SkeletonComponent to populate.
      * @param animator Target AnimatorComponent to populate.
+     * @param append If true, animation clips are appended instead of clearing the animator's cache.
      * @return True if loaded successfully.
      */
-    bool loadBinarySkeletonAndAnimations(const std::string& path, SkeletonComponent& skeleton, AnimatorComponent& animator);
+    bool loadBinarySkeletonAndAnimations(const std::string& path, SkeletonComponent& skeleton, AnimatorComponent& animator, bool append = false);
 
     /**
      * @brief Saves skeletal skin and animations to a custom binary animation file (.anim).

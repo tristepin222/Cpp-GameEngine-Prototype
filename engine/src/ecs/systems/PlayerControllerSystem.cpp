@@ -5,6 +5,7 @@
 #include "ecs/components/RigidBody.hpp"
 #include "ecs/components/Name.hpp"
 #include "ecs/components/EditorCamera.hpp"
+#include "ecs/components/AnimationController.hpp"
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <cmath>
@@ -88,6 +89,28 @@ void PlayerControllerSystem::update(float dt) {
             rb->velocity.z *= std::exp(-15.0f * dt);
         }
         pc.debugRbVelocity = rb->velocity;
+
+        // Automatically update Animation Controller locomotion parameters based on WASD keys
+        if (auto* animController = registry.get<AnimationControllerComponent>(entity)) {
+            float targetX = 0.0f;
+            float targetY = 0.0f;
+
+            if (renderer.getKey(GLFW_KEY_W)) targetY += 1.0f;
+            if (renderer.getKey(GLFW_KEY_S)) targetY -= 1.0f;
+            if (renderer.getKey(GLFW_KEY_D)) targetX += 1.0f;
+            if (renderer.getKey(GLFW_KEY_A)) targetX -= 1.0f;
+
+            // Smoothly interpolate the parameters towards targets
+            float currentX = animController->parameters["velocityX"];
+            float currentY = animController->parameters["velocityY"];
+
+            currentX += (targetX - currentX) * std::min(1.0f, 15.0f * dt);
+            currentY += (targetY - currentY) * std::min(1.0f, 15.0f * dt);
+
+            animController->parameters["velocityX"] = currentX;
+            animController->parameters["velocityY"] = currentY;
+            animController->parameters["speed"] = glm::length(glm::vec2(currentX, currentY));
+        }
 
         // 2. Jump (Space)
         bool spaceDown = renderer.getKey(GLFW_KEY_SPACE);

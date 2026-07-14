@@ -300,6 +300,54 @@ static bool registerBuiltinComponents() {
                     first = false;
                 }
                 out << "}";
+
+                // Serialize custom states
+                out << ",\n" << JSONUtils::indent(indent) << "\"states\": [";
+                for (size_t i = 0; i < controller->states.size(); ++i) {
+                    const auto& state = controller->states[i];
+                    if (i > 0) out << ", ";
+                    out << "{\n" << JSONUtils::indent(indent + 1) << "\"name\": " << JSONUtils::quote(state.name) << ", ";
+                    out << "\"clipName\": " << JSONUtils::quote(state.clipName) << ", ";
+                    out << "\"isBlendTree\": " << (state.isBlendTree ? "true" : "false") << ", ";
+                    out << "\"isLooping\": " << (state.isLooping ? "true" : "false") << ", ";
+                    out << "\"speed\": " << state.speed << ", ";
+                    out << "\"blendTree\": {\n" << JSONUtils::indent(indent + 2) << "\"is2D\": " << (state.blendTree.is2D ? "true" : "false") << ", ";
+                    out << "\"parameterName\": " << JSONUtils::quote(state.blendTree.parameterName) << ", ";
+                    out << "\"parameterYName\": " << JSONUtils::quote(state.blendTree.parameterYName) << ", ";
+                    out << "\"nodes\": [";
+                    for (size_t n = 0; n < state.blendTree.nodes.size(); ++n) {
+                        const auto& node = state.blendTree.nodes[n];
+                        if (n > 0) out << ", ";
+                        out << "{\"clipName\": " << JSONUtils::quote(node.clipName);
+                        out << ", \"threshold\": " << node.threshold;
+                        out << ", \"threshold2D_x\": " << node.threshold2D.x;
+                        out << ", \"threshold2D_y\": " << node.threshold2D.y;
+                        out << "}";
+                    }
+                    out << "]\n" << JSONUtils::indent(indent + 1) << "}\n" << JSONUtils::indent(indent) << "}";
+                }
+                out << "]";
+
+                // Serialize custom transitions
+                out << ",\n" << JSONUtils::indent(indent) << "\"transitions\": [";
+                for (size_t i = 0; i < controller->transitions.size(); ++i) {
+                    const auto& trans = controller->transitions[i];
+                    if (i > 0) out << ", ";
+                    out << "{\n" << JSONUtils::indent(indent + 1) << "\"fromState\": " << JSONUtils::quote(trans.fromState) << ", ";
+                    out << "\"toState\": " << JSONUtils::quote(trans.toState) << ", ";
+                    out << "\"crossfadeDuration\": " << trans.crossfadeDuration << ", ";
+                    out << "\"conditions\": [";
+                    for (size_t c = 0; c < trans.conditions.size(); ++c) {
+                        const auto& cond = trans.conditions[c];
+                        if (c > 0) out << ", ";
+                        out << "{\"parameterName\": " << JSONUtils::quote(cond.parameterName);
+                        out << ", \"op\": " << JSONUtils::quote(cond.op);
+                        out << ", \"value\": " << cond.value;
+                        out << "}";
+                    }
+                    out << "]\n" << JSONUtils::indent(indent) << "}";
+                }
+                out << "]";
             }
         },
         [](Registry& registry, VulkanRenderer& renderer, Entity entity, const std::string& json) {
@@ -315,28 +363,163 @@ static bool registerBuiltinComponents() {
                     hasLocomotion = true;
                 }
                 
-                float speedVal = 0.0f;
-                size_t speedPos = json.find("\"speed\"");
-                if (speedPos != std::string::npos) {
-                    size_t colonPos = json.find(":", speedPos);
-                    if (colonPos != std::string::npos) {
-                        std::string valStr;
-                        for (size_t i = colonPos + 1; i < json.size(); ++i) {
-                            char c = json[i];
-                            if (std::isdigit(c) || c == '.' || c == '-') {
-                                valStr += c;
-                            } else if (!valStr.empty()) {
-                                break;
-                            }
+                // Helper lambdas for array parsing
+                auto extractArrayContent = [](const std::string& source, const std::string& key) -> std::string {
+                    size_t keyPos = source.find(key);
+                    if (keyPos == std::string::npos) return "";
+                    size_t startPos = source.find("[", keyPos);
+                    if (startPos == std::string::npos) return "";
+                    int bracketCount = 1;
+                    size_t endPos = startPos + 1;
+                    while (endPos < source.size() && bracketCount > 0) {
+                        if (source[endPos] == '[') bracketCount++;
+                        else if (source[endPos] == ']') bracketCount--;
+                        endPos++;
+                    }
+                    if (bracketCount == 0) {
+                        return source.substr(startPos + 1, endPos - startPos - 2);
+                    }
+                    return "";
+                };
+
+                auto splitObjects = [](const std::string& arrayContent) -> std::vector<std::string> {
+                    std::vector<std::string> objects;
+                    size_t p = 0;
+                    while (p < arrayContent.size()) {
+                        size_t objStart = arrayContent.find("{", p);
+                        if (objStart == std::string::npos) break;
+                        int braceCount = 1;
+                        size_t objEnd = objStart + 1;
+                        while (objEnd < arrayContent.size() && braceCount > 0) {
+                            if (arrayContent[objEnd] == '{') braceCount++;
+                            else if (arrayContent[objEnd] == '}') braceCount--;
+                            objEnd++;
                         }
-                        if (!valStr.empty()) {
-                            speedVal = std::stof(valStr);
+                        if (braceCount == 0) {
+                            objects.push_back(arrayContent.substr(objStart, objEnd - objStart));
+                        }
+                        p = objEnd;
+                    }
+                    return objects;
+                };
+
+                // Deserialise parameters map
+                size_t paramsPos = json.find("\"parameters\"");
+                if (paramsPos != std::string::npos) {
+                    size_t startPos = json.find("{", paramsPos);
+                    if (startPos != std::string::npos) {
+                        size_t endPos = json.find("}", startPos);
+                        if (endPos != std::string::npos) {
+                            std::string paramsContent = json.substr(startPos + 1, endPos - startPos - 1);
+                            size_t p = 0;
+                            while (p < paramsContent.size()) {
+                                size_t keyStart = paramsContent.find("\"", p);
+                                if (keyStart == std::string::npos) break;
+                                size_t keyEnd = paramsContent.find("\"", keyStart + 1);
+                                if (keyEnd == std::string::npos) break;
+                                std::string paramName = paramsContent.substr(keyStart + 1, keyEnd - keyStart - 1);
+
+                                size_t colonPos = paramsContent.find(":", keyEnd);
+                                if (colonPos == std::string::npos) break;
+                                float val = 0.0f;
+                                std::string valStr;
+                                for (size_t i = colonPos + 1; i < paramsContent.size(); ++i) {
+                                    char c = paramsContent[i];
+                                    if (std::isdigit(c) || c == '.' || c == '-') {
+                                        valStr += c;
+                                    } else if (!valStr.empty() || c == ',') {
+                                        break;
+                                    }
+                                }
+                                if (!valStr.empty()) {
+                                    val = std::stof(valStr);
+                                }
+                                controller.parameters[paramName] = val;
+                                p = colonPos + valStr.size() + 1;
+                            }
                         }
                     }
                 }
-                controller.parameters["speed"] = speedVal;
 
-                if (hasLocomotion) {
+                // Deserialise custom states
+                std::string statesArray = extractArrayContent(json, "\"states\"");
+                if (!statesArray.empty()) {
+                    for (const auto& stateObj : splitObjects(statesArray)) {
+                        AnimationState state;
+                        state.name = JSONUtils::extractStringValue(stateObj, "name");
+                        state.clipName = JSONUtils::extractStringValue(stateObj, "clipName");
+                        
+                        bool isBlendTree = false;
+                        if (stateObj.find("\"isBlendTree\": true") != std::string::npos ||
+                            stateObj.find("\"isBlendTree\":true") != std::string::npos) {
+                            isBlendTree = true;
+                        }
+                        state.isBlendTree = isBlendTree;
+
+                        bool isLooping = true;
+                        if (stateObj.find("\"isLooping\": false") != std::string::npos ||
+                            stateObj.find("\"isLooping\":false") != std::string::npos) {
+                            isLooping = false;
+                        }
+                        state.isLooping = isLooping;
+
+                        JSONUtils::extractFloatValue(stateObj, "speed", state.speed);
+
+                        // Parse blendTree sub-object
+                        size_t btPos = stateObj.find("\"blendTree\"");
+                        if (btPos != std::string::npos) {
+                            std::string btSub = stateObj.substr(btPos);
+                            bool is2D = false;
+                            if (btSub.find("\"is2D\": true") != std::string::npos ||
+                                btSub.find("\"is2D\":true") != std::string::npos) {
+                                is2D = true;
+                            }
+                            state.blendTree.is2D = is2D;
+                            state.blendTree.parameterName = JSONUtils::extractStringValue(btSub, "parameterName");
+                            state.blendTree.parameterYName = JSONUtils::extractStringValue(btSub, "parameterYName");
+
+                            // Parse blend tree nodes array
+                            std::string nodesArray = extractArrayContent(btSub, "\"nodes\"");
+                            if (!nodesArray.empty()) {
+                                for (const auto& nodeObj : splitObjects(nodesArray)) {
+                                    BlendNode node;
+                                    node.clipName = JSONUtils::extractStringValue(nodeObj, "clipName");
+                                    JSONUtils::extractFloatValue(nodeObj, "threshold", node.threshold);
+                                    JSONUtils::extractFloatValue(nodeObj, "threshold2D_x", node.threshold2D.x);
+                                    JSONUtils::extractFloatValue(nodeObj, "threshold2D_y", node.threshold2D.y);
+                                    state.blendTree.nodes.push_back(node);
+                                }
+                            }
+                        }
+                        controller.states.push_back(state);
+                    }
+                }
+
+                // Deserialise custom transitions
+                std::string transArray = extractArrayContent(json, "\"transitions\"");
+                if (!transArray.empty()) {
+                    for (const auto& transObj : splitObjects(transArray)) {
+                        AnimationTransition trans;
+                        trans.fromState = JSONUtils::extractStringValue(transObj, "fromState");
+                        trans.toState = JSONUtils::extractStringValue(transObj, "toState");
+                        JSONUtils::extractFloatValue(transObj, "crossfadeDuration", trans.crossfadeDuration);
+
+                        std::string condsArray = extractArrayContent(transObj, "\"conditions\"");
+                        if (!condsArray.empty()) {
+                            for (const auto& condObj : splitObjects(condsArray)) {
+                                TransitionCondition cond;
+                                cond.parameterName = JSONUtils::extractStringValue(condObj, "parameterName");
+                                cond.op = JSONUtils::extractStringValue(condObj, "op");
+                                JSONUtils::extractFloatValue(condObj, "value", cond.value);
+                                trans.conditions.push_back(cond);
+                            }
+                        }
+                        controller.transitions.push_back(trans);
+                    }
+                }
+
+                // Backward compatibility fallback for older scene files
+                if (controller.states.empty() && hasLocomotion) {
                     AnimationState idleState;
                     idleState.name = "Idle";
                     idleState.clipName = "idle";
@@ -365,15 +548,13 @@ static bool registerBuiltinComponents() {
                     toMove.fromState = "Idle";
                     toMove.toState = "Movement";
                     toMove.crossfadeDuration = 0.3f;
-                    TransitionCondition condMove{ "speed", ">", 0.1f };
-                    toMove.conditions = { condMove };
+                    toMove.conditions = { TransitionCondition{ "speed", ">", 0.1f } };
                     
                     AnimationTransition toIdle;
                     toIdle.fromState = "Movement";
                     toIdle.toState = "Idle";
                     toIdle.crossfadeDuration = 0.3f;
-                    TransitionCondition condIdle2{ "speed", "<", 0.1f };
-                    toIdle.conditions = { condIdle2 };
+                    toIdle.conditions = { TransitionCondition{ "speed", "<", 0.1f } };
                     
                     controller.transitions = { toMove, toIdle };
                 }

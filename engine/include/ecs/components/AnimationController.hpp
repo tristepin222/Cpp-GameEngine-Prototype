@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <glm/glm.hpp>
 
 /**
  * @struct BlendNode
@@ -10,6 +11,7 @@
 struct BlendNode {
     std::string clipName;
     float threshold = 0.0f; // Blending threshold value (e.g. speed where weight is 1.0)
+    glm::vec2 threshold2D = glm::vec2(0.0f); // 2D blending threshold value
 };
 
 /**
@@ -18,7 +20,9 @@ struct BlendNode {
  */
 struct BlendTree {
     std::vector<BlendNode> nodes;
-    std::string parameterName; // e.g. "speed"
+    std::string parameterName; // e.g. "speed" or "velocityX"
+    std::string parameterYName; // e.g. "velocityY"
+    bool is2D = false; // Is this a 2D blend tree
 };
 
 /**

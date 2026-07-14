@@ -883,9 +883,9 @@ static bool isRootMotionJoint(const SkeletonComponent& skeleton, int jointIndex)
     return false;
 }
 
-bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, SkeletonComponent& skeleton, AnimatorComponent& animator) {
+bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, SkeletonComponent& skeleton, AnimatorComponent& animator, bool append) {
     if (path.length() >= 5 && path.substr(path.length() - 5) == ".anim") {
-        return loadBinarySkeletonAndAnimations(path, skeleton, animator);
+        return loadBinarySkeletonAndAnimations(path, skeleton, animator, append);
     }
     
     if (path.length() >= 4 && (path.substr(path.length() - 4) == ".fbx" || path.substr(path.length() - 4) == ".FBX")) {
@@ -920,26 +920,26 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
         };
         collectNodes(collectNodes, scene->root_node);
 
-        uint32_t jointCount = static_cast<uint32_t>(fbxNodes.size());
+        int jointCount = static_cast<int>(fbxNodes.size());
         bool targetHasSkeleton = !skeleton.joints.empty();
         std::vector<Joint> loadedJoints;
-        if (!targetHasSkeleton) {
-            skeleton.joints.resize(jointCount);
+        if (targetHasSkeleton) {
+            loadedJoints = skeleton.joints;
         } else {
-            loadedJoints.resize(jointCount);
+            skeleton.joints.resize(jointCount);
         }
 
-        for (uint32_t i = 0; i < jointCount; ++i) {
-            auto* node = fbxNodes[i];
-            auto& joint = targetHasSkeleton ? loadedJoints[i] : skeleton.joints[i];
-
-            joint.name = node->name.data ? node->name.data : "Joint_" + std::to_string(i);
+        for (size_t i = 0; i < fbxNodes.size(); ++i) {
+            ufbx_node* node = fbxNodes[i];
+            std::string nodeName = node->name.data ? node->name.data : "Joint_" + std::to_string(i);
             
+            Joint& joint = targetHasSkeleton ? loadedJoints[i] : skeleton.joints[i];
+            joint.name = nodeName;
             joint.parentIndex = -1;
             if (node->parent) {
-                auto pIt = std::find(fbxNodes.begin(), fbxNodes.end(), node->parent);
-                if (pIt != fbxNodes.end()) {
-                    joint.parentIndex = static_cast<int>(std::distance(fbxNodes.begin(), pIt));
+                auto it = std::find(fbxNodes.begin(), fbxNodes.end(), node->parent);
+                if (it != fbxNodes.end()) {
+                    joint.parentIndex = static_cast<int>(std::distance(fbxNodes.begin(), it));
                 }
             }
 
@@ -973,7 +973,9 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
             skeleton.jointMatrices.assign(jointCount, glm::mat4(1.0f));
         }
 
-        animator.animations.clear();
+        if (!append) {
+            animator.animations.clear();
+        }
         for (size_t a = 0; a < scene->anim_stacks.count; ++a) {
             ufbx_anim_stack* stack = scene->anim_stacks.data[a];
             AnimationClip clip{};
@@ -1034,7 +1036,17 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
                 clip.channels.push_back(std::move(channel));
             }
 
-            animator.animations.push_back(std::move(clip));
+            bool duplicateFound = false;
+            for (auto& existing : animator.animations) {
+                if (existing.name == clip.name) {
+                    existing = std::move(clip);
+                    duplicateFound = true;
+                    break;
+                }
+            }
+            if (!duplicateFound) {
+                animator.animations.push_back(std::move(clip));
+            }
         }
 
         if (!animator.animations.empty()) {
@@ -1156,10 +1168,10 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
 
 
     // 2. Load Animation Clips & Channels
-    animator.animations.resize(data->animations_count);
+    std::vector<AnimationClip> loadedClips(data->animations_count);
     for (cgltf_size i = 0; i < data->animations_count; ++i) {
         cgltf_animation& gltfAnim = data->animations[i];
-        AnimationClip& clip = animator.animations[i];
+        AnimationClip& clip = loadedClips[i];
         clip.name = gltfAnim.name ? gltfAnim.name : "Animation_" + std::to_string(i);
         clip.duration = 0.0f;
 
@@ -1211,10 +1223,8 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
                     }
                     animChannel.translationKeys.push_back({ time, translation });
                 } else if (channel.target_path == cgltf_animation_path_type_rotation) {
-                    cgltf_accessor_read_float(sampler->output, k, val, 4);
                     animChannel.rotationKeys.push_back({ time, glm::quat(val[3], val[0], val[1], val[2]) });
                 } else if (channel.target_path == cgltf_animation_path_type_scale) {
-                    cgltf_accessor_read_float(sampler->output, k, val, 3);
                     animChannel.scaleKeys.push_back({ time, glm::vec3(val[0], val[1], val[2]) });
                 }
             }
@@ -1227,12 +1237,25 @@ bool ResourceManager::loadSkeletonAndAnimations(const std::string& path, Skeleto
             std::sort(animChannel.rotationKeys.begin(), animChannel.rotationKeys.end(), [](const KeyframeRot& a, const KeyframeRot& b) { return a.time < b.time; });
             std::sort(animChannel.scaleKeys.begin(), animChannel.scaleKeys.end(), [](const Keyframe& a, const Keyframe& b) { return a.time < b.time; });
 
-
-
             clip.channels.push_back(std::move(animChannel));
         }
+    }
 
-
+    if (!append) {
+        animator.animations.clear();
+    }
+    for (auto& clip : loadedClips) {
+        bool duplicateFound = false;
+        for (auto& existing : animator.animations) {
+            if (existing.name == clip.name) {
+                existing = std::move(clip);
+                duplicateFound = true;
+                break;
+            }
+        }
+        if (!duplicateFound) {
+            animator.animations.push_back(std::move(clip));
+        }
     }
 
     if (!animator.animations.empty()) {
@@ -1317,7 +1340,7 @@ bool ResourceManager::saveBinarySkeletonAndAnimations(const std::string& path, c
     return true;
 }
 
-bool ResourceManager::loadBinarySkeletonAndAnimations(const std::string& path, SkeletonComponent& skeleton, AnimatorComponent& animator) {
+bool ResourceManager::loadBinarySkeletonAndAnimations(const std::string& path, SkeletonComponent& skeleton, AnimatorComponent& animator, bool append) {
     std::ifstream in(path, std::ios::binary);
     if (!in.is_open()) {
         std::cerr << "[ResourceManager] Failed to open binary animation file: " << path << std::endl;
@@ -1366,10 +1389,11 @@ bool ResourceManager::loadBinarySkeletonAndAnimations(const std::string& path, S
 
     uint32_t animCount = 0;
     in.read(reinterpret_cast<char*>(&animCount), sizeof(animCount));
-    animator.animations.resize(animCount);
+    
+    std::vector<AnimationClip> loadedClips(animCount);
 
     for (uint32_t c = 0; c < animCount; ++c) {
-        auto& clip = animator.animations[c];
+        auto& clip = loadedClips[c];
         uint32_t nameLength = 0;
         in.read(reinterpret_cast<char*>(&nameLength), sizeof(nameLength));
         if (nameLength > 0) {
@@ -1434,11 +1458,27 @@ bool ResourceManager::loadBinarySkeletonAndAnimations(const std::string& path, S
         }
     }
 
+    if (!append) {
+        animator.animations.clear();
+    }
+    for (auto& clip : loadedClips) {
+        bool duplicateFound = false;
+        for (auto& existing : animator.animations) {
+            if (existing.name == clip.name) {
+                existing = std::move(clip);
+                duplicateFound = true;
+                break;
+            }
+        }
+        if (!duplicateFound) {
+            animator.animations.push_back(std::move(clip));
+        }
+    }
+
     if (!animator.animations.empty()) {
         animator.activeAnimationIndex = 0; // Default active clip
     }
 
     in.close();
-    std::cout << "[ResourceManager] Successfully loaded binary animation file: " << path << std::endl;
     return true;
 }
