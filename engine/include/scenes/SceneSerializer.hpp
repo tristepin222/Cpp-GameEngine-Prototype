@@ -33,6 +33,14 @@ public:
      * @return True if loading was successful, false otherwise.
      */
     bool deserialize(const std::string& path, std::vector<Entity>& outEntities);
+    /**
+     * @brief Deserializes entities from a pre-loaded JSON string.
+     *        Used by async loading: background thread reads the file, main thread calls this.
+     * @param jsonContent Raw JSON content string.
+     * @param outEntities Target list to fill with loaded entities.
+     * @return True if loading was successful, false otherwise.
+     */
+    bool deserializeFromString(const std::string& jsonContent, std::vector<Entity>& outEntities);
     
     /**
      * @brief Serializes a single entity and all its hierarchy children to a JSON prefab file.

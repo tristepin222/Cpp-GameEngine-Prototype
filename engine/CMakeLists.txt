@@ -59,6 +59,7 @@ set(ENGINE_SOURCES
     src/scenes/JSONUtils.cpp
     src/scenes/ComponentSerializerRegistry.cpp
     src/scenes/SceneManager.cpp
+    src/scenes/SceneManagement.cpp
     src/scenes/SceneSerializer.cpp
     src/renderer/ResourceManager.cpp
     src/meta/ComponentReflection.cpp

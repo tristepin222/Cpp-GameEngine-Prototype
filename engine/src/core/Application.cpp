@@ -15,6 +15,7 @@
 #include "scenes/Scene.hpp"
 #include "scenes/JSONUtils.hpp"
 #include "scenes/DefaultScene.hpp"
+#include "scenes/SceneManagement.hpp"
 #include "core/JobSystem.hpp"
 #include "ecs/components/EditorCamera.hpp"
 #include "ecs/components/Name.hpp"
@@ -134,6 +135,8 @@ namespace Engine {
         pluginManager->loadPlugins();
         pluginManager->loadScripts(config.projectPath);
 
+        sceneManager.setContext(&registry, renderer.get());
+        SceneManagement::setSceneManager(&sceneManager);
         sceneManager.changeScene(std::make_unique<DefaultScene>(registry, *renderer, config.startScenePath));
 
         running = true;

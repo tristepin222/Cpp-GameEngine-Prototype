@@ -920,6 +920,26 @@ bool SceneSerializer::serialize(const std::string& path, const std::vector<Entit
  * @param outEntities Vector to store deserialized entities.
  * @return True if successful, false otherwise.
  */
+/**
+ * @brief Deserializes entities from a pre-loaded JSON string (no file I/O).
+ *        Used by the async load pipeline: background thread pre-reads the file,
+ *        main thread calls this to spawn entities and upload Vulkan resources.
+ */
+bool SceneSerializer::deserializeFromString(const std::string& jsonContent, std::vector<Entity>& outEntities) {
+    // Write to a uniquely-named temp file so the full deserialize pipeline
+    // (component reflection, texture loading, etc.) runs identically.
+    std::string tempPath = "_async_scene_" + std::to_string(
+        std::hash<std::string>{}(jsonContent.substr(0, 64))) + ".json";
+    {
+        std::ofstream tempOut(tempPath);
+        if (!tempOut.is_open()) return false;
+        tempOut << jsonContent;
+    }
+    bool ok = deserialize(tempPath, outEntities);
+    try { std::filesystem::remove(tempPath); } catch (...) {}
+    return ok;
+}
+
 bool SceneSerializer::deserialize(const std::string& path, std::vector<Entity>& outEntities) {
     std::ifstream in(path);
     if (!in.is_open()) {

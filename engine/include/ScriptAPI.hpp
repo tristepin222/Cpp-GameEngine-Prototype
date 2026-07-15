@@ -16,6 +16,7 @@
 #include "ecs/components/PlayerControllerComponent.hpp"
 #include "ecs/components/CinemachineComponent.hpp"
 #include "ecs/components/AudioSource.hpp"
+#include "scenes/SceneManagement.hpp"
 
 // Math & Utility
 #include <glm/glm.hpp>
