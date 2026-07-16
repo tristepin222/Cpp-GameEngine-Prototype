@@ -1,11 +1,13 @@
 #pragma once
 #include <vector>
 #include <thread>
-#include <queue>
-#include <mutex>
-#include <condition_variable>
 #include <functional>
 #include <atomic>
+#include <memory>
+#include <semaphore>
+#include <mutex>
+#include <vector>
+
 
 namespace Engine {
 
@@ -49,6 +51,9 @@ namespace Engine {
          */
         unsigned int getThreadCount() const { return static_cast<unsigned int>(workers.size()); }
 
+        // Tries to execute a single job from the queue (returns true if a job was executed)
+        bool tryExecuteOneJob();
+
     private:
         JobSystem() = default;
         ~JobSystem();
@@ -57,11 +62,25 @@ namespace Engine {
         void workerThreadLoop();
 
         std::vector<std::thread> workers;
-        std::queue<std::function<void()>> jobQueue;
-        std::mutex queueMutex;
-        std::condition_variable cv;
+
+        // Bounded MPMC queue cell structure
+        struct Cell {
+            std::atomic<size_t> sequence;
+            std::function<void()> job;
+        };
+
+        std::unique_ptr<Cell[]> buffer;
+        size_t bufferMask{0};
+
+        // Align queue cursors on separate cache lines to avoid false sharing
+        alignas(64) std::atomic<size_t> enqueuePos{0};
+        alignas(64) std::atomic<size_t> dequeuePos{0};
+
+        // Semaphore to wake worker threads without a mutex
+        std::counting_semaphore<65536> jobSemaphore{0};
+
         std::atomic<bool> stop{false};
-        bool initialized{false};
+        std::atomic<bool> initialized{false};
     };
 
 } // namespace Engine
