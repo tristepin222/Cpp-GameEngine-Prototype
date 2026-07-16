@@ -20,6 +20,7 @@
 #include "ecs/components/Collider.hpp"
 #include "ecs/components/PlayerControllerComponent.hpp"
 #include "meta/ComponentReflection.hpp"
+#include "ecs/components/Tilemap.hpp"
 
 
 struct ParentNameComponent {
@@ -146,6 +147,12 @@ static bool registerBuiltinComponents() {
                 if (!material->texturePath.empty()) {
                     out << ",\n" << JSONUtils::indent(indent) << "\"texturePath\": " << JSONUtils::quote(material->texturePath);
                 }
+                if (material->filterMode != TextureFilterMode::Bilinear) {
+                    std::string filterStr = "Bilinear";
+                    if (material->filterMode == TextureFilterMode::Nearest) filterStr = "Nearest";
+                    else if (material->filterMode == TextureFilterMode::Trilinear) filterStr = "Trilinear";
+                    out << ",\n" << JSONUtils::indent(indent) << "\"textureFilter\": " << JSONUtils::quote(filterStr);
+                }
             }
         },
         [](Registry& registry, VulkanRenderer& renderer, Entity entity, const std::string& json) {
@@ -236,7 +243,15 @@ static bool registerBuiltinComponents() {
                 if (!texturePath.empty()) {
                     if (auto* material = registry.get<Material>(entity)) {
                         material->texturePath = texturePath;
-                        if (auto* tex = renderer.resourceManager->loadTexture(texturePath, renderer)) {
+                        std::string textureFilter = JSONUtils::extractStringValue(json, "textureFilter");
+                        TextureFilterMode filterMode = TextureFilterMode::Bilinear;
+                        if (textureFilter == "Nearest" || textureFilter == "Point" || textureFilter == "nearest") {
+                            filterMode = TextureFilterMode::Nearest;
+                        } else if (textureFilter == "Trilinear" || textureFilter == "trilinear") {
+                            filterMode = TextureFilterMode::Trilinear;
+                        }
+                        material->filterMode = filterMode;
+                        if (auto* tex = renderer.resourceManager->loadTexture(texturePath, renderer, filterMode)) {
                             material->descriptorSet = tex->descriptorSet;
                         }
                     }
@@ -767,6 +782,53 @@ static bool registerBuiltinComponents() {
                     animator->activeAnimationIndex = static_cast<int>(activeIdxFloat);
                     animator->playbackSpeed = speed;
                     animator->loop = loop;
+                }
+            }
+        }
+    );
+
+    // 5. Tileset — now a disk asset (.tileset file), NOT serialized into the scene.
+    //    The Tilemap serializer references it by path string (tilesetPath).
+
+    // 6. Tilemap Component Serializer
+    reg.registerComponent(
+        "Tilemap",
+        [](Registry& registry, Entity entity, std::ostream& out, int indent) {
+            if (auto* tm = registry.get<Engine::TilemapComponent>(entity)) {
+                out << ",\n" << JSONUtils::indent(indent) << "\"entityType\": " << JSONUtils::quote("Tilemap") << ",\n";
+                out << JSONUtils::indent(indent) << "\"width\": " << tm->width << ",\n";
+                out << JSONUtils::indent(indent) << "\"height\": " << tm->height << ",\n";
+                out << JSONUtils::indent(indent) << "\"tileSize\": " << tm->tileSize << ",\n";
+                out << JSONUtils::indent(indent) << "\"tilesetPath\": " << JSONUtils::quote(tm->tilesetPath) << ",\n";
+
+                out << JSONUtils::indent(indent) << "\"tiles\": [";
+                for (size_t i = 0; i < tm->tiles.size(); ++i) {
+                    out << tm->tiles[i];
+                    if (i + 1 < tm->tiles.size()) out << ", ";
+                }
+                out << "]";
+            }
+        },
+        [](Registry& registry, VulkanRenderer&, Entity entity, const std::string& json) {
+            std::string type = JSONUtils::extractStringValue(json, "entityType");
+            if (type == "Tilemap" || json.find("\"tiles\":") != std::string::npos) {
+                if (!registry.has<Engine::TilemapComponent>(entity)) {
+                    registry.emplace<Engine::TilemapComponent>(entity, Engine::TilemapComponent{});
+                }
+                if (auto* tm = registry.get<Engine::TilemapComponent>(entity)) {
+                    float val = 0.f;
+                    if (JSONUtils::extractFloatValue(json, "width",    val)) tm->width    = (int)val;
+                    if (JSONUtils::extractFloatValue(json, "height",   val)) tm->height   = (int)val;
+                    if (JSONUtils::extractFloatValue(json, "tileSize", val)) tm->tileSize = val;
+
+                    // New: tilesetPath string (stable cross-scene reference)
+                    tm->tilesetPath = JSONUtils::extractStringValue(json, "tilesetPath");
+
+                    std::vector<int> tilesList;
+                    if (JSONUtils::extractIntVector(json, "tiles", tilesList)) {
+                        tm->tiles = std::move(tilesList);
+                    }
+                    tm->isDirty = true;
                 }
             }
         }

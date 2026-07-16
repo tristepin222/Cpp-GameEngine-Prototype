@@ -38,6 +38,8 @@
 #include "ecs/components/Collider.hpp"
 #include "ecs/components/PlayerControllerComponent.hpp"
 #include "ecs/components/PhysgunScript.hpp"
+#include "ecs/components/Tilemap.hpp"
+#include "scenes/TilesetAsset.hpp"
 #include <functional>
 #include "renderer/VulkanRenderer.hpp"
 #include "scenes/Scene.hpp"
@@ -56,6 +58,7 @@ struct ImportSettingsMetadata {
     bool generateNormals = true;
     bool allowMissingPos = false;
     bool forceInPlace = false;
+    TextureFilterMode filterMode = TextureFilterMode::Bilinear;
     
     struct AnimMetadata {
         std::string name;
@@ -76,11 +79,54 @@ static bool s_openImportSettingsWindow = false;
 static bool s_triggerLoadImportSettings = false;
 static ImportSettingsMetadata s_importMetadata;
 static std::filesystem::path s_importSettingsAssetPath;
+static bool s_openTilesetEditorWindow = false;
+// Tileset editor state (disk-file based)
+static std::string s_editingTilesetPath;         // path to the .tileset currently being edited
+static Engine::TilesetAsset s_editingTileset;    // in-memory copy being edited
+static bool s_tilesetLoaded = false;             // is s_editingTileset valid?
+// Brush painting state
+static int  s_brushTileId = -1;                  // currently selected tile ID from the palette (-1 = none)
+static bool s_brushModeActive = false;           // are we painting on a tilemap?
+static Entity s_brushTilemapEntity;              // which tilemap entity to paint on
+// Tileset palette grid pan/zoom state (infinite grid)
+static ImVec2 s_tsPanOffset{ 0.f, 0.f };        // pixel offset of grid origin from canvas top-left
+static float  s_tsCellSize = 64.f;              // current zoom-adjusted cell size in screen pixels
+static bool   s_tsIsPanning = false;            // true while middle-mouse dragging
+static ImVec2 s_tsPanStart{};                   // mouse pos when pan started
+static ImVec2 s_tsPanOffsetStart{};             // panOffset when pan started
 
 static void loadImportSettingsMetadata(const std::filesystem::path& path) {
     s_importMetadata = ImportSettingsMetadata{};
     s_importMetadata.assetPath = path.generic_string();
     
+    std::string ext = path.extension().string();
+    bool isTexture = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga");
+    if (isTexture) {
+        std::filesystem::path metaPath = path.string() + ".meta";
+        if (std::filesystem::exists(metaPath)) {
+            try {
+                std::ifstream f(metaPath);
+                if (f.is_open()) {
+                    std::stringstream ss;
+                    ss << f.rdbuf();
+                    std::string content = ss.str();
+                    std::string filterStr = JSONUtils::extractStringValue(content, "filterMode");
+                    if (filterStr.empty()) {
+                        filterStr = JSONUtils::extractStringValue(content, "filter");
+                    }
+                    if (filterStr == "Nearest" || filterStr == "Point" || filterStr == "nearest") {
+                        s_importMetadata.filterMode = TextureFilterMode::Nearest;
+                    } else if (filterStr == "Trilinear" || filterStr == "trilinear") {
+                        s_importMetadata.filterMode = TextureFilterMode::Trilinear;
+                    } else {
+                        s_importMetadata.filterMode = TextureFilterMode::Bilinear;
+                    }
+                }
+            } catch (...) {}
+        }
+        return; // Skip ufbx model/animation loading for textures
+    }
+
     std::filesystem::path importPath = path.string() + ".import";
     if (std::filesystem::exists(importPath)) {
         try {
@@ -100,7 +146,6 @@ static void loadImportSettingsMetadata(const std::filesystem::path& path) {
         } catch (...) {}
     }
     
-    std::string ext = path.extension().string();
     if (ext == ".fbx" || ext == ".FBX") {
         ufbx_load_opts opts = { 0 };
         ufbx_error error;
@@ -147,6 +192,37 @@ static void loadImportSettingsMetadata(const std::filesystem::path& path) {
 }
 
 static void saveImportSettings() {
+    std::string ext = std::filesystem::path(s_importMetadata.assetPath).extension().string();
+    bool isTexture = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga");
+    if (isTexture) {
+        std::string relativePath = s_importMetadata.assetPath + ".meta";
+        std::string filterStr = "Bilinear";
+        if (s_importMetadata.filterMode == TextureFilterMode::Nearest) filterStr = "Nearest";
+        else if (s_importMetadata.filterMode == TextureFilterMode::Trilinear) filterStr = "Trilinear";
+
+        auto writeMeta = [&](const std::filesystem::path& destPath) {
+            if (!destPath.parent_path().empty()) {
+                std::filesystem::create_directories(destPath.parent_path());
+            }
+            std::ofstream f(destPath);
+            if (f.is_open()) {
+                f << "{\n"
+                  << "  \"filterMode\": \"" << filterStr << "\"\n"
+                  << "}\n";
+                f.close();
+            }
+        };
+
+        // Write active copy
+        writeMeta(relativePath);
+        // Write source copy
+        std::filesystem::path sourceBase("../../../sandbox_game");
+        if (std::filesystem::exists(sourceBase / "assets")) {
+            writeMeta(sourceBase / relativePath);
+        }
+        return;
+    }
+
     std::string relativePath = s_importMetadata.assetPath + ".import";
     try {
         // Write active copy
@@ -433,6 +509,12 @@ void EditorUI::drawPanels() {
             }
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("Window")) {
+            if (ImGui::MenuItem("Tileset Editor")) {
+                s_openTilesetEditorWindow = true;
+            }
+            ImGui::EndMenu();
+        }
         // Center-aligned Play / Stop buttons in the Main Menu Bar
         float menuBarWidth = ImGui::GetWindowWidth();
         float buttonGroupWidth = 80.0f; // estimated width
@@ -503,6 +585,9 @@ void EditorUI::drawPanels() {
     
     // 7. Float Import Settings panel
     drawImportSettingsWindow();
+    
+    // 7b. Floating Tileset Editor window
+    drawTilesetEditorWindow();
 
     // 8. Build Settings panel (floating modal)
     if (showBuildSettings) {
@@ -1030,6 +1115,7 @@ void EditorUI::drawInspectorPanel() {
     drawAnimationControllerEditor();
     drawReflectedComponentsEditor();
     drawColliderEditor();
+    drawTilemapInspector();
     drawGridEditor();
     drawCameraEditor();
 
@@ -1081,10 +1167,18 @@ void EditorUI::drawInspectorPanel() {
             registry.emplace<ColliderComponent>(selectedEntity, ColliderComponent{});
             statusMessage = "Added Collider component.";
         }
+        if (!registry.has<Engine::TilemapComponent>(selectedEntity) && ImGui::MenuItem("Tilemap")) {
+            Engine::TilemapComponent tm{};
+            tm.width = 10; tm.height = 10; tm.tileSize = 1.f;
+            tm.tiles.assign(100, -1);
+            registry.emplace<Engine::TilemapComponent>(selectedEntity, std::move(tm));
+            statusMessage = "Added Tilemap component.";
+        }
 
-        // Render reflected components dynamically
+        // Render reflected components dynamically (skip those with dedicated hardcoded menu items)
         for (const auto& refl : Engine::ComponentReflectionRegistry::getInstance().getReflections()) {
             if (!refl.has(registry, selectedEntity)) {
+                if (refl.name == "Tilemap") continue; // handled by the hardcoded entry above
                 std::string menuName = refl.name;
                 if (menuName == "PlayerController") menuName = "Player Controller";
                 if (ImGui::MenuItem(menuName.c_str())) {
@@ -1638,12 +1732,16 @@ void EditorUI::drawAssetBrowser() {
                 bool isTexture = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga");
                 bool isPrefab = (ext == ".prefab");
                 bool isScene = (ext == ".json");
+                bool isTileset = (ext == ".tileset");
+                bool isTile    = (ext == ".tile");
 
                 std::string prefix = "  ";
-                if (isModel) prefix = "[] ";
+                if (isModel)   prefix = "[] ";
                 else if (isTexture) prefix = "[] ";
-                else if (isPrefab) prefix = "[] ";
-                else if (isScene) prefix = "[] ";
+                else if (isPrefab)  prefix = "[] ";
+                else if (isScene)   prefix = "[] ";
+                else if (isTileset) prefix = "[] ";
+                else if (isTile)    prefix = "[] ";
 
                 std::string labelStr = prefix + name + "##" + pathStr;
                 Selectable(labelStr.c_str(), false, ImGuiSelectableFlags_AllowOverlap);
@@ -1652,7 +1750,7 @@ void EditorUI::drawAssetBrowser() {
                 if (BeginPopupContextItem(pathStr.c_str())) {
                     TextDisabled("File: %s", name.c_str());
                     Separator();
-                    if (isModel) {
+                    if (isModel || isTexture) {
                         if (MenuItem("Import Settings...")) {
                             s_importSettingsAssetPath = entry.path();
                             s_triggerLoadImportSettings = true;
@@ -1704,6 +1802,17 @@ void EditorUI::drawAssetBrowser() {
                         } else {
                             statusMessage = "Failed to load scene from " + pathStr;
                         }
+                    }
+                }
+
+                if (isTileset) {
+                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+                        // Open the tileset in the Tileset Editor
+                        s_editingTilesetPath = pathStr;
+                        s_editingTileset = Engine::TilesetAsset::loadFromFile(pathStr);
+                        s_tilesetLoaded = true;
+                        s_openTilesetEditorWindow = true;
+                        statusMessage = "Opened tileset: " + name;
                     }
                 }
 
@@ -3199,6 +3308,8 @@ void EditorUI::drawReflectedComponentsEditor() {
     auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
     for (const auto& refl : reflReg.getReflections()) {
         if (!refl.has(registry, selectedEntity)) continue;
+        // Skip components that have dedicated custom inspector panels
+        if (refl.name == "Tilemap") continue;
 
         void* compPtr = refl.get(registry, selectedEntity);
         bool visible = true;
@@ -3696,6 +3807,40 @@ void EditorUI::drawImportSettingsWindow() {
         return;
     }
 
+    std::string ext = s_importSettingsAssetPath.extension().string();
+    bool isTexture = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga");
+    if (isTexture) {
+        Text("Source Texture: %s", s_importMetadata.assetPath.c_str());
+        Separator();
+        drawSectionHeader("Texture Import Settings");
+
+        const char* filterModes[] = { "Nearest (Point)", "Bilinear", "Trilinear" };
+        int currentFilterIdx = 1; // Bilinear
+        if (s_importMetadata.filterMode == TextureFilterMode::Nearest) currentFilterIdx = 0;
+        else if (s_importMetadata.filterMode == TextureFilterMode::Trilinear) currentFilterIdx = 2;
+
+        if (Combo("Filter Mode", &currentFilterIdx, filterModes, IM_ARRAYSIZE(filterModes))) {
+            if (currentFilterIdx == 0) s_importMetadata.filterMode = TextureFilterMode::Nearest;
+            else if (currentFilterIdx == 2) s_importMetadata.filterMode = TextureFilterMode::Trilinear;
+            else s_importMetadata.filterMode = TextureFilterMode::Bilinear;
+        }
+
+        Spacing();
+        Separator();
+        if (Button("Apply Settings")) {
+            saveImportSettings();
+            renderer.resourceManager->updateTextureFilterMode(s_importMetadata.assetPath, renderer, s_importMetadata.filterMode);
+            statusMessage = "Texture import settings applied live!";
+            s_openImportSettingsWindow = false;
+        }
+        SameLine();
+        if (Button("Cancel")) {
+            s_openImportSettingsWindow = false;
+        }
+        End();
+        return;
+    }
+
     Text("Source Asset: %s", s_importMetadata.assetPath.c_str());
     Separator();
 
@@ -4026,3 +4171,567 @@ void EditorUI::drawBuildSettingsPanel() {
     ImGui::Spacing();
     ImGui::End();
 }
+
+void EditorUI::drawTilesetEditorWindow() {
+    if (!s_openTilesetEditorWindow) return;
+
+    ImGui::SetNextWindowSize(ImVec2(900, 650), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Tileset Editor", &s_openTilesetEditorWindow,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar);
+    using namespace ImGui;
+
+    // -----------------------------------------------------------------------
+    // LEFT PANEL: Tileset file list + new tileset button
+    // -----------------------------------------------------------------------
+    const float listW = 190.f;
+    BeginChild("##tsFileList", ImVec2(listW, 0), true);
+    {
+        TextDisabled("Tilesets");
+        Separator();
+        Spacing();
+
+        std::filesystem::path tilesetDir = "assets/tilesets";
+        if (!std::filesystem::exists(tilesetDir))
+            std::filesystem::create_directories(tilesetDir);
+
+        std::error_code ec;
+        for (const auto& entry : std::filesystem::directory_iterator(tilesetDir, ec)) {
+            if (entry.path().extension() != ".tileset") continue;
+            std::string fname = entry.path().stem().string();
+            std::string fpath = entry.path().generic_string();
+            bool selected = (fpath == s_editingTilesetPath);
+
+            PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.45f, 0.70f, 1.f));
+            PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.55f, 0.85f, 1.f));
+            if (Selectable(fname.c_str(), selected, 0, ImVec2(-1, 0))) {
+                s_editingTilesetPath = fpath;
+                s_editingTileset     = Engine::TilesetAsset::loadFromFile(fpath);
+                s_tilesetLoaded      = true;
+                s_tsPanOffset        = ImVec2(0.f, 0.f);
+                Engine::invalidateTilesetCache(fpath);
+            }
+            PopStyleColor(2);
+        }
+
+        Spacing(); Separator(); Spacing();
+
+        if (Button("+ New Tileset", ImVec2(-1, 0)))
+            OpenPopup("##NewTilesetPopup");
+
+        static char s_newTsName[128] = "NewTileset";
+        SetNextWindowSize(ImVec2(280, 0));
+        if (BeginPopup("##NewTilesetPopup")) {
+            Text("Tileset name:");
+            SetNextItemWidth(-1);
+            InputText("##newtsname", s_newTsName, sizeof(s_newTsName));
+            Spacing();
+            if (Button("Create", ImVec2(120, 0))) {
+                std::string safeName = s_newTsName;
+                if (safeName.empty()) safeName = "NewTileset";
+                std::string newPath = (tilesetDir / (safeName + ".tileset")).generic_string();
+                Engine::TilesetAsset newTs;
+                newTs.name       = safeName;
+                newTs.filePath   = newPath;
+                newTs.tileWidth  = 16;
+                newTs.tileHeight = 16;
+                Engine::TilesetAsset::saveToFile(newTs);
+                s_editingTilesetPath = newPath;
+                s_editingTileset     = std::move(newTs);
+                s_tilesetLoaded      = true;
+                s_tsPanOffset        = ImVec2(0.f, 0.f);
+                statusMessage = "Created tileset: " + safeName;
+                CloseCurrentPopup();
+            }
+            SameLine();
+            if (Button("Cancel", ImVec2(120, 0))) CloseCurrentPopup();
+            EndPopup();
+        }
+
+        // Separator + tileset settings if one is loaded
+        if (s_tilesetLoaded) {
+            Spacing(); Separator(); Spacing();
+            TextDisabled("Settings");
+
+            char nameBuf[128] = {};
+            strncpy_s(nameBuf, s_editingTileset.name.c_str(), sizeof(nameBuf) - 1);
+            SetNextItemWidth(-1);
+            if (InputText("##tsname", nameBuf, sizeof(nameBuf)))
+                s_editingTileset.name = nameBuf;
+
+            TextDisabled("Tile W/H (px)");
+            SetNextItemWidth(-1);
+            DragInt("##tsTW", &s_editingTileset.tileWidth,  1.f, 1, 512, "W: %d px");
+            SetNextItemWidth(-1);
+            DragInt("##tsTH", &s_editingTileset.tileHeight, 1.f, 1, 512, "H: %d px");
+            if (s_editingTileset.tileWidth  < 1) s_editingTileset.tileWidth  = 1;
+            if (s_editingTileset.tileHeight < 1) s_editingTileset.tileHeight = 1;
+
+            Spacing();
+            PushStyleColor(ImGuiCol_Button,        ImVec4(0.18f, 0.48f, 0.22f, 1.f));
+            PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.60f, 0.28f, 1.f));
+            if (Button("Save Tileset", ImVec2(-1, 0))) {
+                Engine::TilesetAsset::saveToFile(s_editingTileset);
+                std::filesystem::path tsDir = std::filesystem::path(s_editingTileset.filePath).parent_path();
+                std::filesystem::path tileSubDir = tsDir / s_editingTileset.name;
+                std::filesystem::create_directories(tileSubDir);
+                for (auto& tile : s_editingTileset.tiles) {
+                    std::string tilePath = (tileSubDir / (tile.name + ".tile")).generic_string();
+                    Engine::TilesetAsset::saveTileFile(tile, tilePath);
+                }
+                Engine::invalidateTilesetCache(s_editingTilesetPath);
+                Engine::loadOrGetTileset(s_editingTilesetPath, renderer);
+                for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
+                    if (tm.tilesetPath == s_editingTilesetPath) tm.isDirty = true;
+                }
+                statusMessage = "Saved tileset: " + s_editingTileset.name;
+            }
+            PopStyleColor(2);
+        }
+    }
+    EndChild();
+
+    SameLine();
+
+    // -----------------------------------------------------------------------
+    // RIGHT PANEL: Infinite grid palette canvas
+    // -----------------------------------------------------------------------
+    BeginChild("##tsGrid", ImVec2(0, 0), false,
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+    if (!s_tilesetLoaded) {
+        ImVec2 sz = GetContentRegionAvail();
+        ImVec2 cp = GetCursorScreenPos();
+        GetWindowDrawList()->AddRectFilled(cp, ImVec2(cp.x+sz.x, cp.y+sz.y), IM_COL32(28,28,35,255));
+        ImVec2 tc = ImVec2(cp.x + sz.x*0.5f - 180.f, cp.y + sz.y*0.5f - 10.f);
+        GetWindowDrawList()->AddText(nullptr, 16.f, tc, IM_COL32(100,100,120,200),
+            "Select or create a tileset on the left.");
+    } else {
+        // Build a map from (gridX,gridY) -> tile index for fast lookup
+        std::unordered_map<uint64_t, int> cellMap;
+        auto cellKey = [](int gx, int gy) -> uint64_t {
+            return ((uint64_t)(uint32_t)gx) | (((uint64_t)(uint32_t)gy) << 32);
+        };
+        for (int i = 0; i < (int)s_editingTileset.tiles.size(); ++i) {
+            auto& t = s_editingTileset.tiles[i];
+            cellMap[cellKey(t.gridX, t.gridY)] = i;
+        }
+
+        // Canvas region
+        ImVec2 canvasPos  = GetCursorScreenPos();
+        ImVec2 canvasSize = GetContentRegionAvail();
+        if (canvasSize.x < 10.f) canvasSize.x = 10.f;
+        if (canvasSize.y < 10.f) canvasSize.y = 10.f;
+
+        // Invisible button to capture mouse events
+        InvisibleButton("##tsCanvas", canvasSize,
+            ImGuiButtonFlags_MouseButtonLeft  |
+            ImGuiButtonFlags_MouseButtonRight |
+            ImGuiButtonFlags_MouseButtonMiddle);
+        const bool canvasHovered = IsItemHovered();
+        const bool canvasActive  = IsItemActive();
+
+        ImVec2 mousePos = GetIO().MousePos;
+
+        // --- Zoom (scroll wheel) ---
+        if (canvasHovered) {
+            float wheel = GetIO().MouseWheel;
+            if (wheel != 0.f) {
+                float zoomFactor = (wheel > 0) ? 1.12f : (1.f / 1.12f);
+                float newCell = s_tsCellSize * zoomFactor;
+                newCell = std::max(12.f, std::min(256.f, newCell));
+                ImVec2 mouseInCanvas = ImVec2(mousePos.x - canvasPos.x, mousePos.y - canvasPos.y);
+                float scale = newCell / s_tsCellSize;
+                s_tsPanOffset.x = mouseInCanvas.x - scale * (mouseInCanvas.x - s_tsPanOffset.x);
+                s_tsPanOffset.y = mouseInCanvas.y - scale * (mouseInCanvas.y - s_tsPanOffset.y);
+                s_tsCellSize = newCell;
+            }
+        }
+
+        // --- Pan (middle mouse or right mouse drag) ---
+        bool wantPan = canvasActive && (
+            IsMouseDown(ImGuiMouseButton_Middle) ||
+            (IsMouseDown(ImGuiMouseButton_Right) && !IsAnyItemHovered()));
+
+        if (wantPan && !s_tsIsPanning) {
+            s_tsIsPanning = true;
+            s_tsPanStart  = mousePos;
+            s_tsPanOffsetStart = s_tsPanOffset;
+        }
+        if (!IsMouseDown(ImGuiMouseButton_Middle) && !IsMouseDown(ImGuiMouseButton_Right))
+            s_tsIsPanning = false;
+
+        if (s_tsIsPanning) {
+            s_tsPanOffset.x = s_tsPanOffsetStart.x + (mousePos.x - s_tsPanStart.x);
+            s_tsPanOffset.y = s_tsPanOffsetStart.y + (mousePos.y - s_tsPanStart.y);
+        }
+
+        // ---------------------------------------------------------------
+        // Draw grid lines and cells
+        // ---------------------------------------------------------------
+        ImDrawList* dl = GetWindowDrawList();
+        dl->PushClipRect(canvasPos,
+            ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y), true);
+
+        // Dark background
+        dl->AddRectFilled(canvasPos,
+            ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y),
+            IM_COL32(28, 28, 36, 255));
+
+        const float cs = s_tsCellSize;
+        const float ox = canvasPos.x + s_tsPanOffset.x;
+        const float oy = canvasPos.y + s_tsPanOffset.y;
+
+        // Determine visible cell range
+        int colMin = (int)std::floor((canvasPos.x - ox) / cs) - 1;
+        int colMax = (int)std::ceil ((canvasPos.x + canvasSize.x - ox) / cs) + 1;
+        int rowMin = (int)std::floor((canvasPos.y - oy) / cs) - 1;
+        int rowMax = (int)std::ceil ((canvasPos.y + canvasSize.y - oy) / cs) + 1;
+
+        const int MAX_RANGE = 64;
+        if (colMax - colMin > MAX_RANGE) { colMin = -MAX_RANGE/2; colMax = MAX_RANGE/2; }
+        if (rowMax - rowMin > MAX_RANGE) { rowMin = -MAX_RANGE/2; rowMax = MAX_RANGE/2; }
+
+        // Grid lines
+        ImU32 gridLineCol   = IM_COL32(55, 55, 70, 200);
+        ImU32 originLineCol = IM_COL32(80, 80, 110, 255);
+        for (int col = colMin; col <= colMax; ++col) {
+            float x = ox + col * cs;
+            ImU32 c = (col == 0) ? originLineCol : gridLineCol;
+            dl->AddLine(ImVec2(x, canvasPos.y), ImVec2(x, canvasPos.y + canvasSize.y), c, col == 0 ? 2.f : 1.f);
+        }
+        for (int row = rowMin; row <= rowMax; ++row) {
+            float y = oy + row * cs;
+            ImU32 c = (row == 0) ? originLineCol : gridLineCol;
+            dl->AddLine(ImVec2(canvasPos.x, y), ImVec2(canvasPos.x + canvasSize.x, y), c, row == 0 ? 2.f : 1.f);
+        }
+
+        // Coordinate labels on empty cells (only when zoomed in enough)
+        if (cs >= 48.f) {
+            for (int col = colMin; col <= colMax; ++col) {
+                for (int row = rowMin; row <= rowMax; ++row) {
+                    auto it = cellMap.find(cellKey(col, row));
+                    if (it == cellMap.end()) {
+                        float x = ox + col * cs;
+                        float y = oy + row * cs;
+                        char lbl[32];
+                        snprintf(lbl, sizeof(lbl), "%d,%d", col, row);
+                        dl->AddText(ImVec2(x+3.f, y+3.f), IM_COL32(60,60,80,180), lbl);
+                    }
+                }
+            }
+        }
+
+        // Draw placed tiles
+        static int s_rightClickedTileIdx = -1;
+        for (auto& [key, tileIdx] : cellMap) {
+            if (tileIdx < 0 || tileIdx >= (int)s_editingTileset.tiles.size()) continue;
+            auto& tile = s_editingTileset.tiles[tileIdx];
+            float x = ox + tile.gridX * cs;
+            float y = oy + tile.gridY * cs;
+            ImVec2 tl = ImVec2(x, y);
+            ImVec2 br = ImVec2(x + cs, y + cs);
+            bool isSelected = (s_brushTileId == tileIdx);
+
+            dl->AddRectFilled(tl, br,
+                isSelected ? IM_COL32(30, 90, 180, 200) : IM_COL32(40, 40, 55, 220));
+
+            // Texture thumbnail
+            if (!tile.texturePath.empty()) {
+                Texture* tex = renderer.resourceManager->loadTexture(tile.texturePath, renderer);
+                if (tex && tex->descriptorSet != VK_NULL_HANDLE) {
+                    dl->AddImage((ImTextureID)tex->descriptorSet, tl, br);
+                }
+            }
+
+            // Solid tint
+            if (tile.isSolid)
+                dl->AddRectFilled(tl, br, IM_COL32(220, 40, 40, 70));
+
+            // Border
+            ImU32 borderCol = isSelected ? IM_COL32(80, 160, 255, 255) : IM_COL32(110, 110, 140, 200);
+            dl->AddRect(tl, br, borderCol, 0.f, 0, isSelected ? 2.5f : 1.5f);
+
+            // Tile name label strip
+            if (cs >= 36.f) {
+                float labelH = std::min(14.f, cs * 0.20f);
+                ImVec2 lblTL = ImVec2(tl.x, br.y - labelH);
+                dl->AddRectFilled(lblTL, br, IM_COL32(0, 0, 0, 160));
+                dl->AddText(ImVec2(lblTL.x + 2.f, lblTL.y),
+                    IM_COL32(220, 220, 220, 255), tile.name.c_str());
+            }
+        }
+
+        // --- Mouse interaction ---
+        ImVec2 mouseInCanvas = ImVec2(mousePos.x - canvasPos.x, mousePos.y - canvasPos.y);
+        int hovCol = (int)std::floor((mouseInCanvas.x - s_tsPanOffset.x) / cs);
+        int hovRow = (int)std::floor((mouseInCanvas.y - s_tsPanOffset.y) / cs);
+
+        // Hover highlight
+        if (canvasHovered && !s_tsIsPanning) {
+            float hx = ox + hovCol * cs;
+            float hy = oy + hovRow * cs;
+            dl->AddRectFilled(ImVec2(hx, hy), ImVec2(hx + cs, hy + cs), IM_COL32(255, 255, 255, 18));
+            dl->AddRect(ImVec2(hx, hy), ImVec2(hx + cs, hy + cs), IM_COL32(180, 180, 200, 120));
+
+            // Tooltip
+            auto it = cellMap.find(cellKey(hovCol, hovRow));
+            BeginTooltip();
+            if (it != cellMap.end() && it->second >= 0 && it->second < (int)s_editingTileset.tiles.size()) {
+                auto& t = s_editingTileset.tiles[it->second];
+                Text("[%d, %d]  ID=%d  %s", hovCol, hovRow, t.id, t.name.c_str());
+                Text("Texture: %s", t.texturePath.c_str());
+                Text(t.isSolid ? "Solid: YES" : "Solid: NO");
+                Text("LMB=Select brush  RMB=Options");
+            } else {
+                Text("[%d, %d]  (empty)", hovCol, hovRow);
+                Text("Drag a texture here to place a tile");
+            }
+            EndTooltip();
+        }
+
+        // Left-click: select/deselect brush
+        if (canvasHovered && IsMouseClicked(ImGuiMouseButton_Left) && !s_tsIsPanning) {
+            auto it = cellMap.find(cellKey(hovCol, hovRow));
+            if (it != cellMap.end() && it->second >= 0 && it->second < (int)s_editingTileset.tiles.size()) {
+                int idx = it->second;
+                if (s_brushTileId == idx) {
+                    s_brushTileId = -1;
+                    s_brushModeActive = false;
+                    statusMessage = "Brush cleared.";
+                } else {
+                    s_brushTileId = idx;
+                    s_brushModeActive = true;
+                    statusMessage = "Brush: " + s_editingTileset.tiles[idx].name;
+                }
+            }
+        }
+
+        // Right-click context menu
+        if (canvasHovered && IsMouseClicked(ImGuiMouseButton_Right) && !s_tsIsPanning) {
+            auto it = cellMap.find(cellKey(hovCol, hovRow));
+            if (it != cellMap.end()) {
+                s_rightClickedTileIdx = it->second;
+                OpenPopup("##TileCtxMenu");
+            }
+        }
+        if (BeginPopup("##TileCtxMenu")) {
+            int idx = s_rightClickedTileIdx;
+            if (idx >= 0 && idx < (int)s_editingTileset.tiles.size()) {
+                auto& tile = s_editingTileset.tiles[idx];
+                TextDisabled("%s  [%d,%d]", tile.name.c_str(), tile.gridX, tile.gridY);
+                Separator();
+                bool solid = tile.isSolid;
+                if (Checkbox("Solid Collider", &solid)) {
+                    tile.isSolid = solid;
+                    std::filesystem::path tsDir = std::filesystem::path(s_editingTileset.filePath).parent_path();
+                    std::string tilePath = (tsDir / s_editingTileset.name / (tile.name + ".tile")).generic_string();
+                    Engine::TilesetAsset::saveTileFile(tile, tilePath);
+                    Engine::TilesetAsset::saveToFile(s_editingTileset);
+                    Engine::invalidateTilesetCache(s_editingTilesetPath);
+                    Engine::loadOrGetTileset(s_editingTilesetPath, renderer);
+                    for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>())
+                        if (tm.tilesetPath == s_editingTilesetPath) tm.isDirty = true;
+                }
+                Separator();
+                PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.3f, 0.3f, 1.f));
+                if (MenuItem("Remove Tile")) {
+                    if (s_brushTileId == idx)       { s_brushTileId = -1; s_brushModeActive = false; }
+                    else if (s_brushTileId > idx)   { s_brushTileId--; }
+                    s_editingTileset.tiles.erase(s_editingTileset.tiles.begin() + idx);
+                    for (int ti = 0; ti < (int)s_editingTileset.tiles.size(); ++ti)
+                        s_editingTileset.tiles[ti].id = ti;
+                    Engine::TilesetAsset::saveToFile(s_editingTileset);
+                    Engine::invalidateTilesetCache(s_editingTilesetPath);
+                    Engine::loadOrGetTileset(s_editingTilesetPath, renderer);
+                    for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>())
+                        if (tm.tilesetPath == s_editingTilesetPath) tm.isDirty = true;
+                    statusMessage = "Removed tile.";
+                    s_rightClickedTileIdx = -1;
+                }
+                PopStyleColor();
+            }
+            EndPopup();
+        }
+
+        // --- Drag-drop: accept texture files onto the grid ---
+        SetCursorScreenPos(canvasPos);
+        InvisibleButton("##tsDropTarget", canvasSize);
+        if (BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+                std::string droppedPath = (const char*)payload->Data;
+                auto ext = std::filesystem::path(droppedPath).extension().string();
+                bool isImg = (ext==".png"||ext==".jpg"||ext==".jpeg"||ext==".tga");
+                if (isImg) {
+                    ImVec2 dropMouse     = GetIO().MousePos;
+                    ImVec2 dropInCanvas  = ImVec2(dropMouse.x - canvasPos.x, dropMouse.y - canvasPos.y);
+                    int dropCol = (int)std::floor((dropInCanvas.x - s_tsPanOffset.x) / cs);
+                    int dropRow = (int)std::floor((dropInCanvas.y - s_tsPanOffset.y) / cs);
+
+                    auto it = cellMap.find(cellKey(dropCol, dropRow));
+                    if (it != cellMap.end()) {
+                        // Overwrite existing tile's texture
+                        auto& existing   = s_editingTileset.tiles[it->second];
+                        existing.texturePath = droppedPath;
+                        existing.name        = std::filesystem::path(droppedPath).stem().string();
+                        std::filesystem::path tsDir = std::filesystem::path(s_editingTileset.filePath).parent_path();
+                        std::string tilePath = (tsDir / s_editingTileset.name / (existing.name + ".tile")).generic_string();
+                        Engine::TilesetAsset::saveTileFile(existing, tilePath);
+                        statusMessage = "Replaced tile at [" + std::to_string(dropCol) + "," + std::to_string(dropRow) + "]";
+                    } else {
+                        // New tile at this position
+                        Engine::TileAsset newTile;
+                        newTile.id          = static_cast<int>(s_editingTileset.tiles.size());
+                        newTile.name        = std::filesystem::path(droppedPath).stem().string();
+                        newTile.texturePath = droppedPath;
+                        newTile.isSolid     = false;
+                        newTile.gridX       = dropCol;
+                        newTile.gridY       = dropRow;
+
+                        std::filesystem::path tsDir = std::filesystem::path(s_editingTileset.filePath).parent_path();
+                        std::filesystem::path tileSubDir = tsDir / s_editingTileset.name;
+                        std::filesystem::create_directories(tileSubDir);
+                        std::string tilePath = (tileSubDir / (newTile.name + ".tile")).generic_string();
+                        Engine::TilesetAsset::saveTileFile(newTile, tilePath);
+                        s_editingTileset.tiles.push_back(std::move(newTile));
+                        statusMessage = "Added tile at [" + std::to_string(dropCol) + "," + std::to_string(dropRow) + "]";
+                    }
+
+                    Engine::TilesetAsset::saveToFile(s_editingTileset);
+                    Engine::invalidateTilesetCache(s_editingTilesetPath);
+                    Engine::loadOrGetTileset(s_editingTilesetPath, renderer);
+                    for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>())
+                        if (tm.tilesetPath == s_editingTilesetPath) tm.isDirty = true;
+                }
+            }
+            EndDragDropTarget();
+        }
+
+        dl->PopClipRect();
+
+        // --- Bottom HUD bar ---
+        {
+            const float barH = 22.f;
+            ImVec2 barTL = ImVec2(canvasPos.x, canvasPos.y + canvasSize.y - barH);
+            ImVec2 barBR = ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y);
+            GetWindowDrawList()->AddRectFilled(barTL, barBR, IM_COL32(20, 20, 28, 220));
+
+            char hudBuf[256];
+            if (s_brushTileId >= 0 && s_brushTileId < (int)s_editingTileset.tiles.size()) {
+                auto& bt = s_editingTileset.tiles[s_brushTileId];
+                snprintf(hudBuf, sizeof(hudBuf),
+                    "  Brush: [%d] %s  |  Zoom: %.0fpx  |  Scroll=Zoom  MMB/RMB=Pan  LMB=Select  RMB=Options",
+                    s_brushTileId, bt.name.c_str(), cs);
+            } else {
+                snprintf(hudBuf, sizeof(hudBuf),
+                    "  No brush selected  |  Zoom: %.0fpx  |  Scroll=Zoom  MMB/RMB=Pan  LMB=Select  Drag texture=Place",
+                    cs);
+            }
+            GetWindowDrawList()->AddText(
+                ImVec2(barTL.x + 4.f, barTL.y + 3.f),
+                s_brushTileId >= 0 ? IM_COL32(100, 200, 255, 255) : IM_COL32(140, 140, 160, 220),
+                hudBuf);
+        }
+
+        // --- Paint target dropdown (top-right corner overlay) ---
+        if (s_tilesetLoaded) {
+            const float comboW = 190.f;
+            const float comboH = 22.f;
+            SetCursorScreenPos(ImVec2(canvasPos.x + canvasSize.x - comboW - 4.f, canvasPos.y + 4.f));
+            PushItemWidth(comboW);
+            std::string previewLabel = "Select Tilemap...";
+            for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
+                if (s_brushTilemapEntity == tmEnt) {
+                    if (auto* n = registry.get<Name>(tmEnt)) previewLabel = n->value;
+                    else previewLabel = "Entity " + std::to_string(tmEnt.getId());
+                    break;
+                }
+            }
+            if (BeginCombo("##tmTarget", previewLabel.c_str(), ImGuiComboFlags_HeightSmall)) {
+                for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
+                    std::string lbl;
+                    if (auto* n = registry.get<Name>(tmEnt)) lbl = n->value;
+                    else lbl = "Entity " + std::to_string(tmEnt.getId());
+                    bool sel = (s_brushTilemapEntity == tmEnt);
+                    if (Selectable(lbl.c_str(), sel))
+                        s_brushTilemapEntity = tmEnt;
+                }
+                EndCombo();
+            }
+            PopItemWidth();
+        }
+    }
+    EndChild();
+
+    End();
+}
+
+void EditorUI::drawTilemapInspector() {
+    if (!hasSelection) return;
+    auto* tm = registry.get<Engine::TilemapComponent>(selectedEntity);
+    if (!tm) return;
+
+    ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.22f, 0.35f, 0.55f, 1.f));
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.28f, 0.45f, 0.70f, 1.f));
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.18f, 0.28f, 0.45f, 1.f));
+    using namespace ImGui;
+    if (CollapsingHeader("Tilemap", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // tilesetPath
+        char pathBuf[512];
+        strncpy_s(pathBuf, tm->tilesetPath.c_str(), sizeof(pathBuf) - 1);
+        if (InputText("Tileset Path##tmpth", pathBuf, sizeof(pathBuf))) {
+            tm->tilesetPath = pathBuf;
+            tm->isDirty = true;
+        }
+        if (BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+                const char* p = (const char*)payload->Data;
+                if (std::filesystem::path(p).extension() == ".tileset") {
+                    tm->tilesetPath = p;
+                    tm->isDirty = true;
+                    statusMessage = "Assigned tileset: " + tm->tilesetPath;
+                }
+            }
+            EndDragDropTarget();
+        }
+        TextDisabled("Drop a .tileset file here");
+        Spacing();
+
+        int w = tm->width,  h = tm->height;
+        bool changed = false;
+        if (DragInt("Width##tmW",  &w, 1.f, 1, 512)) changed = true;
+        if (DragInt("Height##tmH", &h, 1.f, 1, 512)) changed = true;
+        if (changed) {
+            int newW = std::max(1, w);
+            int newH = std::max(1, h);
+            std::vector<int> newTiles(newW * newH, -1);
+            for (int y = 0; y < std::min(tm->height, newH); ++y)
+                for (int x = 0; x < std::min(tm->width, newW); ++x)
+                    newTiles[y * newW + x] = (y * tm->width + x < (int)tm->tiles.size())
+                        ? tm->tiles[y * tm->width + x] : -1;
+            tm->width  = newW;
+            tm->height = newH;
+            tm->tiles  = std::move(newTiles);
+            tm->isDirty = true;
+        }
+
+        DragFloat("Tile Size##tmTS", &tm->tileSize, 0.01f, 0.01f, 100.f);
+
+        Spacing();
+        if (Button("Clear All Tiles")) {
+            std::fill(tm->tiles.begin(), tm->tiles.end(), -1);
+            tm->isDirty = true;
+            statusMessage = "Cleared tilemap.";
+        }
+        SameLine();
+        if (Button("Open Tileset Editor")) {
+            if (!tm->tilesetPath.empty()) {
+                s_editingTilesetPath = tm->tilesetPath;
+                s_editingTileset = Engine::TilesetAsset::loadFromFile(tm->tilesetPath);
+                s_tilesetLoaded = true;
+            }
+            s_openTilesetEditorWindow = true;
+        }
+    }
+    PopStyleColor(3);
+}
+

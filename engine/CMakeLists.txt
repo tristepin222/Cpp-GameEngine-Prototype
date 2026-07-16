@@ -61,11 +61,13 @@ set(ENGINE_SOURCES
     src/scenes/SceneManager.cpp
     src/scenes/SceneManagement.cpp
     src/scenes/SceneSerializer.cpp
+    src/scenes/TilesetAsset.cpp
     src/renderer/ResourceManager.cpp
     src/meta/ComponentReflection.cpp
     src/ufbx.cpp
     src/miniaudio.cpp
     src/ecs/systems/AudioSystem.cpp
+    src/ecs/systems/TilemapSystem.cpp
 )
 
 add_library(engine SHARED ${ENGINE_SOURCES})

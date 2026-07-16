@@ -2,6 +2,13 @@
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
 #include <string>
+
+enum class TextureFilterMode {
+    Nearest,
+    Bilinear,
+    Trilinear
+};
+
 /**
  * @struct Material
  * @brief Represents a material component defining rendering properties.
@@ -21,6 +28,8 @@ struct Material {
     VkPipeline pipeline{ VK_NULL_HANDLE }; // optional per-shader pipeline
     /** @brief Optional per-material custom Vulkan pipeline layout. */
     VkPipelineLayout pipelineLayout{ VK_NULL_HANDLE }; // optional per-shader pipeline layout
+    /** @brief Texture filter mode. */
+    TextureFilterMode filterMode = TextureFilterMode::Bilinear;
 
     /**
      * @brief Construct a new Material object.

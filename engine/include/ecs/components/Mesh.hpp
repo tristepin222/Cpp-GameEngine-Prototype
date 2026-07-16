@@ -95,7 +95,7 @@ struct Vertex {
 struct Mesh {
 
     /** @brief Unique identifier for this mesh. */
-    uint32_t id;
+    uint32_t id = 0;
 
     /** @brief Target glTF/glb file path. */
     std::string gltfPath;
@@ -117,7 +117,7 @@ struct Mesh {
     VkDeviceMemory vertexBufferMemory{ VK_NULL_HANDLE };
     /** @brief Vulkan buffer holding the index data. */
     VkBuffer indexBuffer{ VK_NULL_HANDLE };
-    /** @brief GPU memory backing the index buffer. */
+    /** @brief GPU memory backing the index data. */
     VkDeviceMemory indexBufferMemory{ VK_NULL_HANDLE };
 
     /** @brief Whether this mesh has skin weights and is deformed on GPU. */
@@ -142,7 +142,7 @@ struct Mesh {
         VkDeviceMemory vMem = VK_NULL_HANDLE,
         VkBuffer iBuf = VK_NULL_HANDLE,
         VkDeviceMemory iMem = VK_NULL_HANDLE
-    ) : vertices(verts), indices(inds), vertexBuffer(vBuf), vertexBufferMemory(vMem),
+    ) : id(0), vertices(verts), indices(inds), vertexBuffer(vBuf), vertexBufferMemory(vMem),
         indexBuffer(iBuf), indexBufferMemory(iMem), isSkinned(false), visible(true) {
     }
 };

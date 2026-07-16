@@ -12,6 +12,7 @@
 #include "ecs/systems/PhysicsSystem.hpp"
 #include "ecs/systems/PlayerControllerSystem.hpp"
 #include "ecs/systems/AudioSystem.hpp"
+#include "ecs/systems/TilemapSystem.hpp"
 #include "scenes/Scene.hpp"
 #include "scenes/JSONUtils.hpp"
 #include "scenes/DefaultScene.hpp"
@@ -98,9 +99,11 @@ namespace Engine {
         auto physicsSystem = std::make_shared<PhysicsSystem>(registry, editorMode);
         auto playerControllerSystem = std::make_shared<PlayerControllerSystem>(registry, *renderer, editorMode);
         auto audioSystem = std::make_shared<AudioSystem>(registry, editorMode);
+        auto tilemapSystem = std::make_shared<TilemapSystem>(registry, *renderer);
 
         systemManager.addSystem(inputSystem);
         systemManager.addSystem(cameraSystem);
+        systemManager.addSystem(tilemapSystem);
         systemManager.addSystem(physicsSystem);
         systemManager.addSystem(animationSystem);
         systemManager.addSystem(playerControllerSystem);

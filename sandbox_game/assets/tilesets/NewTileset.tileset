@@ -1,0 +1,8 @@
+{
+  "name": "NewTileset",
+  "tileWidth": 16,
+  "tileHeight": 16,
+  "tiles": [
+    "assets/tilesets/Ch36_1001_Diffuse.tile"
+  ]
+}

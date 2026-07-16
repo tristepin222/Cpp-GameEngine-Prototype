@@ -196,4 +196,78 @@ namespace JSONUtils {
 
         return objects;
     }
+
+    /**
+     * @brief Finds and extracts an array of integers associated with a JSON key.
+     */
+    bool extractIntVector(const std::string& source, const std::string& key, std::vector<int>& values) {
+        const std::string token = "\"" + key + "\"";
+        size_t keyPos = source.find(token);
+        if (keyPos == std::string::npos) {
+            return false;
+        }
+
+        size_t open = source.find('[', keyPos);
+        size_t close = source.find(']', open);
+        if (open == std::string::npos || close == std::string::npos) {
+            return false;
+        }
+
+        std::string payload = source.substr(open + 1, close - open - 1);
+        for (char& c : payload) {
+            if (c == ',') {
+                c = ' ';
+            }
+        }
+
+        std::istringstream stream(payload);
+        int val;
+        values.clear();
+        while (stream >> val) {
+            values.push_back(val);
+        }
+
+        return true;
+    }
+
+    /**
+     * @brief Finds and extracts an array of quoted string values associated with a JSON key.
+     *        Handles both compact (["a","b"]) and pretty-printed arrays.
+     */
+    bool extractStringVector(const std::string& source, const std::string& key, std::vector<std::string>& values) {
+        const std::string token = "\"" + key + "\"";
+        size_t keyPos = source.find(token);
+        if (keyPos == std::string::npos) return false;
+
+        size_t open = source.find('[', keyPos);
+        if (open == std::string::npos) return false;
+
+        // Find matching close bracket (handles nested arrays)
+        int depth = 0;
+        size_t close = std::string::npos;
+        for (size_t i = open; i < source.size(); ++i) {
+            if (source[i] == '[') ++depth;
+            else if (source[i] == ']') {
+                --depth;
+                if (depth == 0) { close = i; break; }
+            }
+        }
+        if (close == std::string::npos) return false;
+
+        std::string payload = source.substr(open + 1, close - open - 1);
+
+        // Extract all quoted strings from the payload
+        values.clear();
+        size_t pos = 0;
+        while (pos < payload.size()) {
+            size_t q1 = payload.find('"', pos);
+            if (q1 == std::string::npos) break;
+            size_t q2 = payload.find('"', q1 + 1);
+            if (q2 == std::string::npos) break;
+            values.push_back(payload.substr(q1 + 1, q2 - q1 - 1));
+            pos = q2 + 1;
+        }
+        return !values.empty();
+    }
 }
+

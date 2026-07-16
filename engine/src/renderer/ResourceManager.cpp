@@ -6,6 +6,8 @@
 
 #include "ufbx.h"
 #include "scenes/JSONUtils.hpp"
+#include <filesystem>
+#include <fstream>
 
 #include "renderer/ResourceManager.hpp"
 #include "renderer/VulkanRenderer.hpp"
@@ -166,11 +168,24 @@ void ResourceManager::createTextureImageView(VkDevice device, Texture& texture) 
     }
 }
 
-void ResourceManager::createTextureSampler(VkDevice device, Texture& texture) {
+void ResourceManager::createTextureSampler(VkDevice device, Texture& texture, TextureFilterMode filterMode) {
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = VK_FILTER_LINEAR;
-    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    
+    if (filterMode == TextureFilterMode::Nearest) {
+        samplerInfo.magFilter = VK_FILTER_NEAREST;
+        samplerInfo.minFilter = VK_FILTER_NEAREST;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    } else if (filterMode == TextureFilterMode::Bilinear) {
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    } else { // Trilinear
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    }
+
     samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
@@ -180,7 +195,6 @@ void ResourceManager::createTextureSampler(VkDevice device, Texture& texture) {
     samplerInfo.unnormalizedCoordinates = VK_FALSE;
     samplerInfo.compareEnable = VK_FALSE;
     samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
     samplerInfo.mipLodBias = 0.0f;
     samplerInfo.minLod = 0.0f;
     samplerInfo.maxLod = 0.0f;
@@ -235,7 +249,7 @@ void ResourceManager::createTextureImage(const std::string& path, VulkanRenderer
     stagingBuffer.destroy();
 }
 
-Texture* ResourceManager::loadTexture(const std::string& path, VulkanRenderer& renderer) {
+Texture* ResourceManager::loadTexture(const std::string& path, VulkanRenderer& renderer, TextureFilterMode filterMode) {
     if (path.empty()) return &defaultWhiteTexture;
 
     auto it = textureCache.find(path);
@@ -243,13 +257,36 @@ Texture* ResourceManager::loadTexture(const std::string& path, VulkanRenderer& r
         return it->second.get();
     }
 
+    // Auto-detect filterMode from .meta file if present
+    std::string metaPath = path + ".meta";
+    if (std::filesystem::exists(metaPath)) {
+        std::ifstream f(metaPath);
+        if (f.is_open()) {
+            std::stringstream ss;
+            ss << f.rdbuf();
+            std::string metaJson = ss.str();
+            std::string filterStr = JSONUtils::extractStringValue(metaJson, "filterMode");
+            if (filterStr.empty()) {
+                filterStr = JSONUtils::extractStringValue(metaJson, "filter");
+            }
+            if (filterStr == "Nearest" || filterStr == "Point" || filterStr == "nearest") {
+                filterMode = TextureFilterMode::Nearest;
+            } else if (filterStr == "Bilinear" || filterStr == "bilinear") {
+                filterMode = TextureFilterMode::Bilinear;
+            } else if (filterStr == "Trilinear" || filterStr == "trilinear") {
+                filterMode = TextureFilterMode::Trilinear;
+            }
+        }
+    }
+
     auto texture = std::make_unique<Texture>();
     texture->path = path;
+    texture->filterMode = filterMode;
 
     try {
         createTextureImage(path, renderer, *texture);
         createTextureImageView(renderer.device.getDevice(), *texture);
-        createTextureSampler(renderer.device.getDevice(), *texture);
+        createTextureSampler(renderer.device.getDevice(), *texture, filterMode);
         
         // Allocate and write descriptor set
         renderer.descriptors.allocateTextureDescriptorSet(texture->descriptorSet, texture->imageView, texture->sampler);
@@ -302,7 +339,7 @@ void ResourceManager::createDefaultWhiteTexture(VulkanRenderer& renderer) {
     stagingBuffer.destroy();
 
     createTextureImageView(renderer.device.getDevice(), defaultWhiteTexture);
-    createTextureSampler(renderer.device.getDevice(), defaultWhiteTexture);
+    createTextureSampler(renderer.device.getDevice(), defaultWhiteTexture, TextureFilterMode::Bilinear);
 
     renderer.descriptors.allocateTextureDescriptorSet(defaultWhiteTexture.descriptorSet, defaultWhiteTexture.imageView, defaultWhiteTexture.sampler);
 }
@@ -1481,4 +1518,105 @@ bool ResourceManager::loadBinarySkeletonAndAnimations(const std::string& path, S
 
     in.close();
     return true;
+}
+
+void ResourceManager::updateTextureFilterMode(const std::string& path, VulkanRenderer& renderer, TextureFilterMode filterMode) {
+    auto it = textureCache.find(path);
+    if (it != textureCache.end()) {
+        Texture& texture = *it->second;
+        VkDevice device = renderer.device.getDevice();
+        
+        // Wait for device to be idle to safely destroy the sampler
+        vkDeviceWaitIdle(device);
+        
+        if (texture.sampler != VK_NULL_HANDLE) {
+            vkDestroySampler(device, texture.sampler, nullptr);
+            texture.sampler = VK_NULL_HANDLE;
+        }
+        
+        createTextureSampler(device, texture, filterMode);
+        
+        // Update the descriptor set in-place
+        renderer.descriptors.allocateTextureDescriptorSet(texture.descriptorSet, texture.imageView, texture.sampler);
+    }
+}
+
+Texture* ResourceManager::createTextureFromPixels(const std::string& cacheKey,
+                                                   const uint8_t* pixels, int width, int height,
+                                                   VulkanRenderer& renderer,
+                                                   TextureFilterMode filterMode) {
+    if (!pixels || width <= 0 || height <= 0) return nullptr;
+
+    // Evict any previous entry under this key
+    evictTexture(cacheKey, renderer.device.getDevice());
+
+    auto texture = std::make_unique<Texture>();
+    texture->path       = cacheKey;
+    texture->width      = width;
+    texture->height     = height;
+    texture->filterMode = filterMode;
+
+    try {
+        VkDeviceSize imageSize = static_cast<VkDeviceSize>(width * height * 4);
+
+        VulkanBuffer stagingBuffer;
+        stagingBuffer.create(
+            renderer.device.getDevice(),
+            renderer.device.getPhysicalDevice(),
+            imageSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        );
+        stagingBuffer.uploadData(pixels, imageSize);
+
+        createImage(
+            renderer.device.getDevice(),
+            renderer.device.getPhysicalDevice(),
+            static_cast<uint32_t>(width),
+            static_cast<uint32_t>(height),
+            VK_FORMAT_R8G8B8A8_SRGB,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            texture->image,
+            texture->memory,
+            *this
+        );
+
+        transitionImageLayout(renderer, texture->image, VK_FORMAT_R8G8B8A8_SRGB,
+                              VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        copyBufferToImage(renderer, stagingBuffer.get(), texture->image,
+                          static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+        transitionImageLayout(renderer, texture->image, VK_FORMAT_R8G8B8A8_SRGB,
+                              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        stagingBuffer.destroy();
+
+        createTextureImageView(renderer.device.getDevice(), *texture);
+        createTextureSampler(renderer.device.getDevice(), *texture, filterMode);
+        renderer.descriptors.allocateTextureDescriptorSet(texture->descriptorSet,
+                                                          texture->imageView,
+                                                          texture->sampler);
+    } catch (const std::exception& e) {
+        std::cerr << "[ResourceManager] createTextureFromPixels failed for key '"
+                  << cacheKey << "': " << e.what() << std::endl;
+        return nullptr;
+    }
+
+    Texture* ptr = texture.get();
+    textureCache[cacheKey] = std::move(texture);
+    return ptr;
+}
+
+void ResourceManager::evictTexture(const std::string& cacheKey, VkDevice device) {
+    auto it = textureCache.find(cacheKey);
+    if (it == textureCache.end()) return;
+
+    vkDeviceWaitIdle(device);
+    Texture& tex = *it->second;
+    if (tex.sampler    != VK_NULL_HANDLE) vkDestroySampler(device, tex.sampler, nullptr);
+    if (tex.imageView  != VK_NULL_HANDLE) vkDestroyImageView(device, tex.imageView, nullptr);
+    if (tex.image      != VK_NULL_HANDLE) vkDestroyImage(device, tex.image, nullptr);
+    if (tex.memory     != VK_NULL_HANDLE) vkFreeMemory(device, tex.memory, nullptr);
+    textureCache.erase(it);
 }

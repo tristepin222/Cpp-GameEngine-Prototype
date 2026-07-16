@@ -63,4 +63,20 @@ namespace JSONUtils {
      * @return Vector of individual entity JSON strings.
      */
     std::vector<std::string> extractEntityObjects(const std::string& source);
+    /**
+     * @brief Finds and extracts an array of integers associated with a JSON key.
+     * @param source JSON text source.
+     * @param key Search key.
+     * @param values Destination vector.
+     * @return True if successful, false otherwise.
+     */
+    bool extractIntVector(const std::string& source, const std::string& key, std::vector<int>& values);
+    /**
+     * @brief Finds and extracts an array of quoted strings associated with a JSON key.
+     * @param source JSON text source.
+     * @param key Search key.
+     * @param values Destination vector of strings.
+     * @return True if the key was found and at least one string was parsed.
+     */
+    bool extractStringVector(const std::string& source, const std::string& key, std::vector<std::string>& values);
 }

@@ -7,6 +7,7 @@
 #include "ecs/components/Mesh.hpp"
 #include "ecs/components/Skeleton.hpp"
 #include "ecs/components/Animator.hpp"
+#include "ecs/components/Material.hpp"
 
 class VulkanRenderer;
 
@@ -31,6 +32,8 @@ struct Texture {
     int height = 0;
     /** @brief Filepath from which texture was loaded. */
     std::string path;
+    /** @brief Filter mode used for this texture. */
+    TextureFilterMode filterMode = TextureFilterMode::Bilinear;
 };
 
 /**
@@ -52,9 +55,10 @@ public:
      * @brief Loads a texture from file, uploading it to the GPU and caching the resource.
      * @param path The texture file path.
      * @param renderer Reference to active VulkanRenderer.
+     * @param filterMode Desired filtering mode (will be overridden by .meta if exists).
      * @return Pointer to the loaded Texture object, or nullptr if failed.
      */
-    Texture* loadTexture(const std::string& path, VulkanRenderer& renderer);
+    Texture* loadTexture(const std::string& path, VulkanRenderer& renderer, TextureFilterMode filterMode = TextureFilterMode::Bilinear);
 
     /**
      * @brief Loads a glTF mesh from file, uploading geometry buffers to the GPU and caching it.
@@ -106,6 +110,14 @@ public:
     bool saveBinarySkeletonAndAnimations(const std::string& path, const SkeletonComponent& skeleton, const AnimatorComponent& animator);
 
     /**
+     * @brief Updates an already loaded texture's filter settings live and recreates its Vulkan sampler.
+     * @param path The texture file path.
+     * @param renderer Reference to VulkanRenderer.
+     * @param filterMode The new texture filter mode to apply.
+     */
+    void updateTextureFilterMode(const std::string& path, VulkanRenderer& renderer, TextureFilterMode filterMode);
+
+    /**
      * @brief Initializes the default 1x1 white texture for untextured material fallbacks.
      * @param renderer Reference to active VulkanRenderer.
      */
@@ -118,10 +130,34 @@ public:
     Texture* getDefaultWhiteTexture() { return &defaultWhiteTexture; }
 
     /**
+     * @brief Creates and caches a Vulkan texture directly from raw RGBA pixel data.
+     *        Used by TilesetAsset::buildAtlas() to upload the packed tile atlas.
+     * @param cacheKey  Unique string key used for the texture cache (e.g. "tileset:forest").
+     * @param pixels    Pointer to RGBA8 pixel data (4 bytes per pixel, row-major).
+     * @param width     Width in pixels.
+     * @param height    Height in pixels.
+     * @param renderer  Active VulkanRenderer.
+     * @param filterMode Desired sampler filter mode.
+     * @return Pointer to the uploaded Texture, or nullptr on failure.
+     */
+    Texture* createTextureFromPixels(const std::string& cacheKey,
+                                     const uint8_t* pixels, int width, int height,
+                                     VulkanRenderer& renderer,
+                                     TextureFilterMode filterMode = TextureFilterMode::Nearest);
+
+    /**
+     * @brief Removes a texture from the cache and frees its GPU memory.
+     * @param cacheKey The key used when the texture was created.
+     * @param device   Vulkan logical device.
+     */
+    void evictTexture(const std::string& cacheKey, VkDevice device);
+
+    /**
      * @brief Safely frees all cached textures and meshes from GPU memory.
      * @param device Vulkan logical device context.
      */
     void cleanup(VkDevice device);
+
 
     /**
      * @brief Finds a memory type matching properties in the physical GPU.
@@ -146,7 +182,7 @@ private:
      */
     void createTextureImageView(VkDevice device, Texture& texture);
     /**
-     * @brief Helper to configure linear texture samplers.
+     * @brief Helper to configure texture samplers with the specified filter mode.
      */
-    void createTextureSampler(VkDevice device, Texture& texture);
+    void createTextureSampler(VkDevice device, Texture& texture, TextureFilterMode filterMode);
 };

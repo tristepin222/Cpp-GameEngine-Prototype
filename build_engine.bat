@@ -73,9 +73,11 @@ REM Copy internal headers needed by public API (src/**/*.hpp)
 xcopy /E /Y /I /EXCLUDE:build_engine_exclude.txt engine\src %SDK_DIR%\src
 
 REM Copy third-party headers
-xcopy /E /Y /I third_party\imgui\*.h      %SDK_DIR%\third_party\imgui\
+mkdir %SDK_DIR%\third_party\imgui
+copy /Y third_party\imgui\*.h              %SDK_DIR%\third_party\imgui\
 xcopy /E /Y /I third_party\imgui\backends %SDK_DIR%\third_party\imgui\backends\
-xcopy /E /Y /I third_party\imguizmo\*.h   %SDK_DIR%\third_party\imguizmo\
+mkdir %SDK_DIR%\third_party\imguizmo
+copy /Y third_party\imguizmo\*.h           %SDK_DIR%\third_party\imguizmo\
 
 REM Copy GLFW headers from FetchContent cache
 xcopy /E /Y /I %BUILD_DIR%\_deps\glfw-src\include\GLFW %SDK_DIR%\include\GLFW\
@@ -110,4 +112,5 @@ echo     ..\sdk\bin\editor.exe
 echo.
 
 endlocal
+exit /b 0
 

@@ -3,6 +3,7 @@
 #include "ecs/components/PlayerControllerComponent.hpp"
 #include "ecs/components/AudioSource.hpp"
 #include "ecs/components/AudioListener.hpp"
+#include "ecs/components/Tilemap.hpp"
 #include <cstddef>
 
 namespace Engine {
@@ -84,9 +85,22 @@ namespace Engine {
             audioListRefl.remove = [](Registry& reg, Entity e) { reg.remove<AudioListenerComponent>(e); };
             audioListRefl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<AudioListenerComponent>(e)); };
             instance.registerComponent(audioListRefl);
+            // 5. TilemapComponent Reflection
+            ComponentReflection tmRefl;
+            tmRefl.name = "Tilemap";
+            tmRefl.fields = {
+                { "tileSize", FieldType::Float, offsetof(TilemapComponent, tileSize) },
+                { "tilesetPath", FieldType::String, offsetof(TilemapComponent, tilesetPath) }
+            };
+            tmRefl.add = [](Registry& reg, Entity e) { reg.emplace<TilemapComponent>(e, TilemapComponent{}); };
+            tmRefl.has = [](Registry& reg, Entity e) { return reg.has<TilemapComponent>(e); };
+            tmRefl.remove = [](Registry& reg, Entity e) { reg.remove<TilemapComponent>(e); };
+            tmRefl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<TilemapComponent>(e)); };
+            instance.registerComponent(tmRefl);
         }
         return instance;
     }
+
 
     void ComponentReflectionRegistry::registerComponent(const ComponentReflection& refl) {
         reflections.push_back(refl);

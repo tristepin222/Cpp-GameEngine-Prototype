@@ -42,6 +42,7 @@ if %errorlevel% neq 0 (
 :: Compile sandbox_game user scripts dynamically using the SDK CMake config
 if exist sandbox_game\scripts\CMakeLists.txt (
     echo [INFO] Building sandbox_game user scripts...
+    ver > nul
     if not exist sandbox_game\build mkdir sandbox_game\build
     cmake -S sandbox_game\scripts -B sandbox_game\build -G "Visual Studio 17 2022" -A x64 -T v143 -DCMAKE_BUILD_TYPE=Release
     cmake --build sandbox_game\build --config Release

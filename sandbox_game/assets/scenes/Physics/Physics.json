@@ -73,7 +73,7 @@
       "entityType": "AnimationController",
       "currentState": "Idle",
       "hasLocomotionSetup": true,
-      "parameters": {"velocityX": -4.2039e-45, "velocityY": 5.60519e-45, "speed": 0},
+      "parameters": {"velocityX": -4.2039, "velocityY": 5.60519, "speed": 0},
       "states": [{
         "name": "Idle", "clipName": "mixamo.com", "isBlendTree": false, "isLooping": true, "speed": 1, "blendTree": {
           "is2D": false, "parameterName": "", "parameterYName": "", "nodes": []
@@ -204,6 +204,12 @@
       "scale": [1, 1, 1],
       "entityType": "Hierarchy",
       "parentName": "Player"
+    },
+    {
+      "name": "Empty GameObject 1",
+      "position": [0, 0, 0],
+      "rotation": [0, 0, 0],
+      "scale": [1, 1, 1]
     }
   ]
 }

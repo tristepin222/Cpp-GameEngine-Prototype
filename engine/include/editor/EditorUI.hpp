@@ -113,6 +113,14 @@ private:
      */
     void drawImportSettingsWindow();
     /**
+     * @brief Renders the Tileset Editor window.
+     */
+    void drawTilesetEditorWindow();
+    /**
+     * @brief Renders the Tilemap component inspector panel.
+     */
+    void drawTilemapInspector();
+    /**
      * @brief Renders inline controls for Mesh component fields.
      */
     void drawMeshEditor();
