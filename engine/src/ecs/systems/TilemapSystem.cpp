@@ -110,12 +110,14 @@ namespace Engine {
         mat->descriptorSet = tileset->atlas.descriptorSet;
         mat->filterMode    = TextureFilterMode::Nearest;
 
-        PipelineHandle pipeline = renderer.createPipelineForShaders(
-            renderer.resolveShaderPath("build/shaders/unlit.vert.spv"),
-            renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
-        );
-        mat->pipeline       = pipeline.pipeline;
-        mat->pipelineLayout = pipeline.layout;
+        if (mat->pipeline == VK_NULL_HANDLE) {
+            PipelineHandle pipeline = renderer.createPipelineForShaders(
+                renderer.resolveShaderPath("build/shaders/unlit.vert.spv"),
+                renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
+            );
+            mat->pipeline       = pipeline.pipeline;
+            mat->pipelineLayout = pipeline.layout;
+        }
 
         if (!registry.get<Transform>(entity)) {
             registry.emplace<Transform>(entity, Transform{});

@@ -581,6 +581,7 @@ void EditorUI::drawPanels() {
     drawGizmo();
     drawColliderDebugOverlay();
     drawPhysgunDebugOverlay();
+    drawTilemapGridOverlay();
     handleViewportPicking();
     
     // 7. Float Import Settings panel
@@ -613,8 +614,8 @@ void EditorUI::drawGizmo()
     ImGuizmo::Enable(true);
     ImGuizmo::SetOrthographic(false);
 
-    // draw directly to foreground drawlist
-    ImGuizmo::SetDrawlist(ImGui::GetForegroundDrawList());
+    // draw directly to background drawlist
+    ImGuizmo::SetDrawlist(ImGui::GetBackgroundDrawList());
 
     ImGuizmo::SetRect(
         0.0f,
@@ -2217,6 +2218,92 @@ void EditorUI::handleViewportPicking() {
         return;
     }
 
+    // Brush painting / erasing intercept
+    if (s_brushModeActive && s_brushTileId >= 0) {
+        Entity paintTarget = s_brushTilemapEntity;
+        if (!registry.isValid(paintTarget) || !registry.has<Engine::TilemapComponent>(paintTarget)) {
+            for (auto [entity, tm] : registry.view<Engine::TilemapComponent>()) {
+                paintTarget = entity;
+                s_brushTilemapEntity = entity; // Sync back to the editor state
+                break;
+            }
+        }
+
+        if (registry.isValid(paintTarget)) {
+            const bool leftMouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+            const bool rightMouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+
+            if ((leftMouseDown || rightMouseDown) && !ImGui::GetIO().WantCaptureMouse) {
+                if (renderer.hasActiveCamera()) {
+                    int width = 0, height = 0;
+                    glfwGetWindowSize(window, &width, &height);
+                    if (width > 0 && height > 0) {
+                        double mouseX = 0.0, mouseY = 0.0;
+                        glfwGetCursorPos(window, &mouseX, &mouseY);
+
+                        const float normalizedX = static_cast<float>((2.0 * mouseX) / static_cast<double>(width) - 1.0);
+                        const float normalizedY = static_cast<float>((2.0 * mouseY) / static_cast<double>(height) - 1.0); // Vulkan Correct Y
+
+                        const glm::mat4 inverseViewProjection = glm::inverse(renderer.getActiveCameraViewProj());
+                        const glm::vec4 nearClip = inverseViewProjection * glm::vec4(normalizedX, normalizedY, -1.0f, 1.0f);
+                        const glm::vec4 farClip = inverseViewProjection * glm::vec4(normalizedX, normalizedY, 1.0f, 1.0f);
+
+                        if (glm::abs(nearClip.w) >= 0.0001f && glm::abs(farClip.w) >= 0.0001f) {
+                            const glm::vec3 nearPoint = glm::vec3(nearClip) / nearClip.w;
+                            const glm::vec3 farPoint = glm::vec3(farClip) / farClip.w;
+                            const glm::vec3 rayOrigin = nearPoint;
+                            const glm::vec3 rayDirection = glm::normalize(farPoint - nearPoint);
+
+                            auto* tm = registry.get<Engine::TilemapComponent>(paintTarget);
+                            auto* transform = registry.get<Transform>(paintTarget);
+                            if (tm && transform) {
+                                if (tm->width <= 0 || tm->height <= 0 || tm->tileSize <= 0.0001f) {
+                                    previousLeftMouseDown = leftMouseDown;
+                                    return;
+                                }
+
+                                size_t expectedSize = static_cast<size_t>(tm->width) * tm->height;
+                                if (tm->tiles.size() != expectedSize) {
+                                    tm->tiles.resize(expectedSize, -1);
+                                    tm->isDirty = true;
+                                }
+
+                                glm::mat4 modelMatrix = transform->matrix();
+                                glm::mat4 invModel = glm::inverse(modelMatrix);
+
+                                glm::vec4 localOrigin4 = invModel * glm::vec4(rayOrigin, 1.0f);
+                                glm::vec3 localOrigin = glm::vec3(localOrigin4) / localOrigin4.w;
+                                glm::vec3 localDir = glm::normalize(glm::vec3(invModel * glm::vec4(rayDirection, 0.0f)));
+
+                                if (glm::abs(localDir.z) > 0.0001f) {
+                                    float t = -localOrigin.z / localDir.z;
+                                    if (t >= 0.0f) {
+                                        glm::vec3 hitLocal = localOrigin + t * localDir;
+                                        int cellX = static_cast<int>(std::floor(hitLocal.x / tm->tileSize));
+                                        int cellY = static_cast<int>(std::floor(hitLocal.y / tm->tileSize));
+
+                                        if (cellX >= 0 && cellX < tm->width && cellY >= 0 && cellY < tm->height) {
+                                            int idx = cellY * tm->width + cellX;
+                                            if (idx >= 0 && idx < static_cast<int>(tm->tiles.size())) {
+                                                int newValue = leftMouseDown ? s_brushTileId : -1;
+                                                if (tm->tiles[idx] != newValue) {
+                                                    tm->tiles[idx] = newValue;
+                                                    tm->isDirty = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                previousLeftMouseDown = leftMouseDown;
+                return;
+            }
+        }
+    }
+
     const bool leftMouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
     const bool clickStarted = leftMouseDown && !previousLeftMouseDown;
     previousLeftMouseDown = leftMouseDown;
@@ -2251,7 +2338,7 @@ void EditorUI::handleViewportPicking() {
     glfwGetCursorPos(window, &mouseX, &mouseY);
 
     const float normalizedX = static_cast<float>((2.0 * mouseX) / static_cast<double>(width) - 1.0);
-    const float normalizedY = static_cast<float>(1.0 - (2.0 * mouseY) / static_cast<double>(height));
+    const float normalizedY = static_cast<float>((2.0 * mouseY) / static_cast<double>(height) - 1.0); // Vulkan Correct Y
 
     const glm::mat4 inverseViewProjection = glm::inverse(renderer.getActiveCameraViewProj());
     const glm::vec4 nearClip = inverseViewProjection * glm::vec4(normalizedX, normalizedY, -1.0f, 1.0f);
@@ -3576,7 +3663,7 @@ void EditorUI::drawColliderDebugOverlay() {
         return true;
     };
 
-    ImDrawList* drawList = ImGui::GetForegroundDrawList();
+    ImDrawList* drawList = ImGui::GetBackgroundDrawList();
 
     for (auto [entity, transform, col] : registry.view<Transform, ColliderComponent>()) {
         glm::mat4 worldM = getEntityWorldMatrix(entity);
@@ -3770,7 +3857,7 @@ void EditorUI::drawPhysgunDebugOverlay() {
         return true;
     };
 
-    ImDrawList* drawList = ImGui::GetForegroundDrawList();
+    ImDrawList* drawList = ImGui::GetBackgroundDrawList();
 
     for (auto [ent, script] : registry.view<PhysgunScript>()) {
         if (!script.debugShowRay) continue;
@@ -4279,9 +4366,15 @@ void EditorUI::drawTilesetEditorWindow() {
                     Engine::TilesetAsset::saveTileFile(tile, tilePath);
                 }
                 Engine::invalidateTilesetCache(s_editingTilesetPath);
-                Engine::loadOrGetTileset(s_editingTilesetPath, renderer);
-                for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
-                    if (tm.tilesetPath == s_editingTilesetPath) tm.isDirty = true;
+                if (auto* ts = Engine::loadOrGetTileset(s_editingTilesetPath, renderer)) {
+                    for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
+                        if (tm.tilesetPath == s_editingTilesetPath) {
+                            tm.isDirty = true;
+                            if (auto* mat = registry.get<Material>(tmEnt)) {
+                                mat->descriptorSet = ts->atlas.descriptorSet;
+                            }
+                        }
+                    }
                 }
                 statusMessage = "Saved tileset: " + s_editingTileset.name;
             }
@@ -4528,9 +4621,16 @@ void EditorUI::drawTilesetEditorWindow() {
                     Engine::TilesetAsset::saveTileFile(tile, tilePath);
                     Engine::TilesetAsset::saveToFile(s_editingTileset);
                     Engine::invalidateTilesetCache(s_editingTilesetPath);
-                    Engine::loadOrGetTileset(s_editingTilesetPath, renderer);
-                    for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>())
-                        if (tm.tilesetPath == s_editingTilesetPath) tm.isDirty = true;
+                    if (auto* ts = Engine::loadOrGetTileset(s_editingTilesetPath, renderer)) {
+                        for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
+                            if (tm.tilesetPath == s_editingTilesetPath) {
+                                tm.isDirty = true;
+                                if (auto* mat = registry.get<Material>(tmEnt)) {
+                                    mat->descriptorSet = ts->atlas.descriptorSet;
+                                }
+                            }
+                        }
+                    }
                 }
                 Separator();
                 PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.3f, 0.3f, 1.f));
@@ -4542,9 +4642,16 @@ void EditorUI::drawTilesetEditorWindow() {
                         s_editingTileset.tiles[ti].id = ti;
                     Engine::TilesetAsset::saveToFile(s_editingTileset);
                     Engine::invalidateTilesetCache(s_editingTilesetPath);
-                    Engine::loadOrGetTileset(s_editingTilesetPath, renderer);
-                    for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>())
-                        if (tm.tilesetPath == s_editingTilesetPath) tm.isDirty = true;
+                    if (auto* ts = Engine::loadOrGetTileset(s_editingTilesetPath, renderer)) {
+                        for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
+                            if (tm.tilesetPath == s_editingTilesetPath) {
+                                tm.isDirty = true;
+                                if (auto* mat = registry.get<Material>(tmEnt)) {
+                                    mat->descriptorSet = ts->atlas.descriptorSet;
+                                }
+                            }
+                        }
+                    }
                     statusMessage = "Removed tile.";
                     s_rightClickedTileIdx = -1;
                 }
@@ -4598,9 +4705,16 @@ void EditorUI::drawTilesetEditorWindow() {
 
                     Engine::TilesetAsset::saveToFile(s_editingTileset);
                     Engine::invalidateTilesetCache(s_editingTilesetPath);
-                    Engine::loadOrGetTileset(s_editingTilesetPath, renderer);
-                    for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>())
-                        if (tm.tilesetPath == s_editingTilesetPath) tm.isDirty = true;
+                    if (auto* ts = Engine::loadOrGetTileset(s_editingTilesetPath, renderer)) {
+                        for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
+                            if (tm.tilesetPath == s_editingTilesetPath) {
+                                tm.isDirty = true;
+                                if (auto* mat = registry.get<Material>(tmEnt)) {
+                                    mat->descriptorSet = ts->atlas.descriptorSet;
+                                }
+                            }
+                        }
+                    }
                 }
             }
             EndDragDropTarget();
@@ -4733,5 +4847,130 @@ void EditorUI::drawTilemapInspector() {
         }
     }
     PopStyleColor(3);
+}
+
+void EditorUI::drawTilemapGridOverlay() {
+    if (!s_openTilesetEditorWindow && !s_brushModeActive) return;
+
+    Entity targetEntity = s_brushTilemapEntity;
+    if (!registry.isValid(targetEntity) || !registry.has<Engine::TilemapComponent>(targetEntity)) {
+        for (auto [entity, tm] : registry.view<Engine::TilemapComponent>()) {
+            targetEntity = entity;
+            break;
+        }
+    }
+
+    if (!registry.isValid(targetEntity)) return;
+
+    auto* tm = registry.get<Engine::TilemapComponent>(targetEntity);
+    auto* transform = registry.get<Transform>(targetEntity);
+    if (!tm || !transform) return;
+
+    ImGuiIO& io = ImGui::GetIO();
+    glm::mat4 viewProj = renderer.getActiveCameraViewProj();
+
+    auto projectToScreen = [&](const glm::vec3& worldPos, ImVec2& screenPos) -> bool {
+        glm::vec4 clipPos = viewProj * glm::vec4(worldPos, 1.0f);
+        if (clipPos.w < 0.0001f) return false;
+        glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
+        screenPos.x = (ndc.x + 1.0f) * 0.5f * io.DisplaySize.x;
+        screenPos.y = (ndc.y + 1.0f) * 0.5f * io.DisplaySize.y;
+        return true;
+    };
+
+    ImDrawList* drawList = ImGui::GetBackgroundDrawList();
+    glm::mat4 modelMatrix = transform->matrix();
+
+    float wSpace = tm->width * tm->tileSize;
+    float hSpace = tm->height * tm->tileSize;
+
+    ImU32 lineCol = ImColor(0, 191, 255, 120);
+    ImU32 borderCol = ImColor(255, 215, 0, 220);
+
+    for (int c = 0; c <= tm->width; ++c) {
+        float x = c * tm->tileSize;
+        glm::vec3 localStart(x, 0.0f, 0.0f);
+        glm::vec3 localEnd(x, hSpace, 0.0f);
+        glm::vec3 worldStart(modelMatrix * glm::vec4(localStart, 1.0f));
+        glm::vec3 worldEnd(modelMatrix * glm::vec4(localEnd, 1.0f));
+
+        ImVec2 screenStart, screenEnd;
+        if (projectToScreen(worldStart, screenStart) && projectToScreen(worldEnd, screenEnd)) {
+            bool isBorder = (c == 0 || c == tm->width);
+            drawList->AddLine(screenStart, screenEnd, isBorder ? borderCol : lineCol, isBorder ? 2.5f : 1.0f);
+        }
+    }
+
+    for (int r = 0; r <= tm->height; ++r) {
+        float y = r * tm->tileSize;
+        glm::vec3 localStart(0.0f, y, 0.0f);
+        glm::vec3 localEnd(wSpace, y, 0.0f);
+        glm::vec3 worldStart(modelMatrix * glm::vec4(localStart, 1.0f));
+        glm::vec3 worldEnd(modelMatrix * glm::vec4(localEnd, 1.0f));
+
+        ImVec2 screenStart, screenEnd;
+        if (projectToScreen(worldStart, screenStart) && projectToScreen(worldEnd, screenEnd)) {
+            bool isBorder = (r == 0 || r == tm->height);
+            drawList->AddLine(screenStart, screenEnd, isBorder ? borderCol : lineCol, isBorder ? 2.5f : 1.0f);
+        }
+    }
+
+    if (s_brushModeActive && s_brushTileId >= 0 && !io.WantCaptureMouse) {
+        int w = 0, h = 0;
+        glfwGetWindowSize(window, &w, &h);
+        if (w > 0 && h > 0) {
+            double mouseX = 0.0, mouseY = 0.0;
+            glfwGetCursorPos(window, &mouseX, &mouseY);
+
+            const float normalizedX = static_cast<float>((2.0 * mouseX) / static_cast<double>(w) - 1.0);
+            const float normalizedY = static_cast<float>((2.0 * mouseY) / static_cast<double>(h) - 1.0); // Vulkan Correct Y
+
+            const glm::mat4 inverseViewProjection = glm::inverse(renderer.getActiveCameraViewProj());
+            const glm::vec4 nearClip = inverseViewProjection * glm::vec4(normalizedX, normalizedY, -1.0f, 1.0f);
+            const glm::vec4 farClip = inverseViewProjection * glm::vec4(normalizedX, normalizedY, 1.0f, 1.0f);
+
+            if (glm::abs(nearClip.w) >= 0.0001f && glm::abs(farClip.w) >= 0.0001f) {
+                const glm::vec3 nearPoint = glm::vec3(nearClip) / nearClip.w;
+                const glm::vec3 farPoint = glm::vec3(farClip) / farClip.w;
+                const glm::vec3 rayOrigin = nearPoint;
+                const glm::vec3 rayDirection = glm::normalize(farPoint - nearPoint);
+
+                glm::mat4 invModel = glm::inverse(modelMatrix);
+                glm::vec4 localOrigin4 = invModel * glm::vec4(rayOrigin, 1.0f);
+                glm::vec3 localOrigin = glm::vec3(localOrigin4) / localOrigin4.w;
+                glm::vec3 localDir = glm::normalize(glm::vec3(invModel * glm::vec4(rayDirection, 0.0f)));
+
+                if (glm::abs(localDir.z) > 0.0001f) {
+                    float t = -localOrigin.z / localDir.z;
+                    if (t >= 0.0f) {
+                        glm::vec3 hitLocal = localOrigin + t * localDir;
+                        int cellX = static_cast<int>(std::floor(hitLocal.x / tm->tileSize));
+                        int cellY = static_cast<int>(std::floor(hitLocal.y / tm->tileSize));
+
+                        if (cellX >= 0 && cellX < tm->width && cellY >= 0 && cellY < tm->height) {
+                            float ts = tm->tileSize;
+                            glm::vec3 corners[4] = {
+                                glm::vec3(cellX * ts, cellY * ts, 0.001f),
+                                glm::vec3((cellX + 1) * ts, cellY * ts, 0.001f),
+                                glm::vec3((cellX + 1) * ts, (cellY + 1) * ts, 0.001f),
+                                glm::vec3(cellX * ts, (cellY + 1) * ts, 0.001f)
+                            };
+
+                            ImVec2 sc[4];
+                            bool allValid = true;
+                            for (int i = 0; i < 4; ++i) {
+                                allValid &= projectToScreen(glm::vec3(modelMatrix * glm::vec4(corners[i], 1.0f)), sc[i]);
+                            }
+
+                            if (allValid) {
+                                drawList->AddQuad(sc[0], sc[1], sc[2], sc[3], ImColor(255, 255, 255, 255), 2.0f);
+                                drawList->AddQuadFilled(sc[0], sc[1], sc[2], sc[3], ImColor(255, 255, 255, 40));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 

@@ -208,8 +208,17 @@
     {
       "name": "Empty GameObject 1",
       "position": [0, 0, 0],
-      "rotation": [0, 0, 0],
-      "scale": [1, 1, 1]
+      "rotation": [0, -11, 5.5],
+      "scale": [1, 1, 1],
+      "entityType": "Tilemap",
+      "width": 10,
+      "height": 10,
+      "tileSize": 1,
+      "tilesetPath": "assets/tilesets/NewTileset.tileset",
+      "tiles": [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, -1, -1, -1, -1, -1, -1, -1, 1, -1, -1, -1, 0, -1, -1, -1, -1, -1, -1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+      "hasTilemap": true,
+      "tileSize": 1,
+      "tilesetPath": "assets/tilesets/NewTileset.tileset"
     }
   ]
 }

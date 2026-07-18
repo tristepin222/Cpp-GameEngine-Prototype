@@ -3,6 +3,9 @@
   "tileWidth": 16,
   "tileHeight": 16,
   "tiles": [
-    "assets/tilesets/Ch36_1001_Diffuse.tile"
+    "assets/tilesets/NewTileset/Ch36_1001_Diffuse.tile",
+    "assets/tilesets/NewTileset/Ch36_1001_Glossiness.tile",
+    "assets/tilesets/NewTileset/Ch36_1001_Specular.tile",
+    "assets/tilesets/NewTileset/Ch36_1001_Glossiness.tile"
   ]
 }

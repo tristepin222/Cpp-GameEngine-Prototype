@@ -141,8 +141,21 @@ TilesetAsset TilesetAsset::loadFromFile(const std::string& path) {
     for (const auto& tp : tilePaths) {
         std::string resolvedPath = tp;
         if (!std::filesystem::exists(resolvedPath)) {
-            // Try relative to tileset dir
-            resolvedPath = (tsDir / tp).generic_string();
+            // Fallback 1: Try relative to tileset parent folder
+            std::string tempPath = (tsDir / tp).generic_string();
+            if (std::filesystem::exists(tempPath)) {
+                resolvedPath = tempPath;
+            } else {
+                // Fallback 2: Try inside the subdirectory named after the tileset (e.g. tsDir/ts.name/filename.tile)
+                std::string fname = std::filesystem::path(tp).filename().string();
+                std::string subDirPath = (tsDir / ts.name / fname).generic_string();
+                if (std::filesystem::exists(subDirPath)) {
+                    resolvedPath = subDirPath;
+                } else {
+                    // Default back to relative path if not found
+                    resolvedPath = tempPath;
+                }
+            }
         }
         TileAsset tile = loadTileFile(resolvedPath);
         tile.id = idx++;
@@ -173,8 +186,8 @@ void TilesetAsset::saveToFile(const TilesetAsset& ts) {
 
     std::filesystem::path tsDir = std::filesystem::path(ts.filePath).parent_path();
     for (size_t i = 0; i < ts.tiles.size(); ++i) {
-        // Store paths relative to the .tileset file's directory
-        std::string tilePath = ts.tiles[i].name + ".tile";
+        // Store paths relative to the .tileset file's directory (inside the subdirectory named after the tileset)
+        std::string tilePath = (std::filesystem::path(ts.name) / (ts.tiles[i].name + ".tile")).generic_string();
         std::filesystem::path absTilePath = tsDir / tilePath;
         std::string storedPath = absTilePath.generic_string();
         f << "    \"" << storedPath << "\"";

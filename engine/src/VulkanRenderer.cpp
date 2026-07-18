@@ -56,6 +56,12 @@ std::string VulkanRenderer::resolveShaderPath(const std::string& originalPath) c
         if (std::filesystem::exists(parentShader)) {
             return parentShader.string();
         }
+
+        // 4b. Try parent-parent "shaders" folder (build/engine/Release/../../shaders)
+        std::filesystem::path ppShader = std::filesystem::path(exeDir) / ".." / ".." / "shaders" / filename;
+        if (std::filesystem::exists(ppShader)) {
+            return ppShader.string();
+        }
     }
 
     // 5. Try relative "shaders/" and "build/shaders/" in CWD
@@ -64,6 +70,10 @@ std::string VulkanRenderer::resolveShaderPath(const std::string& originalPath) c
 
     std::filesystem::path cwdShader2 = std::filesystem::path("build/shaders") / filename;
     if (std::filesystem::exists(cwdShader2)) return cwdShader2.string();
+
+    // 5b. Try parent sibling "build/shaders" (if CWD is sandbox_game)
+    std::filesystem::path siblingShader = std::filesystem::path("..") / "build" / "shaders" / filename;
+    if (std::filesystem::exists(siblingShader)) return siblingShader.string();
 
     // Fallback to original
     return originalPath;

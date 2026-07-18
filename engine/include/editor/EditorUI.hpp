@@ -121,6 +121,10 @@ private:
      */
     void drawTilemapInspector();
     /**
+     * @brief Renders a 3D grid overlay on the tilemap for editor visual feedback.
+     */
+    void drawTilemapGridOverlay();
+    /**
      * @brief Renders inline controls for Mesh component fields.
      */
     void drawMeshEditor();

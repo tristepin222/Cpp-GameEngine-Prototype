@@ -120,6 +120,10 @@ static bool registerBuiltinComponents() {
     reg.registerComponent(
         "Primitive",
         [](Registry& registry, Entity entity, std::ostream& out, int indent) {
+            if (registry.has<Engine::TilemapComponent>(entity)) {
+                return; // Skip primitive details for Tilemap entities
+            }
+
             if (auto* mesh = registry.get<Mesh>(entity)) {
                 if (registry.has<Grid>(entity)) {
                     return; // Skip grid mesh details
@@ -161,7 +165,7 @@ static bool registerBuiltinComponents() {
             std::string gltfPath = JSONUtils::extractStringValue(json, "gltfPath");
             std::string texturePath = JSONUtils::extractStringValue(json, "texturePath");
             
-            if (type == "Camera" || type == "Grid") {
+            if (type == "Camera" || type == "Grid" || type == "Tilemap") {
                 return; // Managed by separate component deserializers
             }
 
