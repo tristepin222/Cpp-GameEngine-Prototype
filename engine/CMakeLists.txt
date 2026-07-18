@@ -125,6 +125,9 @@ compile_builtin_shader("${CMAKE_CURRENT_SOURCE_DIR}/builtin_shaders/grid.frag")
 compile_builtin_shader("${CMAKE_CURRENT_SOURCE_DIR}/builtin_shaders/unlit.vert")
 compile_builtin_shader("${CMAKE_CURRENT_SOURCE_DIR}/builtin_shaders/unlit.frag")
 compile_builtin_shader("${CMAKE_CURRENT_SOURCE_DIR}/builtin_shaders/skinned.vert")
+compile_builtin_shader("${CMAKE_CURRENT_SOURCE_DIR}/builtin_shaders/lit.vert")
+compile_builtin_shader("${CMAKE_CURRENT_SOURCE_DIR}/builtin_shaders/lit.frag")
+compile_builtin_shader("${CMAKE_CURRENT_SOURCE_DIR}/builtin_shaders/skinned_lit.vert")
 
 # Target for builtin shaders compilation
 add_custom_target(compile_builtin_shaders ALL DEPENDS ${BUILTIN_SHADERS_SPV})

@@ -118,16 +118,23 @@ public:
     void updateTextureFilterMode(const std::string& path, VulkanRenderer& renderer, TextureFilterMode filterMode);
 
     /**
-     * @brief Initializes the default 1x1 white texture for untextured material fallbacks.
+     * @brief Initializes default 1x1 textures (white, normal, metallic) for fallbacks.
      * @param renderer Reference to active VulkanRenderer.
      */
-    void createDefaultWhiteTexture(VulkanRenderer& renderer);
+    void createDefaultTextures(VulkanRenderer& renderer);
 
     /**
      * @brief Retrieves the default fallback white texture pointer.
      * @return Pointer to default Texture.
      */
     Texture* getDefaultWhiteTexture() { return &defaultWhiteTexture; }
+    Texture* getDefaultNormalTexture() { return &defaultNormalTexture; }
+    Texture* getDefaultMetallicTexture() { return &defaultMetallicTexture; }
+
+    /**
+     * @brief Dynamically updates or allocates a descriptor set for a Material, binding its diffuse, normal, and metallic maps.
+     */
+    void updateMaterialDescriptorSet(Material& mat, VulkanRenderer& renderer);
 
     /**
      * @brief Creates and caches a Vulkan texture directly from raw RGBA pixel data.
@@ -171,6 +178,8 @@ private:
     std::unordered_map<std::string, Mesh> meshCache;
     /** @brief Fallback default 1x1 texture. */
     Texture defaultWhiteTexture;
+    Texture defaultNormalTexture;
+    Texture defaultMetallicTexture;
 
 private:
     /**

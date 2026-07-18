@@ -152,6 +152,15 @@ static bool registerBuiltinComponents() {
                 if (!material->texturePath.empty()) {
                     out << ",\n" << JSONUtils::indent(indent) << "\"texturePath\": " << JSONUtils::quote(material->texturePath);
                 }
+                if (!material->normalMapPath.empty()) {
+                    out << ",\n" << JSONUtils::indent(indent) << "\"normalMapPath\": " << JSONUtils::quote(material->normalMapPath);
+                }
+                if (!material->metallicMapPath.empty()) {
+                    out << ",\n" << JSONUtils::indent(indent) << "\"metallicMapPath\": " << JSONUtils::quote(material->metallicMapPath);
+                }
+                out << ",\n" << JSONUtils::indent(indent) << "\"shaderName\": " << JSONUtils::quote(material->shaderName);
+                out << ",\n" << JSONUtils::indent(indent) << "\"roughness\": " << material->roughness;
+                out << ",\n" << JSONUtils::indent(indent) << "\"metallic\": " << material->metallic;
                 if (material->filterMode != TextureFilterMode::Bilinear) {
                     std::string filterStr = "Bilinear";
                     if (material->filterMode == TextureFilterMode::Nearest) filterStr = "Nearest";
@@ -247,30 +256,50 @@ static bool registerBuiltinComponents() {
                 registry.emplace<Mesh>(entity, std::move(meshData));
                 registry.emplace<Material>(entity, Material{ color });
                 
-                if (!texturePath.empty()) {
-                    if (auto* material = registry.get<Material>(entity)) {
-                        material->texturePath = texturePath;
-                        std::string textureFilter = JSONUtils::extractStringValue(json, "textureFilter");
-                        TextureFilterMode filterMode = TextureFilterMode::Bilinear;
-                        if (textureFilter == "Nearest" || textureFilter == "Point" || textureFilter == "nearest") {
-                            filterMode = TextureFilterMode::Nearest;
-                        } else if (textureFilter == "Trilinear" || textureFilter == "trilinear") {
-                            filterMode = TextureFilterMode::Trilinear;
-                        }
-                        material->filterMode = filterMode;
-                        if (auto* tex = renderer.resourceManager->loadTexture(texturePath, renderer, filterMode)) {
-                            material->descriptorSet = tex->descriptorSet;
-                        }
-                    }
-                }
-                
-                bool hasSkin = registry.has<SkeletonComponent>(entity);
-                PipelineHandle pipeline = renderer.createPipelineForShaders(
-                    hasSkin ? renderer.resolveShaderPath("build/shaders/skinned.vert.spv") : renderer.resolveShaderPath("build/shaders/unlit.vert.spv"),
-                    renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
-                );
+                if (auto* material = registry.get<Material>(entity)) {
+                    material->texturePath = texturePath;
+                    material->normalMapPath = JSONUtils::extractStringValue(json, "normalMapPath");
+                    material->metallicMapPath = JSONUtils::extractStringValue(json, "metallicMapPath");
+                    
+                    std::string shaderName = JSONUtils::extractStringValue(json, "shaderName");
+                    if (shaderName.empty()) shaderName = "Unlit";
+                    material->shaderName = shaderName;
+                    
+                    float roughnessVal = 0.5f;
+                    JSONUtils::extractFloatValue(json, "roughness", roughnessVal);
+                    material->roughness = roughnessVal;
+                    
+                    float metallicVal = 0.0f;
+                    JSONUtils::extractFloatValue(json, "metallic", metallicVal);
+                    material->metallic = metallicVal;
 
-                if (Material* material = registry.get<Material>(entity)) {
+                    std::string textureFilter = JSONUtils::extractStringValue(json, "textureFilter");
+                    TextureFilterMode filterMode = TextureFilterMode::Bilinear;
+                    if (textureFilter == "Nearest" || textureFilter == "Point" || textureFilter == "nearest") {
+                        filterMode = TextureFilterMode::Nearest;
+                    } else if (textureFilter == "Trilinear" || textureFilter == "trilinear") {
+                        filterMode = TextureFilterMode::Trilinear;
+                    }
+                    material->filterMode = filterMode;
+
+                    // Update material descriptors with diffuse, normal, and metallic textures
+                    renderer.resourceManager->updateMaterialDescriptorSet(*material, renderer);
+                    
+                    bool hasSkin = registry.has<SkeletonComponent>(entity);
+                    std::string vertShader = "unlit.vert.spv";
+                    std::string fragShader = "unlit.frag.spv";
+                    if (shaderName == "Lit") {
+                        vertShader = hasSkin ? "skinned_lit.vert.spv" : "lit.vert.spv";
+                        fragShader = "lit.frag.spv";
+                    } else {
+                        vertShader = hasSkin ? "skinned.vert.spv" : "unlit.vert.spv";
+                        fragShader = "unlit.frag.spv";
+                    }
+
+                    PipelineHandle pipeline = renderer.createPipelineForShaders(
+                        renderer.resolveShaderPath("build/shaders/" + vertShader),
+                        renderer.resolveShaderPath("build/shaders/" + fragShader)
+                    );
                     material->pipeline = pipeline.pipeline;
                     material->pipelineLayout = pipeline.layout;
                 }

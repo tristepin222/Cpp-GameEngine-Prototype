@@ -911,6 +911,49 @@ void EditorUI::drawHierarchyPanel() {
             renameBuffer = nameComp->value;
         }
 
+        // Drag source for hierarchy moving/rearranging
+        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+            std::uint32_t entId = entity.getId();
+            ImGui::SetDragDropPayload("DND_PAYLOAD_HIERARCHY_ENTITY", &entId, sizeof(entId));
+            ImGui::Text("Move: %s", nameComp->value.c_str());
+            ImGui::EndDragDropSource();
+        }
+
+        // Drop target for parenting
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PAYLOAD_HIERARCHY_ENTITY")) {
+                std::uint32_t draggedId = *static_cast<const std::uint32_t*>(payload->Data);
+                Entity draggedEntity(draggedId);
+                
+                // Avoid parenting an entity to itself, or to any of its descendants (cycles)
+                bool isSelfOrDescendant = (draggedEntity == entity);
+                Entity check = entity;
+                while (check.getId() != Entity::INVALID_ENTITY && registry.isValid(check)) {
+                    if (auto* checkHierarchy = registry.get<HierarchyComponent>(check)) {
+                        if (checkHierarchy->parent == draggedEntity) {
+                            isSelfOrDescendant = true;
+                            break;
+                        }
+                        check = checkHierarchy->parent;
+                    } else {
+                        break;
+                    }
+                }
+                
+                if (!isSelfOrDescendant) {
+                    if (auto* hc = registry.get<HierarchyComponent>(draggedEntity)) {
+                        hc->parent = entity;
+                    } else {
+                        registry.emplace<HierarchyComponent>(draggedEntity, HierarchyComponent{ entity });
+                    }
+                    statusMessage = "Parented entity under " + nameComp->value;
+                } else {
+                    statusMessage = "Cannot parent an entity to itself or its descendants!";
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+
         if (selected) ImGui::PopStyleColor(2);
 
         // Right-click context menu on any entity node
@@ -1016,6 +1059,19 @@ void EditorUI::drawHierarchyPanel() {
         if (!hasParent) {
             drawEntityNode(entity, 0);
         }
+    }
+
+    // Drop target on empty space of child window to unparent to root
+    if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PAYLOAD_HIERARCHY_ENTITY")) {
+            std::uint32_t draggedId = *static_cast<const std::uint32_t*>(payload->Data);
+            Entity draggedEntity(draggedId);
+            if (auto* hc = registry.get<HierarchyComponent>(draggedEntity)) {
+                hc->parent = Entity();
+                statusMessage = "Unparented entity to root.";
+            }
+        }
+        ImGui::EndDragDropTarget();
     }
 
     ImGui::EndChild(); // End of HierarchyTreeChild scrolling area
@@ -1404,24 +1460,55 @@ void EditorUI::drawMaterialEditor() {
         return;
     }
 
+    // Helper lambda to update descriptors and shaders dynamically
+    auto updatePipelineAndDescriptors = [&]() {
+        renderer.resourceManager->updateMaterialDescriptorSet(*material, renderer);
+
+        bool hasSkin = entityHasSkin(registry, selectedEntity);
+        std::string vertShader = "unlit.vert.spv";
+        std::string fragShader = "unlit.frag.spv";
+        if (material->shaderName == "Lit") {
+            vertShader = hasSkin ? "skinned_lit.vert.spv" : "lit.vert.spv";
+            fragShader = "lit.frag.spv";
+        } else {
+            vertShader = hasSkin ? "skinned.vert.spv" : "unlit.vert.spv";
+            fragShader = "unlit.frag.spv";
+        }
+
+        PipelineHandle pipeline = renderer.createPipelineForShaders(
+            renderer.resolveShaderPath("build/shaders/" + vertShader),
+            renderer.resolveShaderPath("build/shaders/" + fragShader)
+        );
+        material->pipeline = pipeline.pipeline;
+        material->pipelineLayout = pipeline.layout;
+    };
+
+    // 1) Shader Selection
+    const char* shaderOptions[] = { "Unlit", "Lit" };
+    int currentShaderIdx = (material->shaderName == "Lit") ? 1 : 0;
+    if (Combo("Shader", &currentShaderIdx, shaderOptions, IM_ARRAYSIZE(shaderOptions))) {
+        material->shaderName = shaderOptions[currentShaderIdx];
+        updatePipelineAndDescriptors();
+        statusMessage = "Shader changed to: " + material->shaderName;
+    }
+
+    Spacing();
+    Separator();
+    Spacing();
+
+    // 2) Color Picker
     float color[4] = { material->color.r, material->color.g, material->color.b, material->color.a };
-    if (ColorEdit4("Color", color)) {
+    if (ColorEdit4("Base Color", color)) {
         material->color = { color[0], color[1], color[2], color[3] };
     }
 
+    // 3) Diffuse Texture
     char textureBuf[256]{};
     snprintf(textureBuf, sizeof(textureBuf), "%s", material->texturePath.c_str());
-    if (InputText("Texture Path", textureBuf, sizeof(textureBuf))) {
+    if (InputText("Diffuse Map", textureBuf, sizeof(textureBuf))) {
         material->texturePath = textureBuf;
-        if (!material->texturePath.empty()) {
-            if (auto* tex = renderer.resourceManager->loadTexture(material->texturePath, renderer)) {
-                material->descriptorSet = tex->descriptorSet;
-            }
-        } else {
-            material->descriptorSet = VK_NULL_HANDLE;
-        }
+        updatePipelineAndDescriptors();
     }
-
     if (BeginDragDropTarget()) {
         if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
             const char* droppedPath = (const char*)payload->Data;
@@ -1429,15 +1516,69 @@ void EditorUI::drawMaterialEditor() {
             auto ext = std::filesystem::path(pathStr).extension().string();
             if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga") {
                 material->texturePath = pathStr;
-                if (auto* tex = renderer.resourceManager->loadTexture(pathStr, renderer)) {
-                    material->descriptorSet = tex->descriptorSet;
-                    statusMessage = "Assigned texture via drag-and-drop: " + pathStr;
-                }
+                updatePipelineAndDescriptors();
+                statusMessage = "Assigned diffuse texture: " + pathStr;
             } else {
                 statusMessage = "Error: Dropped asset is not a valid texture file.";
             }
         }
         EndDragDropTarget();
+    }
+
+    // 4) Normal Map
+    char normalBuf[256]{};
+    snprintf(normalBuf, sizeof(normalBuf), "%s", material->normalMapPath.c_str());
+    if (InputText("Normal Map", normalBuf, sizeof(normalBuf))) {
+        material->normalMapPath = normalBuf;
+        updatePipelineAndDescriptors();
+    }
+    if (BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+            const char* droppedPath = (const char*)payload->Data;
+            std::string pathStr(droppedPath);
+            auto ext = std::filesystem::path(pathStr).extension().string();
+            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga") {
+                material->normalMapPath = pathStr;
+                updatePipelineAndDescriptors();
+                statusMessage = "Assigned normal map: " + pathStr;
+            } else {
+                statusMessage = "Error: Dropped asset is not a valid texture file.";
+            }
+        }
+        EndDragDropTarget();
+    }
+
+    // 5) Metallic Map
+    char metallicBuf[256]{};
+    snprintf(metallicBuf, sizeof(metallicBuf), "%s", material->metallicMapPath.c_str());
+    if (InputText("Metallic Map", metallicBuf, sizeof(metallicBuf))) {
+        material->metallicMapPath = metallicBuf;
+        updatePipelineAndDescriptors();
+    }
+    if (BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+            const char* droppedPath = (const char*)payload->Data;
+            std::string pathStr(droppedPath);
+            auto ext = std::filesystem::path(pathStr).extension().string();
+            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga") {
+                material->metallicMapPath = pathStr;
+                updatePipelineAndDescriptors();
+                statusMessage = "Assigned metallic map: " + pathStr;
+            } else {
+                statusMessage = "Error: Dropped asset is not a valid texture file.";
+            }
+        }
+        EndDragDropTarget();
+    }
+
+    // 6) Lit Shader parameters
+    if (material->shaderName == "Lit") {
+        Spacing();
+        Separator();
+        Spacing();
+        TextDisabled("Lit Shading Parameters");
+        SliderFloat("Roughness", &material->roughness, 0.0f, 1.0f);
+        SliderFloat("Metallic", &material->metallic, 0.0f, 1.0f);
     }
 }
 
@@ -1654,8 +1795,11 @@ void EditorUI::drawAssetBrowser() {
     static char s_createFolderBuffer[256] = "";
     static std::filesystem::path s_createSceneParentPath;
     static char s_createSceneBuffer[256] = "";
+    static std::filesystem::path s_createFileParentPath;
+    static char s_createFileBuffer[256] = "";
     static bool s_openCreateFolderPopup;
     static bool s_openCreateScenePopup;
+    static bool s_openCreateFilePopup = false;
     static bool s_openRenamePopup;
 
     // ---- Toolbar ----
@@ -1669,6 +1813,12 @@ void EditorUI::drawAssetBrowser() {
         s_createSceneParentPath = "assets";
         s_createSceneBuffer[0] = '\0';
         OpenPopup("CreateScenePopup");
+    }
+    SameLine();
+    if (Button("+ New File")) {
+        s_createFileParentPath = "assets";
+        s_createFileBuffer[0] = '\0';
+        OpenPopup("CreateFilePopup");
     }
     SameLine();
     if (Button("Refresh")) {
@@ -1735,6 +1885,11 @@ void EditorUI::drawAssetBrowser() {
                         s_createSceneParentPath = entry.path();
                         s_createSceneBuffer[0] = '\0';
                         s_openCreateScenePopup = true;
+                    }
+                    if (MenuItem("Create New File")) {
+                        s_createFileParentPath = entry.path();
+                        s_createFileBuffer[0] = '\0';
+                        s_openCreateFilePopup = true;
                     }
                     if (MenuItem("Rename")) {
                         s_renameTargetPath = entry.path();
@@ -2097,6 +2252,10 @@ void EditorUI::drawAssetBrowser() {
         OpenPopup("CreateScenePopup");
         s_openCreateScenePopup = false;
     }
+    if (s_openCreateFilePopup) {
+        OpenPopup("CreateFilePopup");
+        s_openCreateFilePopup = false;
+    }
     if (s_openRenamePopup) {
         OpenPopup("RenameAssetPopup");
         s_openRenamePopup = false;
@@ -2165,6 +2324,38 @@ void EditorUI::drawAssetBrowser() {
                     CloseCurrentPopup();
                 } catch (const std::exception& e) {
                     statusMessage = std::string("Failed to create scene: ") + e.what();
+                }
+            }
+        }
+        SameLine();
+        if (Button("Cancel", ImVec2(120, 0))) {
+            CloseCurrentPopup();
+        }
+        EndPopup();
+    }
+
+    if (BeginPopup("CreateFilePopup")) {
+        Text("Create File under: %s", s_createFileParentPath.generic_string().c_str());
+        InputText("File Name (e.g. Script.cpp)", s_createFileBuffer, sizeof(s_createFileBuffer));
+        if (Button("Create", ImVec2(120, 0))) {
+            if (strlen(s_createFileBuffer) > 0) {
+                std::string fileName = s_createFileBuffer;
+                auto newFilePath = s_createFileParentPath / fileName;
+                try {
+                    std::ofstream out(newFilePath);
+                    std::string ext = std::filesystem::path(fileName).extension().string();
+                    if (ext == ".cpp") {
+                        out << "#include <iostream>\n\n// TODO: Implement script components\n";
+                    } else if (ext == ".hpp" || ext == ".h") {
+                        out << "#pragma once\n\n// TODO: Declare class structure\n";
+                    } else {
+                        out << "// Created via Asset Browser\n";
+                    }
+                    out.close();
+                    statusMessage = "File created successfully: " + fileName;
+                    CloseCurrentPopup();
+                } catch (const std::exception& e) {
+                    statusMessage = std::string("Failed to create file: ") + e.what();
                 }
             }
         }

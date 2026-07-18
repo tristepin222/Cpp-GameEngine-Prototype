@@ -289,7 +289,12 @@ Texture* ResourceManager::loadTexture(const std::string& path, VulkanRenderer& r
         createTextureSampler(renderer.device.getDevice(), *texture, filterMode);
         
         // Allocate and write descriptor set
-        renderer.descriptors.allocateTextureDescriptorSet(texture->descriptorSet, texture->imageView, texture->sampler);
+        renderer.descriptors.allocateTextureDescriptorSet(
+            texture->descriptorSet,
+            texture->imageView, texture->sampler,
+            defaultNormalTexture.imageView, defaultNormalTexture.sampler,
+            defaultMetallicTexture.imageView, defaultMetallicTexture.sampler
+        );
     } catch (const std::exception& e) {
         std::cerr << "[ResourceManager] Error loading texture " << path << ": " << e.what() << std::endl;
         return &defaultWhiteTexture; // Fallback
@@ -300,12 +305,13 @@ Texture* ResourceManager::loadTexture(const std::string& path, VulkanRenderer& r
     return ptr;
 }
 
-void ResourceManager::createDefaultWhiteTexture(VulkanRenderer& renderer) {
+void ResourceManager::createDefaultTextures(VulkanRenderer& renderer) {
+    // 1. Create Default White Texture
     defaultWhiteTexture.path = "";
     defaultWhiteTexture.width = 1;
     defaultWhiteTexture.height = 1;
 
-    uint32_t whitePixel = 0xFFFFFFFF; // RGBA white
+    uint8_t whitePixel[4] = { 255, 255, 255, 255 }; // RGBA white
     VkDeviceSize imageSize = sizeof(whitePixel);
 
     VulkanBuffer stagingBuffer;
@@ -316,7 +322,6 @@ void ResourceManager::createDefaultWhiteTexture(VulkanRenderer& renderer) {
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     );
-
     stagingBuffer.uploadData(&whitePixel, imageSize);
 
     createImage(
@@ -335,13 +340,130 @@ void ResourceManager::createDefaultWhiteTexture(VulkanRenderer& renderer) {
     transitionImageLayout(renderer, defaultWhiteTexture.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     copyBufferToImage(renderer, stagingBuffer.get(), defaultWhiteTexture.image, 1, 1);
     transitionImageLayout(renderer, defaultWhiteTexture.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
     stagingBuffer.destroy();
 
     createTextureImageView(renderer.device.getDevice(), defaultWhiteTexture);
     createTextureSampler(renderer.device.getDevice(), defaultWhiteTexture, TextureFilterMode::Bilinear);
 
-    renderer.descriptors.allocateTextureDescriptorSet(defaultWhiteTexture.descriptorSet, defaultWhiteTexture.imageView, defaultWhiteTexture.sampler);
+    // 2. Create Default Normal Texture (flat tangent-space normal vector: 128, 128, 255, 255)
+    defaultNormalTexture.path = "";
+    defaultNormalTexture.width = 1;
+    defaultNormalTexture.height = 1;
+
+    uint8_t normalPixel[4] = { 128, 128, 255, 255 };
+    stagingBuffer.create(
+        renderer.device.getDevice(),
+        renderer.device.getPhysicalDevice(),
+        imageSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+    stagingBuffer.uploadData(&normalPixel, imageSize);
+
+    createImage(
+        renderer.device.getDevice(),
+        renderer.device.getPhysicalDevice(),
+        1, 1,
+        VK_FORMAT_R8G8B8A8_UNORM, // Normals use UNORM so we don't apply gamma correction!
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        defaultNormalTexture.image,
+        defaultNormalTexture.memory,
+        *this
+    );
+
+    transitionImageLayout(renderer, defaultNormalTexture.image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    copyBufferToImage(renderer, stagingBuffer.get(), defaultNormalTexture.image, 1, 1);
+    transitionImageLayout(renderer, defaultNormalTexture.image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    stagingBuffer.destroy();
+
+    createTextureImageView(renderer.device.getDevice(), defaultNormalTexture);
+    createTextureSampler(renderer.device.getDevice(), defaultNormalTexture, TextureFilterMode::Bilinear);
+
+    // 3. Create Default Metallic/Roughness Texture (roughness = 0.5, metallic = 0.0 -> 0, 128, 0, 255)
+    defaultMetallicTexture.path = "";
+    defaultMetallicTexture.width = 1;
+    defaultMetallicTexture.height = 1;
+
+    uint8_t metallicPixel[4] = { 0, 128, 0, 255 };
+    stagingBuffer.create(
+        renderer.device.getDevice(),
+        renderer.device.getPhysicalDevice(),
+        imageSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+    stagingBuffer.uploadData(&metallicPixel, imageSize);
+
+    createImage(
+        renderer.device.getDevice(),
+        renderer.device.getPhysicalDevice(),
+        1, 1,
+        VK_FORMAT_R8G8B8A8_UNORM, // metallic/roughness parameters should be raw UNORM values
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        defaultMetallicTexture.image,
+        defaultMetallicTexture.memory,
+        *this
+    );
+
+    transitionImageLayout(renderer, defaultMetallicTexture.image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    copyBufferToImage(renderer, stagingBuffer.get(), defaultMetallicTexture.image, 1, 1);
+    transitionImageLayout(renderer, defaultMetallicTexture.image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    stagingBuffer.destroy();
+
+    createTextureImageView(renderer.device.getDevice(), defaultMetallicTexture);
+    createTextureSampler(renderer.device.getDevice(), defaultMetallicTexture, TextureFilterMode::Bilinear);
+
+    // 4. Allocate fallback descriptor sets
+    renderer.descriptors.allocateTextureDescriptorSet(
+        defaultWhiteTexture.descriptorSet,
+        defaultWhiteTexture.imageView, defaultWhiteTexture.sampler,
+        defaultNormalTexture.imageView, defaultNormalTexture.sampler,
+        defaultMetallicTexture.imageView, defaultMetallicTexture.sampler
+    );
+
+    renderer.descriptors.allocateTextureDescriptorSet(
+        defaultNormalTexture.descriptorSet,
+        defaultWhiteTexture.imageView, defaultWhiteTexture.sampler,
+        defaultNormalTexture.imageView, defaultNormalTexture.sampler,
+        defaultMetallicTexture.imageView, defaultMetallicTexture.sampler
+    );
+
+    renderer.descriptors.allocateTextureDescriptorSet(
+        defaultMetallicTexture.descriptorSet,
+        defaultWhiteTexture.imageView, defaultWhiteTexture.sampler,
+        defaultNormalTexture.imageView, defaultNormalTexture.sampler,
+        defaultMetallicTexture.imageView, defaultMetallicTexture.sampler
+    );
+}
+
+void ResourceManager::updateMaterialDescriptorSet(Material& mat, VulkanRenderer& renderer) {
+    Texture* diff = mat.texturePath.empty() ? &defaultWhiteTexture : loadTexture(mat.texturePath, renderer);
+    Texture* norm = mat.normalMapPath.empty() ? &defaultNormalTexture : loadTexture(mat.normalMapPath, renderer);
+    Texture* met  = mat.metallicMapPath.empty() ? &defaultMetallicTexture : loadTexture(mat.metallicMapPath, renderer);
+
+    if (!diff) diff = &defaultWhiteTexture;
+    if (!norm) norm = &defaultNormalTexture;
+    if (!met) met = &defaultMetallicTexture;
+
+    if (mat.descriptorSet == VK_NULL_HANDLE || mat.descriptorSet == defaultWhiteTexture.descriptorSet) {
+        renderer.descriptors.allocateTextureDescriptorSet(
+            mat.descriptorSet,
+            diff->imageView, diff->sampler,
+            norm->imageView, norm->sampler,
+            met->imageView, met->sampler
+        );
+    } else {
+        renderer.descriptors.updateTextureDescriptorSet(
+            mat.descriptorSet,
+            diff->imageView, diff->sampler,
+            norm->imageView, norm->sampler,
+            met->imageView, met->sampler
+        );
+    }
 }
 
 static void traverseNodes(cgltf_data* data, cgltf_node* node, const glm::mat4& parentTransform, Mesh& mesh, int targetPrimIndex, int& currentPrimIndex) {
@@ -1537,7 +1659,12 @@ void ResourceManager::updateTextureFilterMode(const std::string& path, VulkanRen
         createTextureSampler(device, texture, filterMode);
         
         // Update the descriptor set in-place
-        renderer.descriptors.allocateTextureDescriptorSet(texture.descriptorSet, texture.imageView, texture.sampler);
+        renderer.descriptors.updateTextureDescriptorSet(
+            texture.descriptorSet,
+            texture.imageView, texture.sampler,
+            defaultNormalTexture.imageView, defaultNormalTexture.sampler,
+            defaultMetallicTexture.imageView, defaultMetallicTexture.sampler
+        );
     }
 }
 
@@ -1594,9 +1721,12 @@ Texture* ResourceManager::createTextureFromPixels(const std::string& cacheKey,
 
         createTextureImageView(renderer.device.getDevice(), *texture);
         createTextureSampler(renderer.device.getDevice(), *texture, filterMode);
-        renderer.descriptors.allocateTextureDescriptorSet(texture->descriptorSet,
-                                                          texture->imageView,
-                                                          texture->sampler);
+        renderer.descriptors.allocateTextureDescriptorSet(
+            texture->descriptorSet,
+            texture->imageView, texture->sampler,
+            defaultNormalTexture.imageView, defaultNormalTexture.sampler,
+            defaultMetallicTexture.imageView, defaultMetallicTexture.sampler
+        );
     } catch (const std::exception& e) {
         std::cerr << "[ResourceManager] createTextureFromPixels failed for key '"
                   << cacheKey << "': " << e.what() << std::endl;

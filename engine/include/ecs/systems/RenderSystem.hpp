@@ -317,7 +317,14 @@ private:
                 PushConstants pc{};
                 pc.model = inst.model;
                 pc.color = inst.color;
-                // If your PushConstants struct on CPU side has more fields, initialize them here.
+                pc.camPos = getCameraPosition();
+                if (renderer.hasActiveCamera()) {
+                    pc.viewProj = renderer.getActiveCameraViewProj();
+                } else {
+                    pc.viewProj = glm::mat4(1.0f);
+                }
+                pc.scale = mat ? mat->roughness : 0.5f;
+                pc.fade = mat ? mat->metallic : 0.0f;
 
                 vkCmdPushConstants(cmd,
                     mat->pipelineLayout,

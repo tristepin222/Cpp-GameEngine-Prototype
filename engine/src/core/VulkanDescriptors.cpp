@@ -110,26 +110,44 @@ void VulkanDescriptors::allocateCameraDescriptorSets(VkBuffer uniformBuffer, VkD
  * @brief Configures binding requirements for texture samplers and instantiates layout description.
  */
 void VulkanDescriptors::createTextureDescriptorSetLayout() {
-    VkDescriptorSetLayoutBinding samplerLayoutBinding{};
-    samplerLayoutBinding.binding = 0;
-    samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    samplerLayoutBinding.descriptorCount = 1;
-    samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    samplerLayoutBinding.pImmutableSamplers = nullptr;
+    VkDescriptorSetLayoutBinding bindings[3]{};
+    
+    // Binding 0: Diffuse sampler
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[0].pImmutableSamplers = nullptr;
+
+    // Binding 1: Normal map sampler
+    bindings[1].binding = 1;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[1].pImmutableSamplers = nullptr;
+
+    // Binding 2: Metallic map sampler
+    bindings[2].binding = 2;
+    bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[2].descriptorCount = 1;
+    bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[2].pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = 1;
-    layoutInfo.pBindings = &samplerLayoutBinding;
+    layoutInfo.bindingCount = 3;
+    layoutInfo.pBindings = bindings;
 
     if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &textureDescriptorSetLayout) != VK_SUCCESS)
         throw std::runtime_error("Failed to create texture descriptor set layout");
 }
 
-/**
- * @brief Allocates texture descriptor set and updates binding with sampler and image view.
- */
-void VulkanDescriptors::allocateTextureDescriptorSet(VkDescriptorSet& descriptorSet, VkImageView imageView, VkSampler sampler) {
+void VulkanDescriptors::allocateTextureDescriptorSet(
+    VkDescriptorSet& descriptorSet,
+    VkImageView diffuseView, VkSampler diffuseSampler,
+    VkImageView normalView, VkSampler normalSampler,
+    VkImageView metallicView, VkSampler metallicSampler
+) {
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = descriptorPool;
@@ -139,21 +157,40 @@ void VulkanDescriptors::allocateTextureDescriptorSet(VkDescriptorSet& descriptor
     if (vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet) != VK_SUCCESS)
         throw std::runtime_error("Failed to allocate texture descriptor set");
 
-    VkDescriptorImageInfo imageInfo{};
-    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageInfo.imageView = imageView;
-    imageInfo.sampler = sampler;
+    updateTextureDescriptorSet(descriptorSet, diffuseView, diffuseSampler, normalView, normalSampler, metallicView, metallicSampler);
+}
 
-    VkWriteDescriptorSet descriptorWrite{};
-    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrite.dstSet = descriptorSet;
-    descriptorWrite.dstBinding = 0;
-    descriptorWrite.dstArrayElement = 0;
-    descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    descriptorWrite.descriptorCount = 1;
-    descriptorWrite.pImageInfo = &imageInfo;
+void VulkanDescriptors::updateTextureDescriptorSet(
+    VkDescriptorSet descriptorSet,
+    VkImageView diffuseView, VkSampler diffuseSampler,
+    VkImageView normalView, VkSampler normalSampler,
+    VkImageView metallicView, VkSampler metallicSampler
+) {
+    VkDescriptorImageInfo imageInfos[3]{};
+    imageInfos[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imageInfos[0].imageView = diffuseView;
+    imageInfos[0].sampler = diffuseSampler;
 
-    vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+    imageInfos[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imageInfos[1].imageView = normalView;
+    imageInfos[1].sampler = normalSampler;
+
+    imageInfos[2].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imageInfos[2].imageView = metallicView;
+    imageInfos[2].sampler = metallicSampler;
+
+    VkWriteDescriptorSet descriptorWrites[3]{};
+    for (int i = 0; i < 3; ++i) {
+        descriptorWrites[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[i].dstSet = descriptorSet;
+        descriptorWrites[i].dstBinding = i;
+        descriptorWrites[i].dstArrayElement = 0;
+        descriptorWrites[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[i].descriptorCount = 1;
+        descriptorWrites[i].pImageInfo = &imageInfos[i];
+    }
+
+    vkUpdateDescriptorSets(device, 3, descriptorWrites, 0, nullptr);
 }
 
 /**

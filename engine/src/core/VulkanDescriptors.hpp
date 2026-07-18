@@ -54,12 +54,31 @@ public:
     void allocateCameraDescriptorSets(VkBuffer uniformBuffer, VkDeviceSize bufferSize);
 
     /**
-     * @brief Allocates and binds descriptor set for a texture sampler.
+     * @brief Allocates and binds descriptor set for texture samplers (diffuse, normal, metallic).
      * @param descriptorSet Reference to target descriptor set to allocate.
-     * @param imageView The image view to bind.
-     * @param sampler The sampler to bind.
+     * @param diffuseView Diffuse image view.
+     * @param diffuseSampler Diffuse sampler.
+     * @param normalView Normal map image view.
+     * @param normalSampler Normal map sampler.
+     * @param metallicView Metallic map image view.
+     * @param metallicSampler Metallic map sampler.
      */
-    void allocateTextureDescriptorSet(VkDescriptorSet& descriptorSet, VkImageView imageView, VkSampler sampler);
+    void allocateTextureDescriptorSet(
+        VkDescriptorSet& descriptorSet,
+        VkImageView diffuseView, VkSampler diffuseSampler,
+        VkImageView normalView, VkSampler normalSampler,
+        VkImageView metallicView, VkSampler metallicSampler
+    );
+
+    /**
+     * @brief Updates an existing texture descriptor set with new sampler bindings.
+     */
+    void updateTextureDescriptorSet(
+        VkDescriptorSet descriptorSet,
+        VkImageView diffuseView, VkSampler diffuseSampler,
+        VkImageView normalView, VkSampler normalSampler,
+        VkImageView metallicView, VkSampler metallicSampler
+    );
 
     /**
      * @brief Allocates and binds descriptor set for a skeleton joint matrices buffer.

@@ -167,8 +167,8 @@ void VulkanRenderer::createBuffersAndPipelines() {
     descriptors.allocateCameraDescriptorSets(cameraBuffer.get(), cameraBuffer.getSize());
     cameraDescriptorSet = descriptors.getCameraDescriptorSet();
 
-    // Create the default white texture fallback
-    resourceManager->createDefaultWhiteTexture(*this);
+    // Create the default fallback textures (white, normal, metallic)
+    resourceManager->createDefaultTextures(*this);
 
     createInstanceBuffer(10000);
     createPipeline();

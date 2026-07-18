@@ -31,6 +31,13 @@ struct Material {
     /** @brief Texture filter mode. */
     TextureFilterMode filterMode = TextureFilterMode::Bilinear;
 
+    // Shader and mapping properties
+    std::string shaderName = "Unlit";
+    std::string normalMapPath;
+    std::string metallicMapPath;
+    float roughness = 0.5f;
+    float metallic = 0.0f;
+
     /**
      * @brief Construct a new Material object.
      * @param c Color of the material.
