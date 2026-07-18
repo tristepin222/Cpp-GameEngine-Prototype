@@ -4,6 +4,7 @@
 #include "ecs/components/AudioSource.hpp"
 #include "ecs/components/AudioListener.hpp"
 #include "ecs/components/Tilemap.hpp"
+#include "ecs/components/UIComponents.hpp"
 #include <cstddef>
 
 namespace Engine {
@@ -97,6 +98,92 @@ namespace Engine {
             tmRefl.remove = [](Registry& reg, Entity e) { reg.remove<TilemapComponent>(e); };
             tmRefl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<TilemapComponent>(e)); };
             instance.registerComponent(tmRefl);
+ 
+            // 6. CanvasComponent Reflection
+            ComponentReflection canvasRefl;
+            canvasRefl.name = "Canvas";
+            canvasRefl.fields = {
+                { "isScreenSpace", FieldType::Bool, offsetof(CanvasComponent, isScreenSpace) }
+            };
+            canvasRefl.add = [](Registry& reg, Entity e) { reg.emplace<CanvasComponent>(e, CanvasComponent{}); };
+            canvasRefl.has = [](Registry& reg, Entity e) { return reg.has<CanvasComponent>(e); };
+            canvasRefl.remove = [](Registry& reg, Entity e) { reg.remove<CanvasComponent>(e); };
+            canvasRefl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<CanvasComponent>(e)); };
+            instance.registerComponent(canvasRefl);
+
+            // 7. RectTransform Reflection
+            ComponentReflection rectRefl;
+            rectRefl.name = "RectTransform";
+            rectRefl.fields = {
+                { "anchorMin", FieldType::Vec2, offsetof(RectTransform, anchorMin) },
+                { "anchorMax", FieldType::Vec2, offsetof(RectTransform, anchorMax) },
+                { "anchoredPosition", FieldType::Vec2, offsetof(RectTransform, anchoredPosition) },
+                { "sizeDelta", FieldType::Vec2, offsetof(RectTransform, sizeDelta) },
+                { "pivot", FieldType::Vec2, offsetof(RectTransform, pivot) }
+            };
+            rectRefl.add = [](Registry& reg, Entity e) { reg.emplace<RectTransform>(e, RectTransform{}); };
+            rectRefl.has = [](Registry& reg, Entity e) { return reg.has<RectTransform>(e); };
+            rectRefl.remove = [](Registry& reg, Entity e) { reg.remove<RectTransform>(e); };
+            rectRefl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<RectTransform>(e)); };
+            instance.registerComponent(rectRefl);
+
+            // 8. UIPanelComponent Reflection
+            ComponentReflection panelRefl;
+            panelRefl.name = "UIPanel";
+            panelRefl.fields = {
+                { "color", FieldType::Vec4, offsetof(UIPanelComponent, color) },
+                { "borderRadius", FieldType::Float, offsetof(UIPanelComponent, borderRadius) }
+            };
+            panelRefl.add = [](Registry& reg, Entity e) { reg.emplace<UIPanelComponent>(e, UIPanelComponent{}); };
+            panelRefl.has = [](Registry& reg, Entity e) { return reg.has<UIPanelComponent>(e); };
+            panelRefl.remove = [](Registry& reg, Entity e) { reg.remove<UIPanelComponent>(e); };
+            panelRefl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<UIPanelComponent>(e)); };
+            instance.registerComponent(panelRefl);
+
+            // 9. UIImageComponent Reflection
+            ComponentReflection imgRefl;
+            imgRefl.name = "UIImage";
+            imgRefl.fields = {
+                { "texturePath", FieldType::String, offsetof(UIImageComponent, texturePath) },
+                { "tintColor", FieldType::Vec4, offsetof(UIImageComponent, tintColor) }
+            };
+            imgRefl.add = [](Registry& reg, Entity e) { reg.emplace<UIImageComponent>(e, UIImageComponent{}); };
+            imgRefl.has = [](Registry& reg, Entity e) { return reg.has<UIImageComponent>(e); };
+            imgRefl.remove = [](Registry& reg, Entity e) { reg.remove<UIImageComponent>(e); };
+            imgRefl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<UIImageComponent>(e)); };
+            instance.registerComponent(imgRefl);
+
+            // 10. UITextComponent Reflection
+            ComponentReflection txtRefl;
+            txtRefl.name = "UIText";
+            txtRefl.fields = {
+                { "text", FieldType::String, offsetof(UITextComponent, text) },
+                { "color", FieldType::Vec4, offsetof(UITextComponent, color) },
+                { "fontSize", FieldType::Float, offsetof(UITextComponent, fontSize) },
+                { "alignCenter", FieldType::Bool, offsetof(UITextComponent, alignCenter) }
+            };
+            txtRefl.add = [](Registry& reg, Entity e) { reg.emplace<UITextComponent>(e, UITextComponent{}); };
+            txtRefl.has = [](Registry& reg, Entity e) { return reg.has<UITextComponent>(e); };
+            txtRefl.remove = [](Registry& reg, Entity e) { reg.remove<UITextComponent>(e); };
+            txtRefl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<UITextComponent>(e)); };
+            instance.registerComponent(txtRefl);
+
+            // 11. UIButtonComponent Reflection
+            ComponentReflection btnRefl;
+            btnRefl.name = "UIButton";
+            btnRefl.fields = {
+                { "label", FieldType::String, offsetof(UIButtonComponent, label) },
+                { "normalColor", FieldType::Vec4, offsetof(UIButtonComponent, normalColor) },
+                { "hoverColor", FieldType::Vec4, offsetof(UIButtonComponent, hoverColor) },
+                { "pressedColor", FieldType::Vec4, offsetof(UIButtonComponent, pressedColor) },
+                { "textColor", FieldType::Vec4, offsetof(UIButtonComponent, textColor) },
+                { "clickEventName", FieldType::String, offsetof(UIButtonComponent, clickEventName) }
+            };
+            btnRefl.add = [](Registry& reg, Entity e) { reg.emplace<UIButtonComponent>(e, UIButtonComponent{}); };
+            btnRefl.has = [](Registry& reg, Entity e) { return reg.has<UIButtonComponent>(e); };
+            btnRefl.remove = [](Registry& reg, Entity e) { reg.remove<UIButtonComponent>(e); };
+            btnRefl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<UIButtonComponent>(e)); };
+            instance.registerComponent(btnRefl);
         }
         return instance;
     }

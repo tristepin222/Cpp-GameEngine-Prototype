@@ -19,7 +19,9 @@ namespace Engine {
         Vec3,
         RigidBodyType,
         Entity,
-        String
+        String,
+        Vec2,
+        Vec4
     };
 
     /**

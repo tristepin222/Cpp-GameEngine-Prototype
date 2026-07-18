@@ -14,6 +14,7 @@ struct GLFWwindow;
 class RenderSystem;
 
 namespace Engine {
+    class UISystem;
 
     /**
      * @struct ApplicationConfig
@@ -121,6 +122,8 @@ namespace Engine {
 
         /** @brief Reference to default rendering system. */
         std::shared_ptr<RenderSystem> renderSystem;
+        /** @brief Reference to UI system. */
+        std::shared_ptr<UISystem> uiSystem;
 
         /** @brief Pointer to the dynamic plugin manager. */
         std::unique_ptr<PluginManager> pluginManager;

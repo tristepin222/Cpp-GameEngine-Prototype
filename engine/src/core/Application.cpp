@@ -13,6 +13,7 @@
 #include "ecs/systems/PlayerControllerSystem.hpp"
 #include "ecs/systems/AudioSystem.hpp"
 #include "ecs/systems/TilemapSystem.hpp"
+#include "ecs/systems/UISystem.hpp"
 #include "scenes/Scene.hpp"
 #include "scenes/JSONUtils.hpp"
 #include "scenes/DefaultScene.hpp"
@@ -100,6 +101,7 @@ namespace Engine {
         auto playerControllerSystem = std::make_shared<PlayerControllerSystem>(registry, *renderer, editorMode);
         auto audioSystem = std::make_shared<AudioSystem>(registry, editorMode);
         auto tilemapSystem = std::make_shared<TilemapSystem>(registry, *renderer);
+        uiSystem = std::make_shared<UISystem>(registry, *renderer);
 
         systemManager.addSystem(inputSystem);
         systemManager.addSystem(cameraSystem);
@@ -109,6 +111,7 @@ namespace Engine {
         systemManager.addSystem(playerControllerSystem);
         systemManager.addSystem(audioSystem);
         systemManager.addSystem(renderSystem);
+        systemManager.addSystem(uiSystem);
 
         // Spawn persistent Editor Camera
         Entity editorCam = registry.create();
@@ -118,6 +121,10 @@ namespace Engine {
         registry.emplace<InputComponent>(editorCam, InputComponent{});
         registry.emplace<EditorCamera>(editorCam, EditorCamera{});
 
+        // Initialize editor UI overlay (always initialized to support ImGui Game UI rendering)
+        editorUI = std::make_unique<EditorUI>(registry, *renderer, sceneManager, editorMode, config.startScenePath);
+        editorUI->initialize(window);
+
         // Setup initial editor fly mode based on whether editor UI is present
         if (!config.enableEditor) {
             editorMode.isPlaying = true;
@@ -126,10 +133,6 @@ namespace Engine {
         } else {
             editorMode.flyMode = false;
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-
-            // Initialize editor UI overlay
-            editorUI = std::make_unique<EditorUI>(registry, *renderer, sceneManager, editorMode, config.startScenePath);
-            editorUI->initialize(window);
         }
 
         // Load engine-level plugins, then project-level scripts
@@ -222,16 +225,38 @@ namespace Engine {
             sceneManager.update(dt);
             systemManager.updateAll(dt);
 
-            if (config.enableEditor && editorUI) {
-                // Draw ImGui editor and render current frames
-                editorUI->beginFrame();
-                editorUI->drawPanels();
+            if (uiSystem) {
+                uiSystem->setEditorActive(config.enableEditor);
+                uiSystem->setPlaying(editorMode.isPlaying);
+            }
 
-                renderSystem->drawFrame([this](VkCommandBuffer cmd) {
-                    editorUI->render(cmd);
-                });
+            if (editorUI) {
+                if (config.enableEditor) {
+                    // Draw ImGui editor panels
+                    editorUI->beginFrame();
+                    editorUI->drawPanels();
+                    
+                    // Draw Game UI canvas
+                    if (uiSystem) {
+                        uiSystem->draw();
+                    }
+
+                    renderSystem->drawFrame([this](VkCommandBuffer cmd) {
+                        editorUI->render(cmd);
+                    });
+                } else {
+                    // Standalone mode: draw viewport and Game UI fullscreen
+                    editorUI->beginFrame();
+                    if (uiSystem) {
+                        uiSystem->draw();
+                    }
+
+                    renderSystem->drawFrame([this](VkCommandBuffer cmd) {
+                        editorUI->render(cmd);
+                    });
+                }
             } else {
-                // Standalone mode: draw viewport fullscreen (no UI)
+                // Fallback: draw viewport fullscreen with no UI overlay if editorUI is somehow null
                 renderSystem->drawFrame();
             }
         }

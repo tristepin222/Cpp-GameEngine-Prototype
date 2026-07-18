@@ -68,6 +68,7 @@ set(ENGINE_SOURCES
     src/miniaudio.cpp
     src/ecs/systems/AudioSystem.cpp
     src/ecs/systems/TilemapSystem.cpp
+    src/ecs/systems/UISystem.cpp
 )
 
 add_library(engine SHARED ${ENGINE_SOURCES})

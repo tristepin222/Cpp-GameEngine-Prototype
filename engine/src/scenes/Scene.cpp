@@ -4,6 +4,7 @@
 #include "ecs/EntityCloner.hpp"
 #include "ecs/components/Name.hpp"
 #include "ecs/components/Hierarchy.hpp"
+#include "ecs/components/UIComponents.hpp"
 #include "renderer/VulkanRenderer.hpp"
 #include <algorithm>
 #include <filesystem>
@@ -143,6 +144,45 @@ Entity Scene::createEntityOfType(const std::string& entityType) {
         entity = registry.create();
         registry.emplace<Name>(entity, Name{ makeUniqueEntityName("Empty GameObject") });
         registry.emplace<Transform>(entity, Transform{ glm::vec3(0.0f) });
+    } else if (entityType == "Canvas") {
+        entity = registry.create();
+        registry.emplace<Name>(entity, Name{ makeUniqueEntityName("Canvas") });
+        registry.emplace<Transform>(entity, Transform{ glm::vec3(0.0f) });
+        registry.emplace<Engine::CanvasComponent>(entity, Engine::CanvasComponent{});
+    } else if (entityType == "UI Panel" || entityType == "UI Image" || entityType == "UI Text" || entityType == "UI Button") {
+        // Find existing Canvas or create one
+        Entity canvasEnt;
+        bool found = false;
+        for (auto [e, c] : registry.view<Engine::CanvasComponent>()) {
+            canvasEnt = e;
+            found = true;
+            break;
+        }
+        if (!found) {
+            canvasEnt = registry.create();
+            registry.emplace<Name>(canvasEnt, Name{ makeUniqueEntityName("Canvas") });
+            registry.emplace<Transform>(canvasEnt, Transform{ glm::vec3(0.0f) });
+            registry.emplace<Engine::CanvasComponent>(canvasEnt, Engine::CanvasComponent{});
+            trackEntity(canvasEnt);
+        }
+
+        entity = registry.create();
+        registry.emplace<HierarchyComponent>(entity, HierarchyComponent{ canvasEnt });
+        registry.emplace<Engine::RectTransform>(entity, Engine::RectTransform{});
+
+        if (entityType == "UI Panel") {
+            registry.emplace<Name>(entity, Name{ makeUniqueEntityName("Panel") });
+            registry.emplace<Engine::UIPanelComponent>(entity, Engine::UIPanelComponent{});
+        } else if (entityType == "UI Image") {
+            registry.emplace<Name>(entity, Name{ makeUniqueEntityName("Image") });
+            registry.emplace<Engine::UIImageComponent>(entity, Engine::UIImageComponent{});
+        } else if (entityType == "UI Text") {
+            registry.emplace<Name>(entity, Name{ makeUniqueEntityName("Text") });
+            registry.emplace<Engine::UITextComponent>(entity, Engine::UITextComponent{});
+        } else if (entityType == "UI Button") {
+            registry.emplace<Name>(entity, Name{ makeUniqueEntityName("Button") });
+            registry.emplace<Engine::UIButtonComponent>(entity, Engine::UIButtonComponent{});
+        }
     } else {
         return Entity();
     }

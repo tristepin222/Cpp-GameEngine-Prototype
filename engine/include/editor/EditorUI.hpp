@@ -121,6 +121,10 @@ private:
      */
     void drawTilemapInspector();
     /**
+     * @brief Renders custom editor inspectors for all game UI components.
+     */
+    void drawUIComponentsEditor();
+    /**
      * @brief Renders a 3D grid overlay on the tilemap for editor visual feedback.
      */
     void drawTilemapGridOverlay();

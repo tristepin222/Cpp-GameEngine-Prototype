@@ -59,7 +59,10 @@
       "colExtZ": 0.5,
       "colOffsetX": 0,
       "colOffsetY": 0,
-      "colOffsetZ": 0
+      "colOffsetZ": 0,
+      "hasUIPanel": true,
+      "color": [1, 1, 1, 1],
+      "borderRadius": 4
     },
     {
       "name": "Player",
@@ -124,6 +127,12 @@
       "playerSpeed": 5,
       "playerJumpForce": 6,
       "playerInteractRange": 3,
+      "hasUIPanel": true,
+      "color": [1, 1, 1, 1],
+      "borderRadius": 4,
+      "hasUIImage": true,
+      "texturePath": "assets/Textures/Ch36_1001_Diffuse.png",
+      "tintColor": [1, 1, 1, 1],
       "hasPhysgunScript": true,
       "Kp": 450,
       "Kd": 25,
@@ -150,7 +159,10 @@
       "colExtZ": 0.5,
       "colOffsetX": 0,
       "colOffsetY": 0,
-      "colOffsetZ": 0
+      "colOffsetZ": 0,
+      "hasUIPanel": true,
+      "color": [0, 0, 0, 1],
+      "borderRadius": 4
     },
     {
       "name": "Cube 3",
@@ -195,7 +207,10 @@
       "playOnAwake": 1.0,
       "spatialized": 1.0,
       "minDistance": 1,
-      "maxDistance": 50
+      "maxDistance": 50,
+      "hasUIPanel": true,
+      "color": [0, 1, 0, 1],
+      "borderRadius": 4
     },
     {
       "name": "Empty GameObject",
@@ -219,6 +234,44 @@
       "hasTilemap": true,
       "tileSize": 1,
       "tilesetPath": "assets/tilesets/NewTileset.tileset"
+    },
+    {
+      "name": "Canvas",
+      "position": [0, 0, 0],
+      "rotation": [0, 0, 0],
+      "scale": [1, 1, 1],
+      "hasCanvas": true,
+      "isScreenSpace": 1.0
+    },
+    {
+      "name": "Panel",
+      "entityType": "Hierarchy",
+      "parentName": "Canvas",
+      "hasRectTransform": true,
+      "anchorMin": [0.5, 0.5],
+      "anchorMax": [0.5, 0.5],
+      "anchoredPosition": [0, 0],
+      "sizeDelta": [350, 120],
+      "pivot": [0.5, 0.5],
+      "hasUIPanel": true,
+      "color": [0.302239, 0.302239, 0.302239, 1],
+      "borderRadius": 0
+    },
+    {
+      "name": "Text",
+      "entityType": "Hierarchy",
+      "parentName": "Canvas",
+      "hasRectTransform": true,
+      "anchorMin": [0.5, 0.5],
+      "anchorMax": [0.5, 0.5],
+      "anchoredPosition": [0, 0],
+      "sizeDelta": [100, 100],
+      "pivot": [0.5, 0.5],
+      "hasUIText": true,
+      "text": "New Text",
+      "color": [1, 1, 1, 1],
+      "fontSize": 14,
+      "alignCenter": 0.0
     }
   ]
 }

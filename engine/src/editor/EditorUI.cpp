@@ -40,6 +40,8 @@
 #include "ecs/components/PhysgunScript.hpp"
 #include "ecs/components/Tilemap.hpp"
 #include "scenes/TilesetAsset.hpp"
+#include "ecs/components/UIComponents.hpp"
+
 #include <functional>
 #include "renderer/VulkanRenderer.hpp"
 #include "scenes/Scene.hpp"
@@ -846,6 +848,15 @@ void EditorUI::drawHierarchyPanel() {
         if (ImGui::MenuItem("Camera"))        { if (currentScene) { auto e = currentScene->createEntityOfType("Camera"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
         if (ImGui::MenuItem("Grid"))          { if (currentScene) { auto e = currentScene->createEntityOfType("Grid");   selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
         if (ImGui::MenuItem("Empty GameObject")) { if (currentScene) { auto e = currentScene->createEntityOfType("Empty");  selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+        ImGui::Separator();
+        if (ImGui::BeginMenu("UI")) {
+            if (ImGui::MenuItem("Canvas")) { if (currentScene) { auto e = currentScene->createEntityOfType("Canvas"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            if (ImGui::MenuItem("Panel"))  { if (currentScene) { auto e = currentScene->createEntityOfType("UI Panel"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            if (ImGui::MenuItem("Image"))  { if (currentScene) { auto e = currentScene->createEntityOfType("UI Image"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            if (ImGui::MenuItem("Text"))   { if (currentScene) { auto e = currentScene->createEntityOfType("UI Text"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            if (ImGui::MenuItem("Button")) { if (currentScene) { auto e = currentScene->createEntityOfType("UI Button"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            ImGui::EndMenu();
+        }
         ImGui::EndPopup();
     }
 
@@ -1117,6 +1128,7 @@ void EditorUI::drawInspectorPanel() {
     drawReflectedComponentsEditor();
     drawColliderEditor();
     drawTilemapInspector();
+    drawUIComponentsEditor();
     drawGridEditor();
     drawCameraEditor();
 
@@ -1174,6 +1186,30 @@ void EditorUI::drawInspectorPanel() {
             tm.tiles.assign(100, -1);
             registry.emplace<Engine::TilemapComponent>(selectedEntity, std::move(tm));
             statusMessage = "Added Tilemap component.";
+        }
+        if (!registry.has<Engine::CanvasComponent>(selectedEntity) && ImGui::MenuItem("UI Canvas")) {
+            registry.emplace<Engine::CanvasComponent>(selectedEntity, Engine::CanvasComponent{});
+            statusMessage = "Added Canvas component.";
+        }
+        if (!registry.has<Engine::RectTransform>(selectedEntity) && ImGui::MenuItem("UI RectTransform")) {
+            registry.emplace<Engine::RectTransform>(selectedEntity, Engine::RectTransform{});
+            statusMessage = "Added RectTransform component.";
+        }
+        if (!registry.has<Engine::UIPanelComponent>(selectedEntity) && ImGui::MenuItem("UI Panel")) {
+            registry.emplace<Engine::UIPanelComponent>(selectedEntity, Engine::UIPanelComponent{});
+            statusMessage = "Added Panel component.";
+        }
+        if (!registry.has<Engine::UIImageComponent>(selectedEntity) && ImGui::MenuItem("UI Image")) {
+            registry.emplace<Engine::UIImageComponent>(selectedEntity, Engine::UIImageComponent{});
+            statusMessage = "Added Image component.";
+        }
+        if (!registry.has<Engine::UITextComponent>(selectedEntity) && ImGui::MenuItem("UI Text")) {
+            registry.emplace<Engine::UITextComponent>(selectedEntity, Engine::UITextComponent{});
+            statusMessage = "Added Text component.";
+        }
+        if (!registry.has<Engine::UIButtonComponent>(selectedEntity) && ImGui::MenuItem("UI Button")) {
+            registry.emplace<Engine::UIButtonComponent>(selectedEntity, Engine::UIButtonComponent{});
+            statusMessage = "Added Button component.";
         }
 
         // Render reflected components dynamically (skip those with dedicated hardcoded menu items)
@@ -4971,6 +5007,174 @@ void EditorUI::drawTilemapGridOverlay() {
                 }
             }
         }
+    }
+}
+
+void EditorUI::drawUIComponentsEditor() {
+    if (!hasSelection) return;
+
+    using namespace ImGui;
+
+    // 1. Canvas Editor
+    if (auto* canvas = registry.get<Engine::CanvasComponent>(selectedEntity)) {
+        PushStyleColor(ImGuiCol_Header,        ImVec4(0.25f, 0.40f, 0.40f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.32f, 0.50f, 0.50f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.20f, 0.32f, 0.32f, 1.f));
+        if (CollapsingHeader("UI Canvas", ImGuiTreeNodeFlags_DefaultOpen)) {
+            Checkbox("Screen Space Overlay##canvas_ss", &canvas->isScreenSpace);
+        }
+        PopStyleColor(3);
+    }
+
+    // Helper for RectTransform preset combo
+    auto getPresetName = [](const glm::vec2& amin, const glm::vec2& amax) -> std::string {
+        if (amin == glm::vec2(0.5f, 0.5f) && amax == glm::vec2(0.5f, 0.5f)) return "Center";
+        if (amin == glm::vec2(0.f, 0.f) && amax == glm::vec2(0.f, 0.f)) return "Top-Left";
+        if (amin == glm::vec2(0.5f, 0.f) && amax == glm::vec2(0.5f, 0.f)) return "Top-Center";
+        if (amin == glm::vec2(1.f, 0.f) && amax == glm::vec2(1.f, 0.f)) return "Top-Right";
+        if (amin == glm::vec2(0.f, 0.5f) && amax == glm::vec2(0.f, 0.5f)) return "Center-Left";
+        if (amin == glm::vec2(1.f, 0.5f) && amax == glm::vec2(1.f, 0.5f)) return "Center-Right";
+        if (amin == glm::vec2(0.f, 1.f) && amax == glm::vec2(0.f, 1.f)) return "Bottom-Left";
+        if (amin == glm::vec2(0.5f, 1.f) && amax == glm::vec2(0.5f, 1.f)) return "Bottom-Center";
+        if (amin == glm::vec2(1.f, 1.f) && amax == glm::vec2(1.f, 1.f)) return "Bottom-Right";
+        if (amin == glm::vec2(0.f, 0.f) && amax == glm::vec2(1.f, 1.f)) return "Stretch-All";
+        return "Custom";
+    };
+
+    // 2. RectTransform Editor
+    if (auto* rect = registry.get<Engine::RectTransform>(selectedEntity)) {
+        PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.35f, 0.50f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.45f, 0.60f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.15f, 0.28f, 0.40f, 1.f));
+        if (CollapsingHeader("UI RectTransform", ImGuiTreeNodeFlags_DefaultOpen)) {
+            // Anchor presets dropdown
+            std::string preset = getPresetName(rect->anchorMin, rect->anchorMax);
+            if (BeginCombo("Anchor Preset##rect_ap", preset.c_str())) {
+                auto presetItem = [&](const char* name, const glm::vec2& amin, const glm::vec2& amax) {
+                    if (Selectable(name, preset == name)) {
+                        rect->anchorMin = amin;
+                        rect->anchorMax = amax;
+                        if (amin != amax) {
+                            rect->anchoredPosition = glm::vec2(0.f);
+                            rect->sizeDelta = glm::vec2(0.f);
+                        }
+                    }
+                };
+                presetItem("Top-Left", glm::vec2(0.f, 0.f), glm::vec2(0.f, 0.f));
+                presetItem("Top-Center", glm::vec2(0.5f, 0.f), glm::vec2(0.5f, 0.f));
+                presetItem("Top-Right", glm::vec2(1.f, 0.f), glm::vec2(1.f, 0.f));
+                presetItem("Center-Left", glm::vec2(0.f, 0.5f), glm::vec2(0.f, 0.5f));
+                presetItem("Center", glm::vec2(0.5f, 0.5f), glm::vec2(0.5f, 0.5f));
+                presetItem("Center-Right", glm::vec2(1.f, 0.5f), glm::vec2(1.f, 0.5f));
+                presetItem("Bottom-Left", glm::vec2(0.f, 1.f), glm::vec2(0.f, 1.f));
+                presetItem("Bottom-Center", glm::vec2(0.5f, 1.f), glm::vec2(0.5f, 1.f));
+                presetItem("Bottom-Right", glm::vec2(1.f, 1.f), glm::vec2(1.f, 1.f));
+                presetItem("Stretch-All", glm::vec2(0.f, 0.f), glm::vec2(1.f, 1.f));
+                EndCombo();
+            }
+
+            DragFloat2("Position Offset##rect_pos", &rect->anchoredPosition.x, 1.f);
+            if (rect->anchorMin == rect->anchorMax) {
+                DragFloat2("Size Delta (W/H)##rect_sd", &rect->sizeDelta.x, 1.f, 0.f, 4096.f);
+            } else {
+                DragFloat2("Margins (R/B)##rect_sd", &rect->sizeDelta.x, 1.f);
+            }
+            DragFloat2("Pivot##rect_pivot", &rect->pivot.x, 0.01f, 0.f, 1.f);
+
+            // Allow custom anchor edits if user wants custom values
+            if (preset == "Custom" || ImGui::TreeNode("Manual Anchors")) {
+                DragFloat2("Anchor Min##rect_amin", &rect->anchorMin.x, 0.01f, 0.f, 1.f);
+                DragFloat2("Anchor Max##rect_amax", &rect->anchorMax.x, 0.01f, 0.f, 1.f);
+                if (preset != "Custom") ImGui::TreePop();
+            }
+        }
+        PopStyleColor(3);
+    }
+
+    // 3. Panel Component
+    if (auto* panel = registry.get<Engine::UIPanelComponent>(selectedEntity)) {
+        PushStyleColor(ImGuiCol_Header,        ImVec4(0.35f, 0.20f, 0.40f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.45f, 0.25f, 0.50f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.28f, 0.15f, 0.30f, 1.f));
+        if (CollapsingHeader("UI Panel", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ColorEdit4("Background Color##panel_col", &panel->color.x);
+            SliderFloat("Corner Radius##panel_br", &panel->borderRadius, 0.f, 100.f);
+        }
+        PopStyleColor(3);
+    }
+
+    // 4. Image Component
+    if (auto* img = registry.get<Engine::UIImageComponent>(selectedEntity)) {
+        PushStyleColor(ImGuiCol_Header,        ImVec4(0.40f, 0.35f, 0.20f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.50f, 0.45f, 0.25f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.30f, 0.28f, 0.15f, 1.f));
+        if (CollapsingHeader("UI Image", ImGuiTreeNodeFlags_DefaultOpen)) {
+            char pathBuf[512];
+            strncpy_s(pathBuf, img->texturePath.c_str(), sizeof(pathBuf) - 1);
+            if (InputText("Texture Path##img_tex", pathBuf, sizeof(pathBuf))) {
+                img->texturePath = pathBuf;
+            }
+            if (BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+                    img->texturePath = (const char*)payload->Data;
+                    statusMessage = "Assigned UI image texture: " + img->texturePath;
+                }
+                EndDragDropTarget();
+            }
+            TextDisabled("Drop a texture file here");
+
+            ColorEdit4("Tint Color##img_tint", &img->tintColor.x);
+        }
+        PopStyleColor(3);
+    }
+
+    // 5. Text Component
+    if (auto* txt = registry.get<Engine::UITextComponent>(selectedEntity)) {
+        PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.40f, 0.30f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.50f, 0.38f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.15f, 0.30f, 0.22f, 1.f));
+        if (CollapsingHeader("UI Text", ImGuiTreeNodeFlags_DefaultOpen)) {
+            char textBuf[1024];
+            strncpy_s(textBuf, txt->text.c_str(), sizeof(textBuf) - 1);
+            if (InputTextMultiline("Content##txt_val", textBuf, sizeof(textBuf), ImVec2(-1, 60))) {
+                txt->text = textBuf;
+            }
+            DragFloat("Font Size##txt_sz", &txt->fontSize, 0.5f, 1.f, 256.f);
+            ColorEdit4("Text Color##txt_col", &txt->color.x);
+            Checkbox("Align Center##txt_ac", &txt->alignCenter);
+        }
+        PopStyleColor(3);
+    }
+
+    // 6. Button Component
+    if (auto* btn = registry.get<Engine::UIButtonComponent>(selectedEntity)) {
+        PushStyleColor(ImGuiCol_Header,        ImVec4(0.40f, 0.20f, 0.20f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.50f, 0.25f, 0.25f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.30f, 0.15f, 0.15f, 1.f));
+        if (CollapsingHeader("UI Button", ImGuiTreeNodeFlags_DefaultOpen)) {
+            char labelBuf[128];
+            strncpy_s(labelBuf, btn->label.c_str(), sizeof(labelBuf) - 1);
+            if (InputText("Button Label##btn_lbl", labelBuf, sizeof(labelBuf))) {
+                btn->label = labelBuf;
+            }
+
+            char eventBuf[128];
+            strncpy_s(eventBuf, btn->clickEventName.c_str(), sizeof(eventBuf) - 1);
+            if (InputText("Click Event##btn_evt", eventBuf, sizeof(eventBuf))) {
+                btn->clickEventName = eventBuf;
+            }
+
+            ColorEdit4("Normal Color##btn_col_n", &btn->normalColor.x);
+            ColorEdit4("Hover Color##btn_col_h", &btn->hoverColor.x);
+            ColorEdit4("Pressed Color##btn_col_p", &btn->pressedColor.x);
+            ColorEdit4("Text Color##btn_col_t", &btn->textColor.x);
+
+            if (Button("Trigger Click Preview##btn_trg")) {
+                btn->isClicked = true;
+                statusMessage = "Clicked button: " + btn->label;
+            }
+        }
+        PopStyleColor(3);
     }
 }
 
