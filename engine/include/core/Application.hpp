@@ -138,6 +138,7 @@ namespace Engine {
         void initEngine();
         void cleanupEngine();
         void loadConfig();
+        int buildGame(const std::string& projectPath, const std::string& outPath);
     };
 
 } // namespace Engine

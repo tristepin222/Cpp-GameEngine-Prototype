@@ -122,7 +122,10 @@ namespace Engine {
         registry.emplace<EditorCamera>(editorCam, EditorCamera{});
 
         // Initialize editor UI overlay (always initialized to support ImGui Game UI rendering)
-        editorUI = std::make_unique<EditorUI>(registry, *renderer, sceneManager, editorMode, config.startScenePath);
+        editorUI = std::make_unique<EditorUI>(registry, *renderer, sceneManager, editorMode, config.startScenePath,
+            [this](const std::string& projectPath, const std::string& outPath) {
+                return buildGame(projectPath, outPath);
+            });
         editorUI->initialize(window);
 
         // Setup initial editor fly mode based on whether editor UI is present
@@ -186,6 +189,39 @@ namespace Engine {
             window = nullptr;
         }
         glfwTerminate();
+    }
+
+    int Application::buildGame(const std::string& projectPath, const std::string& outPath) {
+        if (pluginManager) {
+            pluginManager->unloadPlugins();
+        }
+
+        std::filesystem::path outPathFs = std::filesystem::absolute(outPath);
+        outPathFs = outPathFs.lexically_normal();
+        std::string outPathArg = outPathFs.string();
+        if (!outPathArg.empty() && (outPathArg.back() == '\\' || outPathArg.back() == '/')) {
+            outPathArg.pop_back();
+        }
+
+        std::string batchPath = "build_game_package.bat";
+        if (!config.exeDir.empty()) {
+            std::filesystem::path exeBatch = std::filesystem::path(config.exeDir) / "build_game_package.bat";
+            if (std::filesystem::exists(exeBatch)) {
+                batchPath = exeBatch.string();
+            }
+        }
+
+        std::string cmd = "\"\"" + batchPath + "\" \"" + projectPath + "\" \"" + outPathArg + "\"\"";
+        std::cout << "[BuildSystem] Running: " << cmd << std::endl;
+
+        int result = std::system(cmd.c_str());
+
+        if (pluginManager) {
+            pluginManager->loadPlugins();
+            pluginManager->loadScripts(config.projectPath);
+        }
+
+        return result;
     }
 
     void Application::run() {

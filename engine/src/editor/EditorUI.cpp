@@ -306,8 +306,8 @@ static bool entityHasSkin(Registry& registry, Entity entity) {
  * @param sceneManager Reference to scene manager.
  * @param editorMode Reference to editor mode state.
  */
-EditorUI::EditorUI(Registry& registry, VulkanRenderer& renderer, SceneManager& sceneManager, EditorModeState& editorMode, const std::string& startScenePath)
-    : registry(registry), renderer(renderer), sceneManager(sceneManager), editorMode(editorMode), scenePath(startScenePath) {
+EditorUI::EditorUI(Registry& registry, VulkanRenderer& renderer, SceneManager& sceneManager, EditorModeState& editorMode, const std::string& startScenePath, BuildGameCallback buildGameCallback)
+    : registry(registry), renderer(renderer), sceneManager(sceneManager), editorMode(editorMode), scenePath(startScenePath), buildGameCallback(std::move(buildGameCallback)) {
 }
 
 /**
@@ -4540,22 +4540,8 @@ void EditorUI::drawBuildSettingsPanel() {
             buildInProgress = true;
             buildStatusMessage = "Building...";
 
-            std::string projectPath = ".";
             std::filesystem::path outPath = std::filesystem::absolute(buildOutputPath);
-
-            // Resolve the path of build_game_package.bat relative to the executable directory
-            std::string batchPath = "build_game_package.bat";
-            std::string exeDir = renderer.getExeDir();
-            if (!exeDir.empty()) {
-                std::filesystem::path p = std::filesystem::path(exeDir) / "build_game_package.bat";
-                if (std::filesystem::exists(p)) {
-                    batchPath = p.string();
-                }
-            }
-            std::string cmd = "\"\"" + batchPath + "\" \"" + projectPath + "\" \"" + outPath.string() + "\"\"";
-            std::cout << "[BuildSystem] Running: " << cmd << std::endl;
-
-            int result = std::system(cmd.c_str());
+            int result = buildGameCallback ? buildGameCallback(".", outPath.string()) : -1;
 
             if (result == 0) {
                 buildStatusMessage = "[OK] Build succeeded -> " + outPath.string();
