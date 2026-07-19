@@ -5,6 +5,7 @@
 #include "../components/Mesh.hpp"
 #include "../components/Material.hpp"
 #include "../components/Skeleton.hpp"
+#include "../components/LightComponent.hpp"
 #include "../../renderer/VulkanRenderer.hpp"
 #include "../components/Renderable.hpp"
 #include "glm/gtc/matrix_access.hpp"
@@ -59,8 +60,41 @@ public:
 
         VkCommandBuffer cmd = renderer.getCurrentCommandBuffer();
 
-        // --- Update CameraSoA using TransformSoA ---
-        renderer.updateCameraUBO();
+        // --- Collect active light info ---
+        glm::vec4 ambientLight = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // Renderer fallback sun as ambient fill
+        glm::vec4 lightDir = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);      // Default key light direction, type 0 (directional)
+        glm::vec4 lightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);    // Default key light color/intensity
+        
+        Entity lightEnt;
+        for (auto [e, light] : registry.view<Engine::LightComponent>()) {
+            lightEnt = e;
+            break;
+        }
+
+        if (lightEnt.getId() != Entity::INVALID_ENTITY && registry.isValid(lightEnt)) {
+            auto* light = registry.get<Engine::LightComponent>(lightEnt);
+            auto* transform = registry.get<Transform>(lightEnt);
+            if (light) {
+                glm::vec3 dir(0.0f, 1.0f, 0.0f);
+                if (transform) {
+                    if (glm::dot(transform->position, transform->position) > 0.0001f) {
+                        dir = glm::normalize(-transform->position);
+                    } else {
+                        dir = transform->forward();
+                    }
+                }
+                lightDir = glm::vec4(dir.x, dir.y, dir.z, static_cast<float>(light->type));
+                lightColor = glm::vec4(light->color.x, light->color.y, light->color.z, light->intensity);
+            }
+        }
+
+        CameraUBO ubo{};
+        ubo.viewProj = renderer.getActiveCameraViewProj();
+        ubo.camPos = glm::vec4(renderer.getActiveCameraPosition(), 1.0f);
+        ubo.ambientLight = ambientLight;
+        ubo.lightDir = lightDir;
+        ubo.lightColor = lightColor;
+        renderer.updateCameraUBO(ubo);
 
 
         std::vector<InstanceDataGPU> gpuData(renderer.instanceDataCPU.size());
@@ -317,7 +351,7 @@ private:
                 PushConstants pc{};
                 pc.model = inst.model;
                 pc.color = inst.color;
-                pc.camPos = getCameraPosition();
+                pc.camPos = glm::vec4(getCameraPosition(), 1.0f);
                 if (renderer.hasActiveCamera()) {
                     pc.viewProj = renderer.getActiveCameraViewProj();
                 } else {
@@ -385,7 +419,7 @@ private:
             struct GridPushConstants {
                 glm::mat4 viewProj;
                 glm::vec4 color;
-                glm::vec3 camPos;
+                glm::vec4 camPos;
                 float scale;
                 float fade;
             } pc;
@@ -398,7 +432,7 @@ private:
             }
 
             pc.color = grid->color;
-            pc.camPos = camPos;
+            pc.camPos = glm::vec4(camPos, 1.0f);
             pc.scale = grid->spacing;
             pc.fade = grid->size;
 

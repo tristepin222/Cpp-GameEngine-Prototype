@@ -5,6 +5,7 @@
 #include "ecs/components/AudioListener.hpp"
 #include "ecs/components/Tilemap.hpp"
 #include "ecs/components/UIComponents.hpp"
+#include "ecs/components/LightComponent.hpp"
 #include <cstddef>
 
 namespace Engine {
@@ -184,6 +185,20 @@ namespace Engine {
             btnRefl.remove = [](Registry& reg, Entity e) { reg.remove<UIButtonComponent>(e); };
             btnRefl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<UIButtonComponent>(e)); };
             instance.registerComponent(btnRefl);
+
+            // 12. LightComponent Reflection
+            ComponentReflection lightRefl;
+            lightRefl.name = "Light";
+            lightRefl.fields = {
+                { "color", FieldType::Vec3, offsetof(LightComponent, color) },
+                { "intensity", FieldType::Float, offsetof(LightComponent, intensity) },
+                { "range", FieldType::Float, offsetof(LightComponent, range) }
+            };
+            lightRefl.add = [](Registry& reg, Entity e) { reg.emplace<LightComponent>(e, LightComponent{}); };
+            lightRefl.has = [](Registry& reg, Entity e) { return reg.has<LightComponent>(e); };
+            lightRefl.remove = [](Registry& reg, Entity e) { reg.remove<LightComponent>(e); };
+            lightRefl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<LightComponent>(e)); };
+            instance.registerComponent(lightRefl);
         }
         return instance;
     }

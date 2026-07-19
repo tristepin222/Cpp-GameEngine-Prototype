@@ -35,43 +35,43 @@ VulkanRenderer::~VulkanRenderer() {
 #include <filesystem>
 
 std::string VulkanRenderer::resolveShaderPath(const std::string& originalPath) const {
-    // 1. If path exists directly, return it
-    if (std::filesystem::exists(originalPath)) {
-        return originalPath;
-    }
-
-    // 2. Extract shader filename (e.g. unlit.vert.spv)
+    // 1. Extract shader filename (e.g. unlit.vert.spv)
     std::filesystem::path p(originalPath);
     std::string filename = p.filename().string();
 
-    // 3. Try sibling "shaders" folder next to exe (packaged app)
+    // 2. Try sibling "shaders" folder next to exe (packaged app)
     if (!exeDir.empty()) {
         std::filesystem::path localShader = std::filesystem::path(exeDir) / "shaders" / filename;
         if (std::filesystem::exists(localShader)) {
             return localShader.string();
         }
         
-        // 4. Try parent "shaders" folder (SDK/editor structure: bin/ is sibling to shaders/)
+        // 3. Try parent "shaders" folder (SDK/editor structure: bin/ is sibling to shaders/)
         std::filesystem::path parentShader = std::filesystem::path(exeDir) / ".." / "shaders" / filename;
         if (std::filesystem::exists(parentShader)) {
             return parentShader.string();
         }
 
-        // 4b. Try parent-parent "shaders" folder (build/engine/Release/../../shaders)
+        // 4. Try parent-parent "shaders" folder (build/engine/Release/../../shaders)
         std::filesystem::path ppShader = std::filesystem::path(exeDir) / ".." / ".." / "shaders" / filename;
         if (std::filesystem::exists(ppShader)) {
             return ppShader.string();
         }
     }
 
-    // 5. Try relative "shaders/" and "build/shaders/" in CWD
+    // 5. If path exists directly in CWD, return it
+    if (std::filesystem::exists(originalPath)) {
+        return originalPath;
+    }
+
+    // 6. Try relative "shaders/" and "build/shaders/" in CWD
     std::filesystem::path cwdShader1 = std::filesystem::path("shaders") / filename;
     if (std::filesystem::exists(cwdShader1)) return cwdShader1.string();
 
     std::filesystem::path cwdShader2 = std::filesystem::path("build/shaders") / filename;
     if (std::filesystem::exists(cwdShader2)) return cwdShader2.string();
 
-    // 5b. Try parent sibling "build/shaders" (if CWD is sandbox_game)
+    // 7. Try parent sibling "build/shaders" (if CWD is sandbox_game)
     std::filesystem::path siblingShader = std::filesystem::path("..") / "build" / "shaders" / filename;
     if (std::filesystem::exists(siblingShader)) return siblingShader.string();
 
@@ -348,9 +348,9 @@ void VulkanRenderer::createCameraUBO() {
 /**
  * @brief Maps and uploads camera projection matrices to GPU.
  */
-void VulkanRenderer::updateCameraUBO() {
+void VulkanRenderer::updateCameraUBO(const CameraUBO& ubo) {
     if (!hasActiveCameraData) return;
-    cameraBuffer.uploadData(&activeCameraViewProj, sizeof(activeCameraViewProj));
+    cameraBuffer.uploadData(&ubo, sizeof(CameraUBO));
 }
 
 /**

@@ -9,10 +9,18 @@ layout(push_constant) uniform Push {
     mat4 model;
     vec4 color;
     mat4 viewProj;
-    vec3 camPos;
+    vec4 camPos;
     float scale; // roughness multiplier
     float fade;  // metallic multiplier
 } push;
+
+layout(set = 0, binding = 0) uniform CameraUBO {
+    mat4 viewProj;
+    vec4 camPos;      // camPos.xyz, w unused
+    vec4 ambientLight; // Renderer fallback sun used as ambient fill
+    vec4 lightDir;    // Direction in xyz, type in w
+    vec4 lightColor;  // Color in xyz, intensity in w
+} cam;
 
 layout(set = 1, binding = 0) uniform sampler2D texSampler;
 layout(set = 1, binding = 1) uniform sampler2D normalSampler;
@@ -20,7 +28,7 @@ layout(set = 1, binding = 2) uniform sampler2D metallicSampler;
 
 layout(location = 0) out vec4 outColor;
 
-// Dynamic screenspace TBN calculation for normal mapping
+// Dynamic screenspace TBN calculation for normal mapping (NaN-safe fallback)
 vec3 getNormalFromMap() {
     vec3 tangentNormal = texture(normalSampler, vUV).xyz * 2.0 - 1.0;
 
@@ -30,8 +38,20 @@ vec3 getNormalFromMap() {
     vec2 st2 = dFdy(vUV);
 
     vec3 N   = normalize(vNormal);
-    vec3 T   = normalize(Q1*st2.t - Q2*st1.t);
-    vec3 B   = -normalize(cross(N, T));
+    
+    // Compute tangent and bitangent, fallback to standard coordinates if derivatives are zero/collinear
+    vec3 T_dir = Q1 * st2.t - Q2 * st1.t;
+    vec3 T;
+    if (length(T_dir) > 0.0001) {
+        T = normalize(T_dir);
+    } else {
+        T = normalize(cross(N, vec3(0.0, 1.0, 0.0)));
+        if (length(T) < 0.0001) {
+            T = normalize(cross(N, vec3(1.0, 0.0, 0.0)));
+        }
+    }
+
+    vec3 B = normalize(cross(N, T));
     mat3 TBN = mat3(T, B, N);
 
     return normalize(TBN * tangentNormal);
@@ -44,18 +64,19 @@ void main() {
     }
 
     vec3 N = getNormalFromMap();
-    vec3 V = normalize(push.camPos - vWorldPos);
+    vec3 V = normalize(cam.camPos.xyz - vWorldPos);
 
-    // Hardcoded directional sun light
-    vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3));
+    // Dynamic light calculations from CameraUBO
+    vec3 lightDir = normalize(cam.lightDir.xyz);
+    vec3 lightCol = cam.lightColor.rgb * cam.lightColor.a;
     vec3 H = normalize(lightDir + V);
 
-    // Ambient lighting
-    vec3 ambient = 0.2 * baseColor.rgb;
+    // Ambient fill comes from the renderer fallback sun.
+    vec3 ambient = (0.05 * cam.ambientLight.rgb + vec3(0.02)) * baseColor.rgb;
 
     // Diffuse lighting
     float diff = max(dot(N, lightDir), 0.0);
-    vec3 diffuse = diff * baseColor.rgb;
+    vec3 diffuse = diff * baseColor.rgb * lightCol;
 
     // Read roughness and metallic from texture and push constants
     vec4 metRough = texture(metallicSampler, vUV);
@@ -68,7 +89,7 @@ void main() {
     // Specular highlight (Blinn-Phong)
     float spec = pow(max(dot(N, H), 0.0), shininess);
     vec3 specularColor = mix(vec3(0.04), baseColor.rgb, metallic);
-    vec3 specular = spec * specularColor;
+    vec3 specular = spec * specularColor * lightCol;
 
     outColor = vec4(ambient + diffuse + specular, baseColor.a);
 }

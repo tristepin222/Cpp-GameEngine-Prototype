@@ -15,7 +15,7 @@ struct PushConstants {
     /** @brief Precomputed view-projection matrix. */
     glm::mat4 viewProj;
     /** @brief Camera position in world space. */
-    glm::vec3 camPos;
+    glm::vec4 camPos;
     /** @brief Scale factor. */
     float scale;
     /** @brief Fade amount (e.g., for grids). */

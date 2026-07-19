@@ -8,6 +8,8 @@
 #include "ecs/components/Material.hpp"
 #include "ecs/components/Camera.hpp"
 #include "ecs/components/Grid.hpp"
+#include "ecs/components/Skeleton.hpp"
+#include "renderer/ResourceManager.hpp"
 
 /**
  * @namespace EntityCloner
@@ -73,6 +75,35 @@ namespace EntityCloner {
         if (Material* sourceMaterial = registry.get<Material>(source)) {
             if (Material* duplicatedMaterial = registry.get<Material>(duplicated)) {
                 duplicatedMaterial->color = sourceMaterial->color;
+                duplicatedMaterial->texturePath = sourceMaterial->texturePath;
+                duplicatedMaterial->normalMapPath = sourceMaterial->normalMapPath;
+                duplicatedMaterial->metallicMapPath = sourceMaterial->metallicMapPath;
+                duplicatedMaterial->shaderName = sourceMaterial->shaderName;
+                duplicatedMaterial->roughness = sourceMaterial->roughness;
+                duplicatedMaterial->metallic = sourceMaterial->metallic;
+                duplicatedMaterial->filterMode = sourceMaterial->filterMode;
+
+                // Recreate descriptor set for duplicate
+                renderer.resourceManager->updateMaterialDescriptorSet(*duplicatedMaterial, renderer);
+
+                // Recreate pipeline for duplicate based on shaderName and skin (no skin for primitives cloned here)
+                bool hasSkin = registry.has<SkeletonComponent>(duplicated);
+                std::string vertShader = "unlit.vert.spv";
+                std::string fragShader = "unlit.frag.spv";
+                if (duplicatedMaterial->shaderName == "Lit") {
+                    vertShader = hasSkin ? "skinned_lit.vert.spv" : "lit.vert.spv";
+                    fragShader = "lit.frag.spv";
+                } else {
+                    vertShader = hasSkin ? "skinned.vert.spv" : "unlit.vert.spv";
+                    fragShader = "unlit.frag.spv";
+                }
+
+                PipelineHandle pipeline = renderer.createPipelineForShaders(
+                    renderer.resolveShaderPath("build/shaders/" + vertShader),
+                    renderer.resolveShaderPath("build/shaders/" + fragShader)
+                );
+                duplicatedMaterial->pipeline = pipeline.pipeline;
+                duplicatedMaterial->pipelineLayout = pipeline.layout;
             }
         }
 

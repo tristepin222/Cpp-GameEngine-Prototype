@@ -41,6 +41,8 @@
 #include "ecs/components/Tilemap.hpp"
 #include "scenes/TilesetAsset.hpp"
 #include "ecs/components/UIComponents.hpp"
+#include "ecs/components/LightComponent.hpp"
+#include "editor/AssetBrowserRegistry.hpp"
 
 #include <functional>
 #include "renderer/VulkanRenderer.hpp"
@@ -426,6 +428,26 @@ void EditorUI::initialize(GLFWwindow* window) {
     if (!ImGui_ImplVulkan_Init(&initInfo)) {
         throw runtime_error("Failed to initialize ImGui Vulkan backend");
     }
+
+    // Register Unity-style custom context menu options
+    Engine::AssetBrowserRegistry::registerOption("Create/C++ Component", [](const std::filesystem::path& folderPath) {
+        std::string filename = "CustomComponent.hpp";
+        auto filepath = folderPath / filename;
+        std::ofstream out(filepath);
+        if (out.is_open()) {
+            out << "#pragma once\n#include \"ecs/Registry.hpp\"\n#include \"core/EngineAPI.hpp\"\n\n"
+                << "namespace Engine {\n\n"
+                << "    struct ENGINE_API CustomComponent {\n"
+                << "        float speed = 1.0f;\n"
+                << "    };\n\n"
+                << "}\n";
+            out.close();
+        }
+    });
+
+    Engine::AssetBrowserRegistry::registerOption("Actions/Print Path", [](const std::filesystem::path& folderPath) {
+        std::printf("Selected Asset Folder Path: %s\n", folderPath.generic_string().c_str());
+    });
 
     applyInputMode();
     initialized = true;
@@ -1202,6 +1224,18 @@ void EditorUI::drawInspectorPanel() {
         if (!registry.has<Material>(selectedEntity) && ImGui::MenuItem("Material")) {
             glm::vec4 color(1.0f);
             registry.emplace<Material>(selectedEntity, Material{ color });
+            if (auto* material = registry.get<Material>(selectedEntity)) {
+                bool hasSkin = entityHasSkin(registry, selectedEntity);
+                std::string vertShader = hasSkin ? "skinned.vert.spv" : "unlit.vert.spv";
+                std::string fragShader = "unlit.frag.spv";
+                PipelineHandle pipeline = renderer.createPipelineForShaders(
+                    renderer.resolveShaderPath("build/shaders/" + vertShader),
+                    renderer.resolveShaderPath("build/shaders/" + fragShader)
+                );
+                material->pipeline = pipeline.pipeline;
+                material->pipelineLayout = pipeline.layout;
+                renderer.resourceManager->updateMaterialDescriptorSet(*material, renderer);
+            }
             statusMessage = "Added Material component.";
         }
         if (!registry.has<Camera>(selectedEntity) && ImGui::MenuItem("Camera")) {
@@ -1214,7 +1248,17 @@ void EditorUI::drawInspectorPanel() {
         }
         if (!registry.has<SkeletonComponent>(selectedEntity) && ImGui::MenuItem("Skeleton")) {
             registry.emplace<SkeletonComponent>(selectedEntity, SkeletonComponent{});
-            statusMessage = "Added Skeleton component.";
+            if (auto* material = registry.get<Material>(selectedEntity)) {
+                std::string vertShader = (material->shaderName == "Lit") ? "skinned_lit.vert.spv" : "skinned.vert.spv";
+                std::string fragShader = (material->shaderName == "Lit") ? "lit.frag.spv" : "unlit.frag.spv";
+                PipelineHandle pipeline = renderer.createPipelineForShaders(
+                    renderer.resolveShaderPath("build/shaders/" + vertShader),
+                    renderer.resolveShaderPath("build/shaders/" + fragShader)
+                );
+                material->pipeline = pipeline.pipeline;
+                material->pipelineLayout = pipeline.layout;
+            }
+            statusMessage = "Added Skeleton Component.";
         }
         if (!registry.has<AnimatorComponent>(selectedEntity) && ImGui::MenuItem("Animator")) {
             registry.emplace<AnimatorComponent>(selectedEntity, AnimatorComponent{});
@@ -1775,6 +1819,26 @@ void EditorUI::drawMeshEditor() {
     Text("Vertices: %d, Indices: %d", (int)mesh->vertices.size(), (int)mesh->indices.size());
 }
 
+static void drawRegisteredAssetBrowserMenu(const std::filesystem::path& folderPath) {
+    for (const auto& opt : Engine::AssetBrowserRegistry::getOptions()) {
+        size_t slashPos = opt.labelPath.find('/');
+        if (slashPos != std::string::npos) {
+            std::string menuName = opt.labelPath.substr(0, slashPos);
+            std::string itemName = opt.labelPath.substr(slashPos + 1);
+            if (ImGui::BeginMenu(menuName.c_str())) {
+                if (ImGui::MenuItem(itemName.c_str())) {
+                    opt.callback(folderPath);
+                }
+                ImGui::EndMenu();
+            }
+        } else {
+            if (ImGui::MenuItem(opt.labelPath.c_str())) {
+                opt.callback(folderPath);
+            }
+        }
+    }
+}
+
 /**
  * @brief Renders the asset browser panel.
  */
@@ -1803,24 +1867,6 @@ void EditorUI::drawAssetBrowser() {
     static bool s_openRenamePopup;
 
     // ---- Toolbar ----
-    if (Button("+ New Folder")) {
-        s_createFolderParentPath = "assets";
-        s_createFolderBuffer[0] = '\0';
-        OpenPopup("CreateFolderPopup");
-    }
-    SameLine();
-    if (Button("+ New Scene")) {
-        s_createSceneParentPath = "assets";
-        s_createSceneBuffer[0] = '\0';
-        OpenPopup("CreateScenePopup");
-    }
-    SameLine();
-    if (Button("+ New File")) {
-        s_createFileParentPath = "assets";
-        s_createFileBuffer[0] = '\0';
-        OpenPopup("CreateFilePopup");
-    }
-    SameLine();
     if (Button("Refresh")) {
         statusMessage = "Refreshed asset directories.";
     }
@@ -1876,20 +1922,27 @@ void EditorUI::drawAssetBrowser() {
                 if (BeginPopupContextItem(pathStr.c_str())) {
                     TextDisabled("Folder: %s", name.c_str());
                     Separator();
-                    if (MenuItem("Create Subfolder")) {
-                        s_createFolderParentPath = entry.path();
-                        s_createFolderBuffer[0] = '\0';
-                        s_openCreateFolderPopup = true;
-                    }
-                    if (MenuItem("Create New Scene")) {
-                        s_createSceneParentPath = entry.path();
-                        s_createSceneBuffer[0] = '\0';
-                        s_openCreateScenePopup = true;
-                    }
-                    if (MenuItem("Create New File")) {
-                        s_createFileParentPath = entry.path();
-                        s_createFileBuffer[0] = '\0';
-                        s_openCreateFilePopup = true;
+                    if (BeginMenu("Create")) {
+                        if (MenuItem("Folder")) {
+                            s_createFolderParentPath = entry.path();
+                            s_createFolderBuffer[0] = '\0';
+                            s_openCreateFolderPopup = true;
+                        }
+                        if (MenuItem("Scene")) {
+                            s_createSceneParentPath = entry.path();
+                            s_createSceneBuffer[0] = '\0';
+                            s_openCreateScenePopup = true;
+                        }
+                        if (MenuItem("File")) {
+                            s_createFileParentPath = entry.path();
+                            s_createFileBuffer[0] = '\0';
+                            s_openCreateFilePopup = true;
+                        }
+
+                        // Custom options registered to the asset browser menu
+                        drawRegisteredAssetBrowserMenu(entry.path());
+
+                        EndMenu();
                     }
                     if (MenuItem("Rename")) {
                         s_renameTargetPath = entry.path();
@@ -2366,6 +2419,31 @@ void EditorUI::drawAssetBrowser() {
         EndPopup();
     }
 
+    if (BeginPopupContextWindow("AssetBrowserBgCtx")) {
+        if (BeginMenu("Create")) {
+            if (MenuItem("Folder")) {
+                s_createFolderParentPath = "assets";
+                s_createFolderBuffer[0] = '\0';
+                s_openCreateFolderPopup = true;
+            }
+            if (MenuItem("Scene")) {
+                s_createSceneParentPath = "assets";
+                s_createSceneBuffer[0] = '\0';
+                s_openCreateScenePopup = true;
+            }
+            if (MenuItem("File")) {
+                s_createFileParentPath = "assets";
+                s_createFileBuffer[0] = '\0';
+                s_openCreateFilePopup = true;
+            }
+
+            drawRegisteredAssetBrowserMenu("assets");
+
+            EndMenu();
+        }
+        EndPopup();
+    }
+
     End();
 }
 
@@ -2791,6 +2869,16 @@ void EditorUI::drawSkeletonEditor() {
     bool open = CollapsingHeader("Skeleton", &visible, ImGuiTreeNodeFlags_DefaultOpen);
     if (!visible) {
         registry.remove<SkeletonComponent>(selectedEntity);
+        if (auto* material = registry.get<Material>(selectedEntity)) {
+            std::string vertShader = (material->shaderName == "Lit") ? "lit.vert.spv" : "unlit.vert.spv";
+            std::string fragShader = (material->shaderName == "Lit") ? "lit.frag.spv" : "unlit.frag.spv";
+            PipelineHandle pipeline = renderer.createPipelineForShaders(
+                renderer.resolveShaderPath("build/shaders/" + vertShader),
+                renderer.resolveShaderPath("build/shaders/" + fragShader)
+            );
+            material->pipeline = pipeline.pipeline;
+            material->pipelineLayout = pipeline.layout;
+        }
         statusMessage = "Removed Skeleton component.";
         return;
     }
@@ -5211,10 +5299,15 @@ void EditorUI::drawUIComponentsEditor() {
         PushStyleColor(ImGuiCol_Header,        ImVec4(0.25f, 0.40f, 0.40f, 1.f));
         PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.32f, 0.50f, 0.50f, 1.f));
         PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.20f, 0.32f, 0.32f, 1.f));
-        if (CollapsingHeader("UI Canvas", ImGuiTreeNodeFlags_DefaultOpen)) {
+        bool visible = true;
+        if (CollapsingHeader("UI Canvas", &visible, ImGuiTreeNodeFlags_DefaultOpen)) {
             Checkbox("Screen Space Overlay##canvas_ss", &canvas->isScreenSpace);
         }
         PopStyleColor(3);
+        if (!visible) {
+            registry.remove<Engine::CanvasComponent>(selectedEntity);
+            statusMessage = "Removed Canvas component.";
+        }
     }
 
     // Helper for RectTransform preset combo
@@ -5237,7 +5330,8 @@ void EditorUI::drawUIComponentsEditor() {
         PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.35f, 0.50f, 1.f));
         PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.45f, 0.60f, 1.f));
         PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.15f, 0.28f, 0.40f, 1.f));
-        if (CollapsingHeader("UI RectTransform", ImGuiTreeNodeFlags_DefaultOpen)) {
+        bool visible = true;
+        if (CollapsingHeader("UI RectTransform", &visible, ImGuiTreeNodeFlags_DefaultOpen)) {
             // Anchor presets dropdown
             std::string preset = getPresetName(rect->anchorMin, rect->anchorMax);
             if (BeginCombo("Anchor Preset##rect_ap", preset.c_str())) {
@@ -5280,6 +5374,10 @@ void EditorUI::drawUIComponentsEditor() {
             }
         }
         PopStyleColor(3);
+        if (!visible) {
+            registry.remove<Engine::RectTransform>(selectedEntity);
+            statusMessage = "Removed RectTransform component.";
+        }
     }
 
     // 3. Panel Component
@@ -5287,11 +5385,16 @@ void EditorUI::drawUIComponentsEditor() {
         PushStyleColor(ImGuiCol_Header,        ImVec4(0.35f, 0.20f, 0.40f, 1.f));
         PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.45f, 0.25f, 0.50f, 1.f));
         PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.28f, 0.15f, 0.30f, 1.f));
-        if (CollapsingHeader("UI Panel", ImGuiTreeNodeFlags_DefaultOpen)) {
+        bool visible = true;
+        if (CollapsingHeader("UI Panel", &visible, ImGuiTreeNodeFlags_DefaultOpen)) {
             ColorEdit4("Background Color##panel_col", &panel->color.x);
             SliderFloat("Corner Radius##panel_br", &panel->borderRadius, 0.f, 100.f);
         }
         PopStyleColor(3);
+        if (!visible) {
+            registry.remove<Engine::UIPanelComponent>(selectedEntity);
+            statusMessage = "Removed Panel component.";
+        }
     }
 
     // 4. Image Component
@@ -5299,7 +5402,8 @@ void EditorUI::drawUIComponentsEditor() {
         PushStyleColor(ImGuiCol_Header,        ImVec4(0.40f, 0.35f, 0.20f, 1.f));
         PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.50f, 0.45f, 0.25f, 1.f));
         PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.30f, 0.28f, 0.15f, 1.f));
-        if (CollapsingHeader("UI Image", ImGuiTreeNodeFlags_DefaultOpen)) {
+        bool visible = true;
+        if (CollapsingHeader("UI Image", &visible, ImGuiTreeNodeFlags_DefaultOpen)) {
             char pathBuf[512];
             strncpy_s(pathBuf, img->texturePath.c_str(), sizeof(pathBuf) - 1);
             if (InputText("Texture Path##img_tex", pathBuf, sizeof(pathBuf))) {
@@ -5317,6 +5421,10 @@ void EditorUI::drawUIComponentsEditor() {
             ColorEdit4("Tint Color##img_tint", &img->tintColor.x);
         }
         PopStyleColor(3);
+        if (!visible) {
+            registry.remove<Engine::UIImageComponent>(selectedEntity);
+            statusMessage = "Removed Image component.";
+        }
     }
 
     // 5. Text Component
@@ -5324,7 +5432,8 @@ void EditorUI::drawUIComponentsEditor() {
         PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.40f, 0.30f, 1.f));
         PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.50f, 0.38f, 1.f));
         PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.15f, 0.30f, 0.22f, 1.f));
-        if (CollapsingHeader("UI Text", ImGuiTreeNodeFlags_DefaultOpen)) {
+        bool visible = true;
+        if (CollapsingHeader("UI Text", &visible, ImGuiTreeNodeFlags_DefaultOpen)) {
             char textBuf[1024];
             strncpy_s(textBuf, txt->text.c_str(), sizeof(textBuf) - 1);
             if (InputTextMultiline("Content##txt_val", textBuf, sizeof(textBuf), ImVec2(-1, 60))) {
@@ -5335,6 +5444,10 @@ void EditorUI::drawUIComponentsEditor() {
             Checkbox("Align Center##txt_ac", &txt->alignCenter);
         }
         PopStyleColor(3);
+        if (!visible) {
+            registry.remove<Engine::UITextComponent>(selectedEntity);
+            statusMessage = "Removed Text component.";
+        }
     }
 
     // 6. Button Component
@@ -5342,7 +5455,8 @@ void EditorUI::drawUIComponentsEditor() {
         PushStyleColor(ImGuiCol_Header,        ImVec4(0.40f, 0.20f, 0.20f, 1.f));
         PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.50f, 0.25f, 0.25f, 1.f));
         PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.30f, 0.15f, 0.15f, 1.f));
-        if (CollapsingHeader("UI Button", ImGuiTreeNodeFlags_DefaultOpen)) {
+        bool visible = true;
+        if (CollapsingHeader("UI Button", &visible, ImGuiTreeNodeFlags_DefaultOpen)) {
             char labelBuf[128];
             strncpy_s(labelBuf, btn->label.c_str(), sizeof(labelBuf) - 1);
             if (InputText("Button Label##btn_lbl", labelBuf, sizeof(labelBuf))) {
@@ -5366,6 +5480,10 @@ void EditorUI::drawUIComponentsEditor() {
             }
         }
         PopStyleColor(3);
+        if (!visible) {
+            registry.remove<Engine::UIButtonComponent>(selectedEntity);
+            statusMessage = "Removed Button component.";
+        }
     }
 }
 

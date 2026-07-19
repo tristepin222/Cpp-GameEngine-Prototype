@@ -3,6 +3,15 @@
 layout(location = 0) in vec4 vColor;
 layout(location = 1) in vec2 vUV;
 
+layout(push_constant) uniform Push {
+    mat4 model;
+    vec4 color;
+    mat4 viewProj;
+    vec4 camPos;
+    float scale;
+    float fade;
+} push;
+
 layout(set = 1, binding = 0) uniform sampler2D texSampler;
 layout(set = 1, binding = 1) uniform sampler2D normalSampler;   // Declared for layout compatibility
 layout(set = 1, binding = 2) uniform sampler2D metallicSampler; // Declared for layout compatibility

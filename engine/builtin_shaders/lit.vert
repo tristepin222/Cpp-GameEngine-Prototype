@@ -8,13 +8,16 @@ layout(push_constant) uniform Push {
     mat4 model;
     vec4 color;
     mat4 viewProj;
-    vec3 camPos;
+    vec4 camPos;
     float scale; // roughness
     float fade;  // metallic
 } push;
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     mat4 viewProj;
+    vec4 camPos;      // camPos.xyz, w unused
+    vec4 lightDir;    // Direction in xyz, type in w
+    vec4 lightColor;  // Color in xyz, intensity in w
 } cam;
 
 layout(location = 0) out vec4 vColor;

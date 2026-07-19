@@ -5,7 +5,7 @@ layout(location = 0) out vec3 worldPos;
 layout(push_constant) uniform Push {
     mat4 viewProj;
     vec4 color;
-    vec3 camPos;
+    vec4 camPos;
     float scale;
     float fade;
 } push;

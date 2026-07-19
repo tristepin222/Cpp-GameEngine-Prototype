@@ -10,13 +10,16 @@ layout(push_constant) uniform Push {
     mat4 model;
     vec4 color;
     mat4 viewProj;
-    vec3 camPos;
+    vec4 camPos;
     float scale;
     float fade;
 } push;
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     mat4 viewProj;
+    vec4 camPos;      // camPos.xyz, w unused
+    vec4 lightDir;    // Direction in xyz, type in w
+    vec4 lightColor;  // Color in xyz, intensity in w
 } cam;
 
 layout(set = 2, binding = 0) uniform JointPalette {

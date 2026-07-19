@@ -38,6 +38,10 @@ struct PipelineHandle {
 struct CameraUBO {
     /** @brief View-projection matrix. */
     glm::mat4 viewProj;
+    glm::vec4 camPos;      // camPos.xyz, w unused
+    glm::vec4 ambientLight; // Ambient light color/intensity from the renderer fallback sun
+    glm::vec4 lightDir;    // Direction in xyz, type in w
+    glm::vec4 lightColor;  // Color in xyz, intensity in w
 };
 
 /**
@@ -178,7 +182,7 @@ public:
     /**
      * @brief Refreshes active camera matrix attributes in UBO.
      */
-    void updateCameraUBO();
+    void updateCameraUBO(const CameraUBO& ubo);
 
     /**
      * @brief Recreates the swapchain when window resizing occurs.
