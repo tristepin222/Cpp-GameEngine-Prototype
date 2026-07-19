@@ -53,8 +53,8 @@ void main() {
     vColor = push.color;
     vUV = inUV;
     
-    // Transform normal to world space using skinning and model transforms
+    // Transform normal to world space using skinning and model transforms (correctly handling non-uniform model scaling)
     vec3 skinnedNormal = mat3(skinMat) * inNormal;
-    vNormal = normalize(mat3(push.model) * skinnedNormal);
+    vNormal = normalize(transpose(inverse(mat3(push.model))) * skinnedNormal);
     vWorldPos = worldPos.xyz;
 }

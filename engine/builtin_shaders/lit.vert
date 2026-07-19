@@ -32,7 +32,7 @@ void main() {
     vColor = push.color;
     vUV = inUV;
     
-    // Transform normal to world space (handles rotation/scale part)
-    vNormal = normalize(mat3(push.model) * inNormal);
+    // Transform normal to world space (handles rotation/scale part correctly under non-uniform scaling)
+    vNormal = normalize(transpose(inverse(mat3(push.model))) * inNormal);
     vWorldPos = worldPos.xyz;
 }

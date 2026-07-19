@@ -66,8 +66,8 @@ void main() {
     vec3 N = getNormalFromMap();
     vec3 V = normalize(cam.camPos.xyz - vWorldPos);
 
-    // Dynamic light calculations from CameraUBO
-    vec3 lightDir = normalize(cam.lightDir.xyz);
+    // Dynamic light calculations from CameraUBO (negated to point towards the light source)
+    vec3 lightDir = normalize(-cam.lightDir.xyz);
     vec3 lightCol = cam.lightColor.rgb * cam.lightColor.a;
     vec3 H = normalize(lightDir + V);
 
