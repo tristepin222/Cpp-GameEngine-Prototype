@@ -85,6 +85,7 @@ endif()
 target_include_directories(engine PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../sandbox_game/scripts/public
     ${cgltf_SOURCE_DIR}
     ${stb_SOURCE_DIR}
     ${miniaudio_SOURCE_DIR}

@@ -183,18 +183,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Also scan the engine public include directory for PhysgunScript.hpp if we are running from sandbox_game
-    try {
-        fs::path engineInclude = fs::path(inputDir) / "../../engine/include/ecs/components";
-        if (fs::exists(engineInclude)) {
-            for (const auto& entry : fs::directory_iterator(engineInclude)) {
-                if (entry.is_regular_file() && entry.path().filename() == "PhysgunScript.hpp") {
-                    parseHeader(entry.path(), inputDir, components, systems);
-                }
-            }
-        }
-    } catch (...) {}
-
     // Open output file
     std::ofstream out(outputFile);
     if (!out.is_open()) {

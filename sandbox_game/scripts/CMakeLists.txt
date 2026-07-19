@@ -15,15 +15,18 @@ else()
     set(REFLECTION_GENERATOR_EXE "${CMAKE_CURRENT_SOURCE_DIR}/../../sdk/bin/reflection_generator")
 endif()
 
+set(SCRIPT_PUBLIC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/public")
+set(SCRIPT_PRIVATE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/private")
+
 set(SCRIPT_SOURCES
-    src/PhysgunScript.cpp
+    private/PhysgunScript.cpp
 )
 
 # Set up custom command to compile/generate script reflection boilerplate code automatically
 add_custom_command(
     OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/src/generated_reflection.cpp"
-    COMMAND "${REFLECTION_GENERATOR_EXE}" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src/generated_reflection.cpp"
-    DEPENDS ${SCRIPT_SOURCES}
+    COMMAND "${REFLECTION_GENERATOR_EXE}" "${SCRIPT_PUBLIC_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src/generated_reflection.cpp"
+    DEPENDS ${SCRIPT_SOURCES} "${SCRIPT_PUBLIC_DIR}/ecs/components/PhysgunScript.hpp"
     COMMENT "[Reflection Generator] Parsing annotations and generating registration code..."
 )
 
@@ -34,6 +37,8 @@ add_library(physgun_script SHARED ${SCRIPT_SOURCES})
 
 # Include cinemachine plugin headers so we can access CinemachineVirtualCamera properties
 target_include_directories(physgun_script PRIVATE
+    "${SCRIPT_PUBLIC_DIR}"
+    "${SCRIPT_PRIVATE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../plugins/cinemachine/include"
 )
 
