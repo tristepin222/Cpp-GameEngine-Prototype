@@ -1,0 +1,795 @@
+#include "editor/EditorUI.hpp"
+#include "editor/EditorUIInternal.hpp"
+#include "ecs/Registry.hpp"
+#include "ecs/components/Transform.hpp"
+#include "ecs/components/Material.hpp"
+#include "ecs/components/Mesh.hpp"
+#include "ecs/components/Name.hpp"
+#include "ecs/components/Camera.hpp"
+#include "ecs/components/Grid.hpp"
+#include "ecs/components/Skeleton.hpp"
+#include "ecs/components/Animator.hpp"
+#include "ecs/components/Hierarchy.hpp"
+#include "ecs/components/EditorCamera.hpp"
+#include "ecs/components/AnimationController.hpp"
+#include "ecs/components/IKSolver.hpp"
+#include "ecs/components/Collider.hpp"
+#include "ecs/components/PhysgunScript.hpp"
+#include "ecs/components/RigidBody.hpp"
+#include "ecs/components/Tilemap.hpp"
+#include "renderer/VulkanRenderer.hpp"
+
+#include <GLFW/glfw3.h>
+#include <imgui.h>
+#include "ImGuizmo.h"
+#include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
+#include <cmath>
+#include <limits>
+
+using namespace ImGui;
+using namespace std;
+
+void EditorUI::drawGizmo()
+{
+    if (!hasSelection || editorMode.flyMode)
+        return;
+
+    Transform* transform = registry.get<Transform>(selectedEntity);
+    if (!transform)
+        return;
+
+    ImGuiIO& io = ImGui::GetIO();
+
+    ImGuizmo::BeginFrame();
+    ImGuizmo::Enable(true);
+    ImGuizmo::SetOrthographic(false);
+
+    // draw directly to background drawlist
+    ImGuizmo::SetDrawlist(ImGui::GetBackgroundDrawList());
+
+    ImGuizmo::SetRect(
+        0.0f,
+        0.0f,
+        io.DisplaySize.x,
+        io.DisplaySize.y
+    );
+
+    glm::mat4 view = renderer.getActiveCameraView();
+    glm::mat4 proj = renderer.getActiveCameraProjection();
+
+    proj[1][1] *= -1.0f; // Vulkan
+
+    glm::mat4 parentWorldMatrix = glm::mat4(1.0f);
+    bool hasParent = false;
+    if (auto* hierarchy = registry.get<HierarchyComponent>(selectedEntity)) {
+        if (hierarchy->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hierarchy->parent)) {
+            parentWorldMatrix = getEntityWorldMatrix(hierarchy->parent);
+            hasParent = true;
+        }
+    }
+
+    glm::mat4 worldMatrix = parentWorldMatrix * transform->matrix();
+
+    // Safety guard: do not invoke ImGuizmo if worldMatrix contains NaNs/Infs
+    bool hasNaN = false;
+    for (int col = 0; col < 4; ++col) {
+        for (int row = 0; row < 4; ++row) {
+            float val = worldMatrix[col][row];
+            if (std::isnan(val) || std::isinf(val)) {
+                hasNaN = true;
+                break;
+            }
+        }
+        if (hasNaN) break;
+    }
+
+    if (hasNaN) {
+        // Reset transform components to clean states to recover from NaN
+        transform->position = glm::vec3(0.0f);
+        transform->rotation = glm::vec3(0.0f);
+        transform->scale = glm::vec3(1.0f);
+        worldMatrix = parentWorldMatrix * transform->matrix();
+    }
+
+    ImGuizmo::Manipulate(
+        &view[0][0],
+        &proj[0][0],
+        ImGuizmo::TRANSLATE,
+        ImGuizmo::LOCAL,
+        &worldMatrix[0][0]
+    );
+
+    if (ImGuizmo::IsUsing()) {
+        bool worldNaN = false;
+        for (int col = 0; col < 4; ++col) {
+            for (int row = 0; row < 4; ++row) {
+                float val = worldMatrix[col][row];
+                if (std::isnan(val) || std::isinf(val)) {
+                    worldNaN = true;
+                    break;
+                }
+            }
+            if (worldNaN) break;
+        }
+
+        if (!worldNaN) {
+            glm::mat4 newLocalMatrix = worldMatrix;
+            if (hasParent) {
+                float det = glm::determinant(parentWorldMatrix);
+                if (std::abs(det) > 1e-5f) {
+                    newLocalMatrix = glm::inverse(parentWorldMatrix) * worldMatrix;
+                }
+            }
+            decomposeMatrixToTransform(newLocalMatrix, *transform);
+        }
+
+        if (auto* rb = registry.get<RigidBodyComponent>(selectedEntity)) {
+            rb->velocity = glm::vec3(0.0f);
+            rb->force = glm::vec3(0.0f);
+        }
+    }
+}
+
+void EditorUI::decomposeMatrixToTransform(const glm::mat4& mat, Transform& t)
+{
+    // Safety check BEFORE calling ImGuizmo decomposition to prevent infinite loops in ImGuizmo
+    bool hasNaNOrInf = false;
+    for (int col = 0; col < 4; ++col) {
+        for (int row = 0; row < 4; ++row) {
+            float val = mat[col][row];
+            if (std::isnan(val) || std::isinf(val)) {
+                hasNaNOrInf = true;
+                break;
+            }
+        }
+        if (hasNaNOrInf) break;
+    }
+
+    if (hasNaNOrInf) {
+        t.position = glm::vec3(0.0f);
+        t.rotation = glm::vec3(0.0f);
+        t.scale = glm::vec3(1.0f);
+        return;
+    }
+
+    float matrixTranslation[3];
+    float matrixRotation[3];
+    float matrixScale[3];
+
+    ImGuizmo::DecomposeMatrixToComponents(
+        &mat[0][0],
+        matrixTranslation,
+        matrixRotation,
+        matrixScale
+    );
+
+    t.position = glm::vec3(
+        matrixTranslation[0],
+        matrixTranslation[1],
+        matrixTranslation[2]
+    );
+
+    // Keep rotation and scale unchanged to prevent decomposition drift/erratic rotation when using translation gizmo
+    /*
+    t.rotation = glm::vec3(
+        matrixRotation[0],
+        matrixRotation[1],
+        matrixRotation[2]
+    );
+
+    t.scale = glm::vec3(
+        matrixScale[0],
+        matrixScale[1],
+        matrixScale[2]
+    );
+    */
+
+    // Safety guards to prevent NaN/Inf propagation to the C++ transform state
+    if (std::isnan(t.position.x) || std::isinf(t.position.x) ||
+        std::isnan(t.position.y) || std::isinf(t.position.y) ||
+        std::isnan(t.position.z) || std::isinf(t.position.z)) {
+        t.position = glm::vec3(0.0f);
+    }
+    if (std::isnan(t.rotation.x) || std::isinf(t.rotation.x) ||
+        std::isnan(t.rotation.y) || std::isinf(t.rotation.y) ||
+        std::isnan(t.rotation.z) || std::isinf(t.rotation.z)) {
+        t.rotation = glm::vec3(0.0f);
+    }
+    if (std::isnan(t.scale.x) || std::isinf(t.scale.x) || t.scale.x < 1e-4f ||
+        std::isnan(t.scale.y) || std::isinf(t.scale.y) || t.scale.y < 1e-4f ||
+        std::isnan(t.scale.z) || std::isinf(t.scale.z) || t.scale.z < 1e-4f) {
+        t.scale = glm::vec3(1.0f);
+    }
+}
+
+void EditorUI::handleViewportPicking() {
+    if (ImGuizmo::IsOver() || ImGuizmo::IsUsing())
+        return;
+
+    if (!window || editorMode.flyMode) {
+        previousLeftMouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+        return;
+    }
+
+    // Brush painting / erasing intercept
+    if (s_brushModeActive && s_brushTileId >= 0) {
+        Entity paintTarget = s_brushTilemapEntity;
+        if (!registry.isValid(paintTarget) || !registry.has<Engine::TilemapComponent>(paintTarget)) {
+            for (auto [entity, tm] : registry.view<Engine::TilemapComponent>()) {
+                paintTarget = entity;
+                s_brushTilemapEntity = entity; // Sync back to the editor state
+                break;
+            }
+        }
+
+        if (registry.isValid(paintTarget)) {
+            const bool leftMouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+            const bool rightMouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+
+            if ((leftMouseDown || rightMouseDown) && !ImGui::GetIO().WantCaptureMouse) {
+                if (renderer.hasActiveCamera()) {
+                    int width = 0, height = 0;
+                    glfwGetWindowSize(window, &width, &height);
+                    if (width > 0 && height > 0) {
+                        double mouseX = 0.0, mouseY = 0.0;
+                        glfwGetCursorPos(window, &mouseX, &mouseY);
+
+                        const float normalizedX = static_cast<float>((2.0 * mouseX) / static_cast<double>(width) - 1.0);
+                        const float normalizedY = static_cast<float>((2.0 * mouseY) / static_cast<double>(height) - 1.0); // Vulkan Correct Y
+
+                        const glm::mat4 inverseViewProjection = glm::inverse(renderer.getActiveCameraViewProj());
+                        const glm::vec4 nearClip = inverseViewProjection * glm::vec4(normalizedX, normalizedY, -1.0f, 1.0f);
+                        const glm::vec4 farClip = inverseViewProjection * glm::vec4(normalizedX, normalizedY, 1.0f, 1.0f);
+
+                        if (glm::abs(nearClip.w) >= 0.0001f && glm::abs(farClip.w) >= 0.0001f) {
+                            const glm::vec3 nearPoint = glm::vec3(nearClip) / nearClip.w;
+                            const glm::vec3 farPoint = glm::vec3(farClip) / farClip.w;
+                            const glm::vec3 rayOrigin = nearPoint;
+                            const glm::vec3 rayDirection = glm::normalize(farPoint - nearPoint);
+
+                            auto* tm = registry.get<Engine::TilemapComponent>(paintTarget);
+                            auto* transform = registry.get<Transform>(paintTarget);
+                            if (tm && transform) {
+                                if (tm->width <= 0 || tm->height <= 0 || tm->tileSize <= 0.0001f) {
+                                    previousLeftMouseDown = leftMouseDown;
+                                    return;
+                                }
+
+                                size_t expectedSize = static_cast<size_t>(tm->width) * tm->height;
+                                if (tm->tiles.size() != expectedSize) {
+                                    tm->tiles.resize(expectedSize, -1);
+                                    tm->isDirty = true;
+                                }
+
+                                glm::mat4 modelMatrix = transform->matrix();
+                                glm::mat4 invModel = glm::inverse(modelMatrix);
+
+                                glm::vec4 localOrigin4 = invModel * glm::vec4(rayOrigin, 1.0f);
+                                glm::vec3 localOrigin = glm::vec3(localOrigin4) / localOrigin4.w;
+                                glm::vec3 localDir = glm::normalize(glm::vec3(invModel * glm::vec4(rayDirection, 0.0f)));
+
+                                if (glm::abs(localDir.z) > 0.0001f) {
+                                    float t = -localOrigin.z / localDir.z;
+                                    if (t >= 0.0f) {
+                                        glm::vec3 hitLocal = localOrigin + t * localDir;
+                                        int cellX = static_cast<int>(std::floor(hitLocal.x / tm->tileSize));
+                                        int cellY = static_cast<int>(std::floor(hitLocal.y / tm->tileSize));
+
+                                        if (cellX >= 0 && cellX < tm->width && cellY >= 0 && cellY < tm->height) {
+                                            int idx = cellY * tm->width + cellX;
+                                            if (idx >= 0 && idx < static_cast<int>(tm->tiles.size())) {
+                                                int newValue = leftMouseDown ? s_brushTileId : -1;
+                                                if (tm->tiles[idx] != newValue) {
+                                                    tm->tiles[idx] = newValue;
+                                                    tm->isDirty = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                previousLeftMouseDown = leftMouseDown;
+                return;
+            }
+        }
+    }
+
+    const bool leftMouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+    const bool clickStarted = leftMouseDown && !previousLeftMouseDown;
+    previousLeftMouseDown = leftMouseDown;
+
+    if (!clickStarted)
+        return;
+
+    if (GetIO().WantCaptureMouse)
+        return;
+
+    if (!renderer.hasActiveCamera()) {
+        statusMessage = "No active camera available for picking.";
+        lastPickResult = statusMessage;
+        lastPickNearestEntityName = "None";
+        lastPickNearestDistance = -1.0f;
+        return;
+    }
+
+    int width = 0;
+    int height = 0;
+    glfwGetWindowSize(window, &width, &height);
+    if (width <= 0 || height <= 0) {
+        lastPickResult = "Viewport size is invalid for picking.";
+        lastPickNearestEntityName = "None";
+        lastPickNearestDistance = -1.0f;
+        return;
+    }
+
+    double mouseX = 0.0;
+    double mouseY = 0.0;
+    glfwGetCursorPos(window, &mouseX, &mouseY);
+
+    const float normalizedX = static_cast<float>((2.0 * mouseX) / static_cast<double>(width) - 1.0);
+    const float normalizedY = static_cast<float>((2.0 * mouseY) / static_cast<double>(height) - 1.0); // Vulkan Correct Y
+
+    const glm::mat4 inverseViewProjection = glm::inverse(renderer.getActiveCameraViewProj());
+    const glm::vec4 nearClip = inverseViewProjection * glm::vec4(normalizedX, normalizedY, -1.0f, 1.0f);
+    const glm::vec4 farClip = inverseViewProjection * glm::vec4(normalizedX, normalizedY, 1.0f, 1.0f);
+    if (glm::abs(nearClip.w) < 0.0001f || glm::abs(farClip.w) < 0.0001f) {
+        statusMessage = "Viewport picking could not unproject the mouse ray.";
+        lastPickResult = statusMessage;
+        lastPickNearestEntityName = "None";
+        lastPickNearestDistance = -1.0f;
+        return;
+    }
+
+    const glm::vec3 nearPoint = glm::vec3(nearClip) / nearClip.w;
+    const glm::vec3 farPoint = glm::vec3(farClip) / farClip.w;
+    const glm::vec3 rayDirection = glm::normalize(farPoint - nearPoint);
+    const glm::vec3 rayOrigin = nearPoint;
+    lastPickRayOrigin = rayOrigin;
+    lastPickRayDirection = rayDirection;
+
+    Entity hitEntity{};
+    Name* hitName = nullptr;
+    float nearestHitDistance = std::numeric_limits<float>::max();
+    lastPickNearestEntityName = "None";
+    lastPickNearestDistance = -1.0f;
+
+    for (auto [entity, name, transform, mesh] : registry.view<Name, Transform, Mesh>()) {
+        if (mesh.vertices.empty() || registry.has<Grid>(entity)) {
+            continue;
+        }
+
+        glm::vec3 worldMin(std::numeric_limits<float>::max());
+        glm::vec3 worldMax(std::numeric_limits<float>::lowest());
+        const glm::mat4 model = transform.matrix();
+
+        for (const Vertex& vertex : mesh.vertices) {
+            const glm::vec3 worldPosition = glm::vec3(model * glm::vec4(vertex.position, 1.0f));
+            worldMin = glm::min(worldMin, worldPosition);
+            worldMax = glm::max(worldMax, worldPosition);
+        }
+
+        // --- Bounding sphere from AABB ---
+        glm::vec3 center = (worldMin + worldMax) * 0.5f;
+        float radius = glm::length(worldMax - center);
+        float distanceToCamera = glm::length(center - rayOrigin);
+        radius += distanceToCamera * 0.06f;
+        radius *= 1.6f;
+
+        // --- Ray-sphere intersection ---
+        glm::vec3 oc = rayOrigin - center;
+
+        float a = glm::dot(rayDirection, rayDirection);
+        float b = 2.0f * glm::dot(oc, rayDirection);
+        float c = glm::dot(oc, oc) - radius * radius;
+
+        float discriminant = b * b - 4.0f * a * c;
+
+        if (discriminant < 0.0f) {
+            continue;
+        }
+
+        // nearest intersection
+        float sqrtD = sqrt(discriminant);
+        float t0 = (-b - sqrtD) / (2.0f * a);
+        float t1 = (-b + sqrtD) / (2.0f * a);
+
+        // pick closest valid hit
+        float hitDistance = (t0 > 0.0f) ? t0 : t1;
+
+        if (hitDistance > 0.0f && hitDistance < nearestHitDistance) {
+            nearestHitDistance = hitDistance;
+            hitEntity = entity;
+            hitName = &name;
+            lastPickNearestEntityName = name.value;
+            lastPickNearestDistance = hitDistance;
+        }
+    }
+
+    if (hitName) {
+        selectedEntity = hitEntity;
+        hasSelection = true;
+        renameBuffer = hitName->value;
+        statusMessage = "Selected " + hitName->value + " from viewport.";
+        lastPickResult = statusMessage;
+        return;
+    }
+
+    hasSelection = false;
+    selectedEntity = Entity();
+    renameBuffer.clear();
+    statusMessage = "Viewport selection cleared.";
+    lastPickResult = statusMessage;
+}
+
+glm::mat4 EditorUI::getEntityWorldMatrix(Entity entity, int depth) {
+    if (depth > 20) return glm::mat4(1.0f);
+    
+    auto* transform = registry.get<Transform>(entity);
+    glm::mat4 localMat = transform ? transform->matrix() : glm::mat4(1.0f);
+
+    if (auto* hierarchy = registry.get<HierarchyComponent>(entity)) {
+        if (hierarchy->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hierarchy->parent)) {
+            return getEntityWorldMatrix(hierarchy->parent, depth + 1) * localMat;
+        }
+    }
+    return localMat;
+}
+
+void EditorUI::drawColliderDebugOverlay() {
+    if (!showColliders) return;
+
+    ImGuiIO& io = ImGui::GetIO();
+    glm::mat4 viewProj = renderer.getActiveCameraViewProj();
+
+    auto projectToScreen = [&](const glm::vec3& worldPos, ImVec2& screenPos) -> bool {
+        glm::vec4 clipPos = viewProj * glm::vec4(worldPos, 1.0f);
+        if (clipPos.w < 0.0001f) return false;
+        glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
+        screenPos.x = (ndc.x + 1.0f) * 0.5f * io.DisplaySize.x;
+        screenPos.y = (ndc.y + 1.0f) * 0.5f * io.DisplaySize.y;
+        return true;
+    };
+
+    ImDrawList* drawList = ImGui::GetBackgroundDrawList();
+
+    for (auto [entity, transform, col] : registry.view<Transform, ColliderComponent>()) {
+        glm::mat4 worldM = getEntityWorldMatrix(entity);
+        ImU32 color = (hasSelection && entity == selectedEntity) ? ImColor(0, 255, 0, 255) : ImColor(255, 120, 0, 200);
+
+        if (col.shape == ColliderShape::Sphere) {
+            const int segments = 24;
+            float radius = col.radius;
+            glm::vec3 center = glm::vec3(worldM * glm::vec4(col.offset, 1.0f));
+
+            auto drawRing = [&](const glm::vec3& u, const glm::vec3& v) {
+                ImVec2 prevScreen;
+                bool prevValid = false;
+                for (int step = 0; step <= segments; ++step) {
+                    float angle = (float)step / (float)segments * 2.0f * 3.14159265f;
+                    glm::vec3 offset = radius * (std::cos(angle) * u + std::sin(angle) * v);
+                    ImVec2 currScreen;
+                    if (projectToScreen(center + offset, currScreen)) {
+                        if (prevValid) {
+                            drawList->AddLine(prevScreen, currScreen, color, 1.5f);
+                        }
+                        prevScreen = currScreen;
+                        prevValid = true;
+                    } else {
+                        prevValid = false;
+                    }
+                }
+            };
+
+            glm::vec3 axisX(1.0f, 0.0f, 0.0f);
+            glm::vec3 axisY(0.0f, 1.0f, 0.0f);
+            glm::vec3 axisZ(0.0f, 0.0f, 1.0f);
+
+            drawRing(axisX, axisY);
+            drawRing(axisX, axisZ);
+            drawRing(axisY, axisZ);
+
+        } else if (col.shape == ColliderShape::AABB) {
+            glm::vec3 center = glm::vec3(worldM * glm::vec4(col.offset, 1.0f));
+            glm::vec3 worldCorners[8] = {
+                center + col.extents * glm::vec3(-1, -1, -1),
+                center + col.extents * glm::vec3(1, -1, -1),
+                center + col.extents * glm::vec3(1, 1, -1),
+                center + col.extents * glm::vec3(-1, 1, -1),
+                center + col.extents * glm::vec3(-1, -1, 1),
+                center + col.extents * glm::vec3(1, -1, 1),
+                center + col.extents * glm::vec3(1, 1, 1),
+                center + col.extents * glm::vec3(-1, 1, 1)
+            };
+
+            ImVec2 screenCorners[8];
+            bool valid[8];
+
+            for (int k = 0; k < 8; ++k) {
+                valid[k] = projectToScreen(worldCorners[k], screenCorners[k]);
+            }
+
+            auto drawEdge = [&](int i, int j) {
+                if (valid[i] && valid[j]) {
+                    drawList->AddLine(screenCorners[i], screenCorners[j], color, 1.5f);
+                }
+            };
+
+            drawEdge(0, 1); drawEdge(1, 2); drawEdge(2, 3); drawEdge(3, 0);
+            drawEdge(4, 5); drawEdge(5, 6); drawEdge(6, 7); drawEdge(7, 4);
+            drawEdge(0, 4); drawEdge(1, 5); drawEdge(2, 6); drawEdge(3, 7);
+
+        } else if (col.shape == ColliderShape::OBB) {
+            glm::vec3 localCorners[8] = {
+                col.offset + col.extents * glm::vec3(-1, -1, -1),
+                col.offset + col.extents * glm::vec3(1, -1, -1),
+                col.offset + col.extents * glm::vec3(1, 1, -1),
+                col.offset + col.extents * glm::vec3(-1, 1, -1),
+                col.offset + col.extents * glm::vec3(-1, -1, 1),
+                col.offset + col.extents * glm::vec3(1, -1, 1),
+                col.offset + col.extents * glm::vec3(1, 1, 1),
+                col.offset + col.extents * glm::vec3(-1, 1, 1)
+            };
+
+            glm::vec3 worldCorners[8];
+            ImVec2 screenCorners[8];
+            bool valid[8];
+
+            for (int k = 0; k < 8; ++k) {
+                worldCorners[k] = glm::vec3(worldM * glm::vec4(localCorners[k], 1.0f));
+                valid[k] = projectToScreen(worldCorners[k], screenCorners[k]);
+            }
+
+            auto drawEdge = [&](int i, int j) {
+                if (valid[i] && valid[j]) {
+                    drawList->AddLine(screenCorners[i], screenCorners[j], color, 1.5f);
+                }
+            };
+
+            drawEdge(0, 1); drawEdge(1, 2); drawEdge(2, 3); drawEdge(3, 0);
+            drawEdge(4, 5); drawEdge(5, 6); drawEdge(6, 7); drawEdge(7, 4);
+            drawEdge(0, 4); drawEdge(1, 5); drawEdge(2, 6); drawEdge(3, 7);
+
+        } else if (col.shape == ColliderShape::Capsule) {
+            const int segments = 16;
+            float radius = col.radius;
+            float halfHeight = std::max(0.0f, (col.height - 2.0f * radius) * 0.5f);
+
+            glm::vec3 bottomCenter = glm::vec3(worldM * glm::vec4(col.offset - glm::vec3(0.0f, halfHeight, 0.0f), 1.0f));
+            glm::vec3 topCenter = glm::vec3(worldM * glm::vec4(col.offset + glm::vec3(0.0f, halfHeight, 0.0f), 1.0f));
+
+            // Extract world-space axes from worldM to draw rings aligned with the entity's orientation
+            glm::vec3 axisX = glm::normalize(glm::vec3(worldM[0]));
+            glm::vec3 axisY = glm::normalize(glm::vec3(worldM[1]));
+            glm::vec3 axisZ = glm::normalize(glm::vec3(worldM[2]));
+
+            auto drawRing = [&](const glm::vec3& center, const glm::vec3& u, const glm::vec3& v) {
+                ImVec2 prevScreen;
+                bool prevValid = false;
+                for (int step = 0; step <= segments; ++step) {
+                    float angle = (float)step / (float)segments * 2.0f * 3.14159265f;
+                    glm::vec3 offset = radius * (std::cos(angle) * u + std::sin(angle) * v);
+                    ImVec2 currScreen;
+                    if (projectToScreen(center + offset, currScreen)) {
+                        if (prevValid) {
+                            drawList->AddLine(prevScreen, currScreen, color, 1.5f);
+                        }
+                        prevScreen = currScreen;
+                        prevValid = true;
+                    } else {
+                        prevValid = false;
+                    }
+                }
+            };
+
+            // Draw horizontal rings at the top and bottom hemispherical centers
+            drawRing(bottomCenter, axisX, axisZ);
+            drawRing(topCenter, axisX, axisZ);
+
+            // Draw hemispherical dome wireframes (vertical arcs)
+            auto drawDome = [&](const glm::vec3& center, const glm::vec3& u, const glm::vec3& v, bool isTop) {
+                ImVec2 prevScreen;
+                bool prevValid = false;
+                for (int step = 0; step <= segments / 2; ++step) {
+                    float angle = (float)step / (float)(segments / 2) * 3.14159265f * 0.5f;
+                    if (!isTop) angle = -angle;
+                    glm::vec3 offset = radius * (std::cos(angle) * u + std::sin(angle) * v);
+                    ImVec2 currScreen;
+                    if (projectToScreen(center + offset, currScreen)) {
+                        if (prevValid) {
+                            drawList->AddLine(prevScreen, currScreen, color, 1.5f);
+                        }
+                        prevScreen = currScreen;
+                        prevValid = true;
+                    } else {
+                        prevValid = false;
+                    }
+                }
+            };
+
+            // Draw vertical dome arcs (XY and ZY planes)
+            drawDome(topCenter, axisX, axisY, true);
+            drawDome(topCenter, axisZ, axisY, true);
+            drawDome(bottomCenter, axisX, axisY, false);
+            drawDome(bottomCenter, axisZ, axisY, false);
+
+            // Connect top and bottom hemispherical rings with 4 vertical lines (along Y axis)
+            auto drawLine = [&](const glm::vec3& localOffset) {
+                glm::vec3 worldOffset = localOffset.x * axisX + localOffset.y * axisY + localOffset.z * axisZ;
+                ImVec2 p1, p2;
+                if (projectToScreen(bottomCenter + worldOffset, p1) && projectToScreen(topCenter + worldOffset, p2)) {
+                    drawList->AddLine(p1, p2, color, 1.5f);
+                }
+            };
+
+            drawLine(glm::vec3(radius, 0.0f, 0.0f));
+            drawLine(glm::vec3(-radius, 0.0f, 0.0f));
+            drawLine(glm::vec3(0.0f, 0.0f, radius));
+            drawLine(glm::vec3(0.0f, 0.0f, -radius));
+        }
+    }
+}
+
+void EditorUI::drawPhysgunDebugOverlay() {
+    if (!editorMode.isPlaying) return;
+
+    ImGuiIO& io = ImGui::GetIO();
+    glm::mat4 viewProj = renderer.getActiveCameraViewProj();
+
+    auto projectToScreen = [&](const glm::vec3& worldPos, ImVec2& screenPos) -> bool {
+        glm::vec4 clipPos = viewProj * glm::vec4(worldPos, 1.0f);
+        if (clipPos.w < 0.0001f) return false;
+        glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
+        screenPos.x = (ndc.x + 1.0f) * 0.5f * io.DisplaySize.x;
+        screenPos.y = (ndc.y + 1.0f) * 0.5f * io.DisplaySize.y;
+        return true;
+    };
+
+    ImDrawList* drawList = ImGui::GetBackgroundDrawList();
+
+    for (auto [ent, script] : registry.view<PhysgunScript>()) {
+        if (!script.debugShowRay) continue;
+
+        glm::vec3 start = script.rayOrigin;
+        float lineDist = script.isHolding ? script.currentHoldDistance : 40.0f;
+        glm::vec3 end = start + script.rayDirection * lineDist;
+
+        ImVec2 pStart, pEnd;
+        if (projectToScreen(start, pStart) && projectToScreen(end, pEnd)) {
+            // Draw glowing cyan line if not holding, or orange if holding
+            ImU32 color = script.isHolding ? ImColor(255, 69, 0, 255) : ImColor(0, 255, 255, 255);
+            drawList->AddLine(pStart, pEnd, color, 3.0f);
+            drawList->AddCircleFilled(pEnd, 6.0f, color);
+            drawList->AddCircle(pEnd, 10.0f, ImColor(255, 255, 255, 180), 0, 1.5f);
+        }
+    }
+}
+
+void EditorUI::drawTilemapGridOverlay() {
+    if (!s_openTilesetEditorWindow && !s_brushModeActive) return;
+
+    Entity targetEntity = s_brushTilemapEntity;
+    if (!registry.isValid(targetEntity) || !registry.has<Engine::TilemapComponent>(targetEntity)) {
+        for (auto [entity, tm] : registry.view<Engine::TilemapComponent>()) {
+            targetEntity = entity;
+            break;
+        }
+    }
+
+    if (!registry.isValid(targetEntity)) return;
+
+    auto* tm = registry.get<Engine::TilemapComponent>(targetEntity);
+    auto* transform = registry.get<Transform>(targetEntity);
+    if (!tm || !transform) return;
+
+    ImGuiIO& io = ImGui::GetIO();
+    glm::mat4 viewProj = renderer.getActiveCameraViewProj();
+
+    auto projectToScreen = [&](const glm::vec3& worldPos, ImVec2& screenPos) -> bool {
+        glm::vec4 clipPos = viewProj * glm::vec4(worldPos, 1.0f);
+        if (clipPos.w < 0.0001f) return false;
+        glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
+        screenPos.x = (ndc.x + 1.0f) * 0.5f * io.DisplaySize.x;
+        screenPos.y = (ndc.y + 1.0f) * 0.5f * io.DisplaySize.y;
+        return true;
+    };
+
+    ImDrawList* drawList = ImGui::GetBackgroundDrawList();
+    glm::mat4 modelMatrix = transform->matrix();
+
+    float wSpace = tm->width * tm->tileSize;
+    float hSpace = tm->height * tm->tileSize;
+
+    ImU32 lineCol = ImColor(0, 191, 255, 120);
+    ImU32 borderCol = ImColor(255, 215, 0, 220);
+
+    for (int c = 0; c <= tm->width; ++c) {
+        float x = c * tm->tileSize;
+        glm::vec3 localStart(x, 0.0f, 0.0f);
+        glm::vec3 localEnd(x, hSpace, 0.0f);
+        glm::vec3 worldStart(modelMatrix * glm::vec4(localStart, 1.0f));
+        glm::vec3 worldEnd(modelMatrix * glm::vec4(localEnd, 1.0f));
+
+        ImVec2 screenStart, screenEnd;
+        if (projectToScreen(worldStart, screenStart) && projectToScreen(worldEnd, screenEnd)) {
+            bool isBorder = (c == 0 || c == tm->width);
+            drawList->AddLine(screenStart, screenEnd, isBorder ? borderCol : lineCol, isBorder ? 2.5f : 1.0f);
+        }
+    }
+
+    for (int r = 0; r <= tm->height; ++r) {
+        float y = r * tm->tileSize;
+        glm::vec3 localStart(0.0f, y, 0.0f);
+        glm::vec3 localEnd(wSpace, y, 0.0f);
+        glm::vec3 worldStart(modelMatrix * glm::vec4(localStart, 1.0f));
+        glm::vec3 worldEnd(modelMatrix * glm::vec4(localEnd, 1.0f));
+
+        ImVec2 screenStart, screenEnd;
+        if (projectToScreen(worldStart, screenStart) && projectToScreen(worldEnd, screenEnd)) {
+            bool isBorder = (r == 0 || r == tm->height);
+            drawList->AddLine(screenStart, screenEnd, isBorder ? borderCol : lineCol, isBorder ? 2.5f : 1.0f);
+        }
+    }
+
+    if (s_brushModeActive && s_brushTileId >= 0 && !io.WantCaptureMouse) {
+        int w = 0, h = 0;
+        glfwGetWindowSize(window, &w, &h);
+        if (w > 0 && h > 0) {
+            double mouseX = 0.0, mouseY = 0.0;
+            glfwGetCursorPos(window, &mouseX, &mouseY);
+
+            const float normalizedX = static_cast<float>((2.0 * mouseX) / static_cast<double>(w) - 1.0);
+            const float normalizedY = static_cast<float>((2.0 * mouseY) / static_cast<double>(h) - 1.0); // Vulkan Correct Y
+
+            const glm::mat4 inverseViewProjection = glm::inverse(renderer.getActiveCameraViewProj());
+            const glm::vec4 nearClip = inverseViewProjection * glm::vec4(normalizedX, normalizedY, -1.0f, 1.0f);
+            const glm::vec4 farClip = inverseViewProjection * glm::vec4(normalizedX, normalizedY, 1.0f, 1.0f);
+
+            if (glm::abs(nearClip.w) >= 0.0001f && glm::abs(farClip.w) >= 0.0001f) {
+                const glm::vec3 nearPoint = glm::vec3(nearClip) / nearClip.w;
+                const glm::vec3 farPoint = glm::vec3(farClip) / farClip.w;
+                const glm::vec3 rayOrigin = nearPoint;
+                const glm::vec3 rayDirection = glm::normalize(farPoint - nearPoint);
+
+                glm::mat4 invModel = glm::inverse(modelMatrix);
+                glm::vec4 localOrigin4 = invModel * glm::vec4(rayOrigin, 1.0f);
+                glm::vec3 localOrigin = glm::vec3(localOrigin4) / localOrigin4.w;
+                glm::vec3 localDir = glm::normalize(glm::vec3(invModel * glm::vec4(rayDirection, 0.0f)));
+
+                if (glm::abs(localDir.z) > 0.0001f) {
+                    float t = -localOrigin.z / localDir.z;
+                    if (t >= 0.0f) {
+                        glm::vec3 hitLocal = localOrigin + t * localDir;
+                        int cellX = static_cast<int>(std::floor(hitLocal.x / tm->tileSize));
+                        int cellY = static_cast<int>(std::floor(hitLocal.y / tm->tileSize));
+
+                        if (cellX >= 0 && cellX < tm->width && cellY >= 0 && cellY < tm->height) {
+                            float ts = tm->tileSize;
+                            glm::vec3 corners[4] = {
+                                glm::vec3(cellX * ts, cellY * ts, 0.001f),
+                                glm::vec3((cellX + 1) * ts, cellY * ts, 0.001f),
+                                glm::vec3((cellX + 1) * ts, (cellY + 1) * ts, 0.001f),
+                                glm::vec3(cellX * ts, (cellY + 1) * ts, 0.001f)
+                            };
+
+                            ImVec2 sc[4];
+                            bool allValid = true;
+                            for (int i = 0; i < 4; ++i) {
+                                allValid &= projectToScreen(glm::vec3(modelMatrix * glm::vec4(corners[i], 1.0f)), sc[i]);
+                            }
+
+                            if (allValid) {
+                                drawList->AddQuad(sc[0], sc[1], sc[2], sc[3], ImColor(255, 255, 255, 255), 2.0f);
+                                drawList->AddQuadFilled(sc[0], sc[1], sc[2], sc[3], ImColor(255, 255, 255, 40));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
