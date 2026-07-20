@@ -1,8 +1,25 @@
 #pragma once
-#include <string>
-#include <vector>
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
+#include "meta/ComponentReflection.hpp"
+
+/**
+ * @struct PropertyKeyframe
+ * @brief Keyframe storing a reflected field value (up to 4 floats, e.g. float, bool, vec2, vec3, vec4) at a specific timestamp.
+ */
+struct PropertyKeyframe {
+    float time = 0.0f;
+    glm::vec4 value = glm::vec4(0.0f);
+};
+
+/**
+ * @struct PropertyChannel
+ * @brief Tracks keyframe sequences affecting a specific reflected component field.
+ */
+struct PropertyChannel {
+    std::string componentName;
+    std::string fieldName;
+    Engine::FieldType type;
+    std::vector<PropertyKeyframe> keys;
+};
 
 /**
  * @struct Keyframe
@@ -54,6 +71,8 @@ struct AnimationClip {
     float duration = 0.0f;
     /** @brief Bone channels mapping keyframe states. */
     std::vector<AnimationChannel> channels;
+    /** @brief Reflected component field channels. */
+    std::vector<PropertyChannel> propertyChannels;
 };
 
 /**

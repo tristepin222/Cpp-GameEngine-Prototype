@@ -1434,7 +1434,7 @@ bool ResourceManager::saveBinarySkeletonAndAnimations(const std::string& path, c
 
     char magic[4] = {'A', 'N', 'I', 'M'};
     out.write(magic, 4);
-    uint32_t version = 1;
+    uint32_t version = 2;
     out.write(reinterpret_cast<const char*>(&version), sizeof(version));
 
     uint32_t jointCount = static_cast<uint32_t>(skeleton.joints.size());
@@ -1492,6 +1492,33 @@ bool ResourceManager::saveBinarySkeletonAndAnimations(const std::string& path, c
                 out.write(reinterpret_cast<const char*>(&key.value[0]), sizeof(glm::vec3));
             }
         }
+
+        // Write reflected property channels (version >= 2)
+        uint32_t propertyChannelCount = static_cast<uint32_t>(clip.propertyChannels.size());
+        out.write(reinterpret_cast<const char*>(&propertyChannelCount), sizeof(propertyChannelCount));
+        for (const auto& channel : clip.propertyChannels) {
+            uint32_t compNameLen = static_cast<uint32_t>(channel.componentName.size());
+            out.write(reinterpret_cast<const char*>(&compNameLen), sizeof(compNameLen));
+            if (compNameLen > 0) {
+                out.write(channel.componentName.data(), compNameLen);
+            }
+
+            uint32_t fieldNameLen = static_cast<uint32_t>(channel.fieldName.size());
+            out.write(reinterpret_cast<const char*>(&fieldNameLen), sizeof(fieldNameLen));
+            if (fieldNameLen > 0) {
+                out.write(channel.fieldName.data(), fieldNameLen);
+            }
+
+            uint32_t typeInt = static_cast<uint32_t>(channel.type);
+            out.write(reinterpret_cast<const char*>(&typeInt), sizeof(typeInt));
+
+            uint32_t keyCount = static_cast<uint32_t>(channel.keys.size());
+            out.write(reinterpret_cast<const char*>(&keyCount), sizeof(keyCount));
+            for (const auto& key : channel.keys) {
+                out.write(reinterpret_cast<const char*>(&key.time), sizeof(key.time));
+                out.write(reinterpret_cast<const char*>(&key.value[0]), sizeof(glm::vec4));
+            }
+        }
     }
 
     out.close();
@@ -1515,7 +1542,7 @@ bool ResourceManager::loadBinarySkeletonAndAnimations(const std::string& path, S
 
     uint32_t version = 0;
     in.read(reinterpret_cast<char*>(&version), sizeof(version));
-    if (version != 1) {
+    if (version != 1 && version != 2) {
         std::cerr << "[ResourceManager] Unsupported version in binary animation file: " << version << std::endl;
         return false;
     }
@@ -1613,6 +1640,42 @@ bool ResourceManager::loadBinarySkeletonAndAnimations(const std::string& path, S
                 auto& key = channel.scaleKeys[k];
                 in.read(reinterpret_cast<char*>(&key.time), sizeof(key.time));
                 in.read(reinterpret_cast<char*>(&key.value[0]), sizeof(glm::vec3));
+            }
+        }
+
+        if (version >= 2) {
+            uint32_t propertyChannelCount = 0;
+            in.read(reinterpret_cast<char*>(&propertyChannelCount), sizeof(propertyChannelCount));
+            clip.propertyChannels.resize(propertyChannelCount);
+            for (uint32_t pch = 0; pch < propertyChannelCount; ++pch) {
+                auto& channel = clip.propertyChannels[pch];
+
+                uint32_t compNameLen = 0;
+                in.read(reinterpret_cast<char*>(&compNameLen), sizeof(compNameLen));
+                channel.componentName.resize(compNameLen);
+                if (compNameLen > 0) {
+                    in.read(&channel.componentName[0], compNameLen);
+                }
+
+                uint32_t fieldNameLen = 0;
+                in.read(reinterpret_cast<char*>(&fieldNameLen), sizeof(fieldNameLen));
+                channel.fieldName.resize(fieldNameLen);
+                if (fieldNameLen > 0) {
+                    in.read(&channel.fieldName[0], fieldNameLen);
+                }
+
+                uint32_t typeInt = 0;
+                in.read(reinterpret_cast<char*>(&typeInt), sizeof(typeInt));
+                channel.type = static_cast<Engine::FieldType>(typeInt);
+
+                uint32_t keyCount = 0;
+                in.read(reinterpret_cast<char*>(&keyCount), sizeof(keyCount));
+                channel.keys.resize(keyCount);
+                for (uint32_t k = 0; k < keyCount; ++k) {
+                    auto& key = channel.keys[k];
+                    in.read(reinterpret_cast<char*>(&key.time), sizeof(key.time));
+                    in.read(reinterpret_cast<char*>(&key.value[0]), sizeof(glm::vec4));
+                }
             }
         }
     }

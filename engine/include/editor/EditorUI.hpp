@@ -118,6 +118,7 @@ private:
      * @brief Renders the Tileset Editor window.
      */
     void drawTilesetEditorWindow();
+    void drawAnimationEditorWindow();
     /**
      * @brief Renders the Tilemap component inspector panel.
      */

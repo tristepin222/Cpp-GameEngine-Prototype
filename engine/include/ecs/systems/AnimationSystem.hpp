@@ -102,6 +102,22 @@ public:
                     updateEntityAnimation(entity, *skeleton, *animator, dt);
                 }
             });
+
+            // 3. Third Pass: Process generic property-only animations for entities without skeletons
+            genericAnimatedEntities.clear();
+            for (auto [entity, animator] : registry.view<AnimatorComponent>()) {
+                if (!registry.has<SkeletonComponent>(entity)) {
+                    genericAnimatedEntities.push_back(entity);
+                }
+            }
+
+            Engine::JobSystem::getInstance().parallelFor(static_cast<int>(genericAnimatedEntities.size()), [&](int idx) {
+                Entity entity = genericAnimatedEntities[idx];
+                auto* animator = registry.get<AnimatorComponent>(entity);
+                if (animator) {
+                    updateGenericAnimation(entity, *animator, dt);
+                }
+            });
         }
 
     private:
@@ -763,6 +779,7 @@ public:
             }
 
             skeleton.gpuBuffer->uploadData(skeleton.jointMatrices.data(), bufferSize);
+            sampleAndApplyProperties(entity, animator);
         }
 
         // --- Keyframe Interpolation Helpers ---
@@ -824,10 +841,110 @@ public:
             return glm::mix(k1.value, k2.value, factor);
         }
 
+        glm::vec4 interpolateProperty(const std::vector<PropertyKeyframe>& keys, float time, const glm::vec4& defaultValue) {
+            if (keys.empty()) return defaultValue;
+            if (keys.size() == 1 || time <= keys.front().time) return keys.front().value;
+            if (time >= keys.back().time) return keys.back().value;
+
+            size_t index = 0;
+            for (size_t i = 0; i < keys.size() - 1; ++i) {
+                if (time >= keys[i].time && time <= keys[i+1].time) {
+                    index = i;
+                    break;
+                }
+            }
+
+            const auto& k1 = keys[index];
+            const auto& k2 = keys[index+1];
+            float factor = (time - k1.time) / (k2.time - k1.time);
+            return glm::mix(k1.value, k2.value, factor);
+        }
+
+        void sampleAndApplyProperties(Entity entity, AnimatorComponent& animator) {
+            AnimationClip* clip = nullptr;
+            if (!animator.animations.empty() && 
+                animator.activeAnimationIndex >= 0 && 
+                animator.activeAnimationIndex < static_cast<int>(animator.animations.size())) {
+                clip = &animator.animations[animator.activeAnimationIndex];
+            }
+
+            if (!clip || clip->propertyChannels.empty()) return;
+
+            auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
+
+            for (const auto& channel : clip->propertyChannels) {
+                const Engine::ComponentReflection* targetRefl = nullptr;
+                for (const auto& refl : reflReg.getReflections()) {
+                    if (refl.name == channel.componentName) {
+                        targetRefl = &refl;
+                        break;
+                    }
+                }
+
+                if (!targetRefl || !targetRefl->has(registry, entity)) {
+                    continue;
+                }
+
+                void* compPtr = targetRefl->get(registry, entity);
+                if (!compPtr) continue;
+
+                const Engine::ComponentField* targetField = nullptr;
+                for (const auto& f : targetRefl->fields) {
+                    if (f.name == channel.fieldName) {
+                        targetField = &f;
+                        break;
+                    }
+                }
+
+                if (!targetField) continue;
+
+                char* fieldPtr = static_cast<char*>(compPtr) + targetField->offset;
+
+                glm::vec4 val = interpolateProperty(channel.keys, animator.currentTime, glm::vec4(0.0f));
+
+                if (channel.type == Engine::FieldType::Float) {
+                    *reinterpret_cast<float*>(fieldPtr) = val.x;
+                } else if (channel.type == Engine::FieldType::Bool) {
+                    *reinterpret_cast<bool*>(fieldPtr) = (val.x > 0.5f);
+                } else if (channel.type == Engine::FieldType::Vec2) {
+                    *reinterpret_cast<glm::vec2*>(fieldPtr) = glm::vec2(val.x, val.y);
+                } else if (channel.type == Engine::FieldType::Vec3) {
+                    *reinterpret_cast<glm::vec3*>(fieldPtr) = glm::vec3(val.x, val.y, val.z);
+                } else if (channel.type == Engine::FieldType::Vec4) {
+                    *reinterpret_cast<glm::vec4*>(fieldPtr) = val;
+                }
+            }
+        }
+
+        void updateGenericAnimation(Entity entity, AnimatorComponent& animator, float dt) {
+            AnimationClip* clip = nullptr;
+            if (!animator.animations.empty() && 
+                animator.activeAnimationIndex >= 0 && 
+                animator.activeAnimationIndex < static_cast<int>(animator.animations.size())) {
+                clip = &animator.animations[animator.activeAnimationIndex];
+            }
+
+            if (clip) {
+                animator.currentTime += dt * animator.playbackSpeed;
+                if (animator.loop) {
+                    if (clip->duration > 0.0f) {
+                        animator.currentTime = std::fmod(animator.currentTime, clip->duration);
+                    } else {
+                        animator.currentTime = 0.0f;
+                    }
+                } else {
+                    animator.currentTime = std::min(animator.currentTime, clip->duration);
+                }
+            }
+
+            sampleAndApplyProperties(entity, animator);
+        }
+
         Registry& registry;
         VulkanRenderer& renderer;
         EditorModeState& editorMode;
         std::vector<Entity> controllerEntities;
         std::vector<Entity> animatedEntities;
+        std::vector<Entity> genericAnimatedEntities;
     };
 

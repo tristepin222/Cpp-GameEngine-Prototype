@@ -62,6 +62,7 @@ bool s_triggerLoadImportSettings = false;
 ImportSettingsMetadata s_importMetadata;
 std::filesystem::path s_importSettingsAssetPath;
 bool s_openTilesetEditorWindow = false;
+bool s_openAnimationEditorWindow = false;
 std::string s_editingTilesetPath;
 Engine::TilesetAsset s_editingTileset;
 bool s_tilesetLoaded = false;

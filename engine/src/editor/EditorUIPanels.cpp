@@ -111,6 +111,9 @@ void EditorUI::drawPanels() {
             if (ImGui::MenuItem("Tileset Editor")) {
                 s_openTilesetEditorWindow = true;
             }
+            if (ImGui::MenuItem("Animation Editor")) {
+                s_openAnimationEditorWindow = true;
+            }
             ImGui::EndMenu();
         }
         // Center-aligned Play / Stop buttons in the Main Menu Bar
@@ -187,6 +190,9 @@ void EditorUI::drawPanels() {
     
     // 7b. Floating Tileset Editor window
     drawTilesetEditorWindow();
+
+    // 7c. Floating Animation Editor window
+    drawAnimationEditorWindow();
 
     // 8. Build Settings panel (floating modal)
     if (showBuildSettings) {
@@ -894,6 +900,11 @@ void EditorUI::drawAssetBrowser() {
                             s_createFileBuffer[0] = '\0';
                             s_openCreateFilePopup = true;
                         }
+                        if (MenuItem("Animation File (.anim)")) {
+                            s_createFileParentPath = entry.path();
+                            strcpy_s(s_createFileBuffer, "new_animation.anim");
+                            s_openCreateFilePopup = true;
+                        }
 
                         // Custom options registered to the asset browser menu
                         drawRegisteredAssetBrowserMenu(entry.path());
@@ -1114,6 +1125,11 @@ void EditorUI::drawAssetBrowser() {
                     s_createFileBuffer[0] = '\0';
                     s_openCreateFilePopup = true;
                 }
+                if (MenuItem("Animation File (.anim)")) {
+                    s_createFileParentPath = "assets";
+                    strcpy_s(s_createFileBuffer, "new_animation.anim");
+                    s_openCreateFilePopup = true;
+                }
                 drawRegisteredAssetBrowserMenu("assets");
                 EndMenu();
             }
@@ -1189,11 +1205,29 @@ void EditorUI::drawAssetBrowser() {
             if (s_createFileBuffer[0] != '\0') {
                 std::filesystem::path newActive = s_createFileParentPath / s_createFileBuffer;
                 std::filesystem::path newSource = std::filesystem::path("../../../sandbox_game") / newActive;
-                std::ofstream fActive(newActive);
-                if (fActive.is_open()) { fActive.close(); }
-                std::ofstream fSource(newSource);
-                if (fSource.is_open()) { fSource.close(); }
-                statusMessage = "Created empty file: " + std::string(s_createFileBuffer);
+                auto writeNewFile = [](const std::filesystem::path& p) {
+                    std::ofstream f(p, std::ios::binary);
+                    if (f.is_open()) {
+                        if (p.extension().string() == ".anim") {
+                            char magic[4] = {'A', 'N', 'I', 'M'};
+                            f.write(magic, 4);
+                            uint32_t version = 2;
+                            f.write(reinterpret_cast<const char*>(&version), sizeof(version));
+                            uint32_t jointCount = 0;
+                            f.write(reinterpret_cast<const char*>(&jointCount), sizeof(jointCount));
+                            uint32_t animCount = 0;
+                            f.write(reinterpret_cast<const char*>(&animCount), sizeof(animCount));
+                        }
+                        f.close();
+                    }
+                };
+                writeNewFile(newActive);
+                writeNewFile(newSource);
+                if (newActive.extension().string() == ".anim") {
+                    statusMessage = "Created animation file: " + std::string(s_createFileBuffer);
+                } else {
+                    statusMessage = "Created empty file: " + std::string(s_createFileBuffer);
+                }
             }
             CloseCurrentPopup();
         }
@@ -2101,4 +2135,474 @@ void EditorUI::drawTilesetEditorWindow() {
     EndChild();
 
     End();
+}
+
+void EditorUI::drawAnimationEditorWindow() {
+    if (!s_openAnimationEditorWindow) return;
+
+    ImGui::SetNextWindowSize(ImVec2(800, 450), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Animation Editor", &s_openAnimationEditorWindow)) {
+        ImGui::End();
+        return;
+    }
+
+    if (!hasSelection || !registry.isValid(selectedEntity)) {
+        ImGui::Text("Select an Entity with an AnimatorComponent to edit animations.");
+        ImGui::End();
+        return;
+    }
+
+    // Check if the entity has an AnimatorComponent
+    AnimatorComponent* animator = registry.get<AnimatorComponent>(selectedEntity);
+    if (!animator) {
+        ImGui::Text("The selected entity does not have an AnimatorComponent.");
+        if (ImGui::Button("Add Animator Component")) {
+            registry.emplace<AnimatorComponent>(selectedEntity, AnimatorComponent{});
+        }
+        ImGui::End();
+        return;
+    }
+
+    // Active Clip dropdown
+    static char s_newClipName[128] = "New Clip";
+    AnimationClip* activeClip = nullptr;
+    if (animator->activeAnimationIndex >= 0 && animator->activeAnimationIndex < static_cast<int>(animator->animations.size())) {
+        activeClip = &animator->animations[animator->activeAnimationIndex];
+    }
+
+    // Toolbar Row
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Active Clip:");
+    ImGui::SameLine();
+    ImGui::PushItemWidth(200);
+    
+    std::string previewLabel = activeClip ? activeClip->name : "None";
+    if (ImGui::BeginCombo("##active_clip", previewLabel.c_str())) {
+        for (int i = 0; i < static_cast<int>(animator->animations.size()); ++i) {
+            bool isSelected = (i == animator->activeAnimationIndex);
+            if (ImGui::Selectable(animator->animations[i].name.c_str(), isSelected)) {
+                animator->activeAnimationIndex = i;
+                animator->currentTime = 0.0f;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::PopItemWidth();
+
+    ImGui::SameLine();
+    if (ImGui::Button("Create New Clip")) {
+        ImGui::OpenPopup("CreateNewClipPopup");
+    }
+
+    // Modal popup to create new clip
+    if (ImGui::BeginPopup("CreateNewClipPopup")) {
+        ImGui::Text("Clip Name:");
+        ImGui::InputText("##clip_name_input", s_newClipName, sizeof(s_newClipName));
+        if (ImGui::Button("Create##btn")) {
+            AnimationClip newClip;
+            newClip.name = s_newClipName;
+            newClip.duration = 2.0f; // Default 2 seconds
+            animator->animations.push_back(newClip);
+            animator->activeAnimationIndex = animator->animations.size() - 1;
+            animator->currentTime = 0.0f;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    ImGui::SameLine();
+    static char s_saveLoadPath[256] = "assets/animations/cube.anim";
+    if (!animator->loadedAnimPath.empty() && strcmp(s_saveLoadPath, animator->loadedAnimPath.c_str()) != 0) {
+        strcpy_s(s_saveLoadPath, animator->loadedAnimPath.c_str());
+    }
+    ImGui::PushItemWidth(200);
+    ImGui::InputText("Path##save_load", s_saveLoadPath, sizeof(s_saveLoadPath));
+    ImGui::PopItemWidth();
+    ImGui::SameLine();
+    if (ImGui::Button("Save")) {
+        SkeletonComponent dummySkeleton;
+        if (auto* skel = registry.get<SkeletonComponent>(selectedEntity)) {
+            renderer.resourceManager->saveBinarySkeletonAndAnimations(s_saveLoadPath, *skel, *animator);
+        } else {
+            renderer.resourceManager->saveBinarySkeletonAndAnimations(s_saveLoadPath, dummySkeleton, *animator);
+        }
+        statusMessage = "Saved animations to: " + std::string(s_saveLoadPath);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Load")) {
+        SkeletonComponent dummySkeleton;
+        SkeletonComponent* skelPtr = &dummySkeleton;
+        if (auto* skel = registry.get<SkeletonComponent>(selectedEntity)) {
+            skelPtr = skel;
+        }
+        if (renderer.resourceManager->loadBinarySkeletonAndAnimations(s_saveLoadPath, *skelPtr, *animator, false)) {
+            statusMessage = "Loaded animations from: " + std::string(s_saveLoadPath);
+            animator->loadedAnimPath = s_saveLoadPath;
+        } else {
+            statusMessage = "Failed to load animations from: " + std::string(s_saveLoadPath);
+        }
+    }
+
+    if (!activeClip) {
+        ImGui::TextDisabled("No active animation clip selected. Create or load one to begin animating.");
+        ImGui::End();
+        return;
+    }
+
+    // Timeline settings and playback
+    ImGui::Separator();
+    
+    // Play/Pause buttons
+    bool isPlaying = (animator->playbackSpeed > 0.0f);
+    if (ImGui::Button(isPlaying ? "Pause" : "Play")) {
+        if (isPlaying) {
+            animator->playbackSpeed = 0.0f;
+        } else {
+            animator->playbackSpeed = 1.0f;
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Stop")) {
+        animator->playbackSpeed = 0.0f;
+        animator->currentTime = 0.0f;
+    }
+    
+    ImGui::SameLine();
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Time:");
+    ImGui::SameLine();
+    ImGui::PushItemWidth(80);
+    ImGui::DragFloat("##current_time", &animator->currentTime, 0.01f, 0.0f, activeClip->duration, "%.2fs");
+    ImGui::PopItemWidth();
+
+    ImGui::SameLine();
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Duration:");
+    ImGui::SameLine();
+    ImGui::PushItemWidth(80);
+    ImGui::DragFloat("##duration_input", &activeClip->duration, 0.1f, 0.1f, 100.0f, "%.1fs");
+    ImGui::PopItemWidth();
+
+    ImGui::SameLine();
+    ImGui::Checkbox("Loop", &animator->loop);
+
+    ImGui::SameLine();
+    if (ImGui::Button("Add Property")) {
+        ImGui::OpenPopup("AddPropertyPopup");
+    }
+
+    if (ImGui::BeginPopup("AddPropertyPopup")) {
+        auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
+        for (const auto& refl : reflReg.getReflections()) {
+            if (refl.has(registry, selectedEntity)) {
+                if (ImGui::BeginMenu(refl.name.c_str())) {
+                    for (const auto& field : refl.fields) {
+                        if (field.type == Engine::FieldType::Float ||
+                            field.type == Engine::FieldType::Bool ||
+                            field.type == Engine::FieldType::Vec2 ||
+                            field.type == Engine::FieldType::Vec3 ||
+                            field.type == Engine::FieldType::Vec4) {
+                            
+                            bool exists = false;
+                            for (const auto& chan : activeClip->propertyChannels) {
+                                if (chan.componentName == refl.name && chan.fieldName == field.name) {
+                                    exists = true;
+                                    break;
+                                }
+                            }
+
+                            if (!exists) {
+                                if (ImGui::MenuItem(field.name.c_str())) {
+                                    PropertyChannel newChan;
+                                    newChan.componentName = refl.name;
+                                    newChan.fieldName = field.name;
+                                    newChan.type = field.type;
+                                    activeClip->propertyChannels.push_back(newChan);
+                                }
+                            } else {
+                                ImGui::MenuItem(field.name.c_str(), nullptr, false, false);
+                            }
+                        }
+                    }
+                    ImGui::EndMenu();
+                }
+            }
+        }
+        ImGui::EndPopup();
+    }
+
+    ImGui::Separator();
+
+    static int s_selectedTrackIndex = -1;
+    static int s_selectedKeyIndex = -1;
+
+    ImVec2 contentSize = ImGui::GetContentRegionAvail();
+    float leftColWidth = 250.0f;
+    float rightColWidth = contentSize.x - leftColWidth - 8.0f;
+
+    ImGui::BeginChild("##left_properties", ImVec2(leftColWidth, contentSize.y - 120.0f), true);
+    ImGui::Text("Properties");
+    ImGui::Separator();
+    
+    int trackToDelete = -1;
+    for (int t = 0; t < static_cast<int>(activeClip->propertyChannels.size()); ++t) {
+        auto& chan = activeClip->propertyChannels[t];
+        
+        ImGui::PushID(t);
+        
+        bool isSelected = (s_selectedTrackIndex == t);
+        if (ImGui::Selectable("##track_select", isSelected, ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 20))) {
+            s_selectedTrackIndex = t;
+            s_selectedKeyIndex = -1;
+        }
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() - 220.0f);
+        
+        ImGui::Text("%s.%s", chan.componentName.c_str(), chan.fieldName.c_str());
+        
+        ImGui::SameLine(leftColWidth - 80.0f);
+        if (ImGui::Button("Key")) {
+            auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
+            const Engine::ComponentReflection* targetRefl = nullptr;
+            for (const auto& refl : reflReg.getReflections()) {
+                if (refl.name == chan.componentName) {
+                    targetRefl = &refl;
+                    break;
+                }
+            }
+            if (targetRefl && targetRefl->has(registry, selectedEntity)) {
+                void* compPtr = targetRefl->get(registry, selectedEntity);
+                if (compPtr) {
+                    const Engine::ComponentField* targetField = nullptr;
+                    for (const auto& f : targetRefl->fields) {
+                        if (f.name == chan.fieldName) {
+                            targetField = &f;
+                            break;
+                        }
+                    }
+                    if (targetField) {
+                        char* fieldPtr = static_cast<char*>(compPtr) + targetField->offset;
+                        glm::vec4 capturedVal(0.0f);
+                        
+                        if (chan.type == Engine::FieldType::Float) {
+                            capturedVal.x = *reinterpret_cast<float*>(fieldPtr);
+                        } else if (chan.type == Engine::FieldType::Bool) {
+                            capturedVal.x = *reinterpret_cast<bool*>(fieldPtr) ? 1.0f : 0.0f;
+                        } else if (chan.type == Engine::FieldType::Vec2) {
+                            auto* v = reinterpret_cast<glm::vec2*>(fieldPtr);
+                            capturedVal = glm::vec4(v->x, v->y, 0.0f, 0.0f);
+                        } else if (chan.type == Engine::FieldType::Vec3) {
+                            auto* v = reinterpret_cast<glm::vec3*>(fieldPtr);
+                            capturedVal = glm::vec4(v->x, v->y, v->z, 0.0f);
+                        } else if (chan.type == Engine::FieldType::Vec4) {
+                            capturedVal = *reinterpret_cast<glm::vec4*>(fieldPtr);
+                        }
+
+                        PropertyKeyframe newKey;
+                        newKey.time = animator->currentTime;
+                        newKey.value = capturedVal;
+
+                        bool found = false;
+                        for (auto& key : chan.keys) {
+                            if (std::abs(key.time - animator->currentTime) < 0.01f) {
+                                key.value = capturedVal;
+                                found = true;
+                                break;
+                            }
+                        }
+
+                        if (!found) {
+                            chan.keys.push_back(newKey);
+                            std::sort(chan.keys.begin(), chan.keys.end(), [](const PropertyKeyframe& a, const PropertyKeyframe& b) {
+                                return a.time < b.time;
+                            });
+                        }
+                        statusMessage = "Added keyframe for " + chan.componentName + "." + chan.fieldName + " at " + std::to_string(animator->currentTime) + "s";
+                    }
+                }
+            }
+        }
+        ImGui::SameLine(leftColWidth - 35.0f);
+        if (ImGui::Button("X")) {
+            trackToDelete = t;
+        }
+
+        ImGui::PopID();
+    }
+
+    if (trackToDelete != -1) {
+        activeClip->propertyChannels.erase(activeClip->propertyChannels.begin() + trackToDelete);
+        s_selectedTrackIndex = -1;
+        s_selectedKeyIndex = -1;
+    }
+
+    ImGui::EndChild();
+
+    ImGui::SameLine();
+
+    ImGui::BeginChild("##right_timeline", ImVec2(rightColWidth, contentSize.y - 120.0f), true, ImGuiWindowFlags_HorizontalScrollbar);
+    
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    ImVec2 startCursorPos = ImGui::GetCursorScreenPos();
+    float timelineDuration = activeClip->duration;
+    
+    float pixelsPerSecond = 150.0f;
+    float trackWidth = timelineDuration * pixelsPerSecond;
+    float trackHeight = 20.0f;
+
+    ImVec2 rulerStart = startCursorPos;
+    ImVec2 rulerEnd = ImVec2(rulerStart.x + trackWidth, rulerStart.y + 25.0f);
+    
+    drawList->AddRectFilled(rulerStart, rulerEnd, IM_COL32(40, 40, 40, 255));
+    
+    float playheadX = rulerStart.x + animator->currentTime * pixelsPerSecond;
+    
+    for (float tSec = 0.0f; tSec <= timelineDuration; tSec += 0.1f) {
+        float xPos = rulerStart.x + tSec * pixelsPerSecond;
+        bool isMajor = (std::fmod(tSec + 0.001f, 0.5f) < 0.01f);
+        float tickH = isMajor ? 12.0f : 6.0f;
+        drawList->AddLine(ImVec2(xPos, rulerStart.y + 25.0f - tickH), ImVec2(xPos, rulerStart.y + 25.0f), IM_COL32(150, 150, 150, 255));
+        
+        if (isMajor) {
+            char label[16];
+            snprintf(label, sizeof(label), "%.1fs", tSec);
+            drawList->AddText(ImVec2(xPos + 2.0f, rulerStart.y + 2.0f), IM_COL32(200, 200, 200, 255), label);
+        }
+    }
+
+    ImGui::InvisibleButton("##ruler_scrub", ImVec2(trackWidth, 25.0f));
+    if (ImGui::IsItemActive()) {
+        ImVec2 mousePos = ImGui::GetMousePos();
+        float localMouseX = mousePos.x - rulerStart.x;
+        animator->currentTime = glm::clamp(localMouseX / pixelsPerSecond, 0.0f, timelineDuration);
+    }
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5.0f);
+
+    for (int t = 0; t < static_cast<int>(activeClip->propertyChannels.size()); ++t) {
+        auto& chan = activeClip->propertyChannels[t];
+        ImVec2 laneStart = ImGui::GetCursorScreenPos();
+        ImVec2 laneEnd = ImVec2(laneStart.x + trackWidth, laneStart.y + trackHeight);
+
+        ImU32 laneColor = (t % 2 == 0) ? IM_COL32(50, 50, 50, 255) : IM_COL32(45, 45, 45, 255);
+        if (s_selectedTrackIndex == t) {
+            laneColor = IM_COL32(70, 70, 70, 255);
+        }
+        drawList->AddRectFilled(laneStart, laneEnd, laneColor);
+
+        ImGui::PushID(t);
+        ImGui::SetCursorScreenPos(laneStart);
+        ImGui::InvisibleButton("##lane_btn", ImVec2(trackWidth, trackHeight));
+        
+        if (ImGui::IsItemClicked()) {
+            s_selectedTrackIndex = t;
+            s_selectedKeyIndex = -1;
+            
+            ImVec2 mPos = ImGui::GetMousePos();
+            for (int k = 0; k < static_cast<int>(chan.keys.size()); ++k) {
+                float keyX = laneStart.x + chan.keys[k].time * pixelsPerSecond;
+                if (std::abs(mPos.x - keyX) < 8.0f) {
+                    s_selectedKeyIndex = k;
+                    animator->currentTime = chan.keys[k].time;
+                    break;
+                }
+            }
+        }
+        ImGui::PopID();
+
+        for (int k = 0; k < static_cast<int>(chan.keys.size()); ++k) {
+            float keyX = laneStart.x + chan.keys[k].time * pixelsPerSecond;
+            float keyY = laneStart.y + trackHeight * 0.5f;
+
+            bool isKeySelected = (s_selectedTrackIndex == t && s_selectedKeyIndex == k);
+            ImU32 keyColor = isKeySelected ? IM_COL32(255, 200, 50, 255) : IM_COL32(220, 220, 220, 255);
+            
+            ImVec2 points[4] = {
+                ImVec2(keyX, keyY - 5.0f),
+                ImVec2(keyX + 5.0f, keyY),
+                ImVec2(keyX, keyY + 5.0f),
+                ImVec2(keyX - 5.0f, keyY)
+            };
+            drawList->AddConvexPolyFilled(points, 4, keyColor);
+            drawList->AddPolyline(points, 4, IM_COL32(0, 0, 0, 255), true, 1.0f);
+        }
+
+        ImGui::SetCursorScreenPos(ImVec2(laneStart.x, laneStart.y + trackHeight));
+    }
+
+    float playheadBottomY = ImGui::GetCursorScreenPos().y;
+    drawList->AddLine(
+        ImVec2(playheadX, rulerStart.y),
+        ImVec2(playheadX, playheadBottomY),
+        IM_COL32(70, 180, 255, 200),
+        2.0f
+    );
+    drawList->AddTriangleFilled(
+        ImVec2(playheadX - 6.0f, rulerStart.y + 20.0f),
+        ImVec2(playheadX + 6.0f, rulerStart.y + 20.0f),
+        ImVec2(playheadX, rulerStart.y + 25.0f),
+        IM_COL32(70, 180, 255, 255)
+    );
+
+    ImGui::EndChild();
+
+    ImGui::Separator();
+    if (s_selectedTrackIndex >= 0 && s_selectedTrackIndex < static_cast<int>(activeClip->propertyChannels.size())) {
+        auto& chan = activeClip->propertyChannels[s_selectedTrackIndex];
+        if (s_selectedKeyIndex >= 0 && s_selectedKeyIndex < static_cast<int>(chan.keys.size())) {
+            auto& key = chan.keys[s_selectedKeyIndex];
+            
+            ImGui::Text("Selected Keyframe details for: %s.%s", chan.componentName.c_str(), chan.fieldName.c_str());
+            
+            ImGui::PushItemWidth(150);
+            if (ImGui::DragFloat("Key Time", &key.time, 0.01f, 0.0f, activeClip->duration, "%.2fs")) {
+                std::sort(chan.keys.begin(), chan.keys.end(), [](const PropertyKeyframe& a, const PropertyKeyframe& b) {
+                    return a.time < b.time;
+                });
+                for (int k = 0; k < static_cast<int>(chan.keys.size()); ++k) {
+                    if (chan.keys[k].time == key.time) {
+                        s_selectedKeyIndex = k;
+                        break;
+                    }
+                }
+            }
+            ImGui::PopItemWidth();
+            
+            ImGui::SameLine();
+            ImGui::PushItemWidth(250);
+            
+            if (chan.type == Engine::FieldType::Float) {
+                ImGui::DragFloat("Value", &key.value.x, 0.05f);
+            } else if (chan.type == Engine::FieldType::Bool) {
+                bool bVal = (key.value.x > 0.5f);
+                if (ImGui::Checkbox("Value", &bVal)) {
+                    key.value.x = bVal ? 1.0f : 0.0f;
+                }
+            } else if (chan.type == Engine::FieldType::Vec2) {
+                ImGui::DragFloat2("Value", &key.value.x, 0.05f);
+            } else if (chan.type == Engine::FieldType::Vec3) {
+                ImGui::DragFloat3("Value", &key.value.x, 0.05f);
+            } else if (chan.type == Engine::FieldType::Vec4) {
+                if (chan.fieldName.find("color") != std::string::npos || chan.fieldName.find("Color") != std::string::npos) {
+                    ImGui::ColorEdit4("Value", &key.value.x);
+                } else {
+                    ImGui::DragFloat4("Value", &key.value.x, 0.05f);
+                }
+            }
+            
+            ImGui::PopItemWidth();
+
+            ImGui::SameLine();
+            if (ImGui::Button("Delete Key")) {
+                chan.keys.erase(chan.keys.begin() + s_selectedKeyIndex);
+                s_selectedKeyIndex = -1;
+            }
+        } else {
+            ImGui::TextDisabled("Select a keyframe diamond in the timeline to inspect/edit its properties.");
+        }
+    } else {
+        ImGui::TextDisabled("Select a property track and keyframe diamond in the timeline to inspect/edit its properties.");
+    }
+
+    ImGui::End();
 }
