@@ -1,5 +1,6 @@
 #include "editor/EditorUI.hpp"
 #include "editor/EditorUIInternal.hpp"
+#include "editor/NodeGraphFramework.hpp"
 #include "meta/ComponentReflection.hpp"
 #include "scenes/JSONUtils.hpp"
 #include "editor/AssetBrowserRegistry.hpp"
@@ -114,6 +115,9 @@ void EditorUI::drawPanels() {
             if (ImGui::MenuItem("Animation Editor")) {
                 s_openAnimationEditorWindow = true;
             }
+            if (ImGui::MenuItem("Node Graph Demo")) {
+                s_openNodeGraphDemoWindow = true;
+            }
             ImGui::EndMenu();
         }
         // Center-aligned Play / Stop buttons in the Main Menu Bar
@@ -193,6 +197,9 @@ void EditorUI::drawPanels() {
 
     // 7c. Floating Animation Editor window
     drawAnimationEditorWindow();
+
+    // 7d. Floating Node Graph Demo window
+    drawNodeGraphDemoWindow();
 
     // 8. Build Settings panel (floating modal)
     if (showBuildSettings) {
@@ -2606,3 +2613,184 @@ void EditorUI::drawAnimationEditorWindow() {
 
     ImGui::End();
 }
+
+void EditorUI::drawNodeGraphDemoWindow() {
+    if (!s_openNodeGraphDemoWindow) return;
+
+    ImGui::SetNextWindowSize(ImVec2(900, 600), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Node Graph Demo", &s_openNodeGraphDemoWindow)) {
+        ImGui::End();
+        return;
+    }
+
+    static Engine::NodeGraph graph;
+    static bool initialized = false;
+    static std::string s_serializedText = "";
+
+    if (!initialized) {
+        // Define pin types
+        Engine::NodePinType pinFloat{ "float", IM_COL32(100, 200, 100, 255) };
+        Engine::NodePinType pinExec{ "exec", IM_COL32(220, 220, 220, 255) };
+        Engine::NodePinType pinDialogue{ "dialogue", IM_COL32(200, 100, 200, 255) };
+        Engine::NodePinType pinColor{ "color", IM_COL32(200, 180, 50, 255) };
+
+        // 1. Dialogue Node
+        graph.registerNodeType("Dialogue", "DialogueSpeech", "Speech Node",
+            [pinDialogue](uint32_t nodeId) {
+                graph.addInputPin(nodeId, "Prev", pinDialogue);
+                graph.addOutputPin(nodeId, "Next", pinDialogue);
+            },
+            [](Engine::Node& nodeRef) {
+                ImGui::Text("Speech text:");
+                char textBuf[128] = "";
+                strncpy_s(textBuf, nodeRef.customData.c_str(), sizeof(textBuf) - 1);
+                if (ImGui::InputText("##speechText", textBuf, sizeof(textBuf))) {
+                    nodeRef.customData = textBuf;
+                }
+            }
+        );
+
+        // 2. Dialogue Choice Node
+        graph.registerNodeType("Dialogue", "DialogueChoice", "Choice Node",
+            [pinDialogue](uint32_t nodeId) {
+                graph.addInputPin(nodeId, "Prev", pinDialogue);
+                graph.addOutputPin(nodeId, "Option A", pinDialogue);
+                graph.addOutputPin(nodeId, "Option B", pinDialogue);
+            },
+            [](Engine::Node& nodeRef) {
+                ImGui::Text("Choice Details:");
+                ImGui::TextDisabled("(Extendable custom properties)");
+            }
+        );
+
+        // 3. Math Add Node
+        graph.registerNodeType("Math", "MathAdd", "Add Node",
+            [pinFloat](uint32_t nodeId) {
+                graph.addInputPin(nodeId, "A", pinFloat);
+                graph.addInputPin(nodeId, "B", pinFloat);
+                graph.addOutputPin(nodeId, "Result", pinFloat);
+            }
+        );
+
+        // 4. Conditional Branch Node
+        graph.registerNodeType("Logic", "Branch", "Branch Node",
+            [pinExec](uint32_t nodeId) {
+                graph.addInputPin(nodeId, "In", pinExec);
+                graph.addOutputPin(nodeId, "True", pinExec);
+                graph.addOutputPin(nodeId, "False", pinExec);
+            },
+            [](Engine::Node& nodeRef) {
+                bool val = (nodeRef.customData == "1");
+                if (ImGui::Checkbox("Condition", &val)) {
+                    nodeRef.customData = val ? "1" : "0";
+                }
+            }
+        );
+
+        // 5. Color Node
+        graph.registerNodeType("Visual", "ColorConstant", "Color Constant",
+            [pinColor](uint32_t nodeId) {
+                graph.addOutputPin(nodeId, "Out", pinColor);
+            },
+            [](Engine::Node& nodeRef) {
+                static float color[4] = { 0.15f, 0.45f, 0.8f, 1.0f };
+                if (!nodeRef.customData.empty()) {
+                    std::stringstream ss(nodeRef.customData);
+                    ss >> color[0] >> color[1] >> color[2] >> color[3];
+                }
+                if (ImGui::ColorEdit4("Color", color, ImGuiColorEditFlags_NoInputs)) {
+                    std::stringstream ss;
+                    ss << color[0] << " " << color[1] << " " << color[2] << " " << color[3];
+                    nodeRef.customData = ss.str();
+                }
+            }
+        );
+
+        // Pre-spawn default demonstration nodes
+        uint32_t n1Id = graph.createNode("Speech Node", "DialogueSpeech", ImVec2(50.0f, 150.0f));
+        Engine::Node* n1 = graph.findNode(n1Id);
+        if (n1) {
+            n1->customData = "Hello adventurer! Welcome to the realm of Antigravity.";
+            n1->customWidgetCallback = [](Engine::Node& nodeRef) {
+                ImGui::Text("Speech text:");
+                char textBuf[128] = "";
+                strncpy_s(textBuf, nodeRef.customData.c_str(), sizeof(textBuf) - 1);
+                if (ImGui::InputText("##speechText", textBuf, sizeof(textBuf))) {
+                    nodeRef.customData = textBuf;
+                }
+            };
+        }
+        graph.addInputPin(n1Id, "Prev", pinDialogue);
+        uint32_t n1OutId = graph.addOutputPin(n1Id, "Next", pinDialogue);
+
+        uint32_t n2Id = graph.createNode("Choice Node", "DialogueChoice", ImVec2(320.0f, 120.0f));
+        Engine::Node* n2 = graph.findNode(n2Id);
+        if (n2) {
+            n2->customWidgetCallback = [](Engine::Node& nodeRef) {
+                ImGui::Text("Choice Details:");
+                ImGui::TextDisabled("(Extendable custom properties)");
+            };
+        }
+        uint32_t n2InId = graph.addInputPin(n2Id, "Prev", pinDialogue);
+        graph.addOutputPin(n2Id, "Option A", pinDialogue);
+        graph.addOutputPin(n2Id, "Option B", pinDialogue);
+
+        // Pre-link them
+        graph.addLink(n1OutId, n2InId);
+
+        s_serializedText = graph.serialize();
+        initialized = true;
+    }
+
+    // Canvas Toolbar
+    if (ImGui::Button("Clear Canvas")) {
+        graph.clear();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Save JSON")) {
+        s_serializedText = graph.serialize();
+        std::ofstream out("assets/node_graph_demo.json");
+        if (out.is_open()) {
+            out << s_serializedText;
+            out.close();
+            statusMessage = "Saved node graph to assets/node_graph_demo.json";
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Load JSON")) {
+        std::ifstream in("assets/node_graph_demo.json");
+        if (in.is_open()) {
+            std::stringstream ss;
+            ss << in.rdbuf();
+            in.close();
+            if (graph.deserialize(ss.str())) {
+                s_serializedText = ss.str();
+                statusMessage = "Loaded node graph from assets/node_graph_demo.json";
+            }
+        }
+    }
+
+    ImGui::SameLine();
+    ImGui::TextDisabled("|  R-Click canvas to create nodes. Drag output-to-input slots to link. Drag headers to move.");
+
+    ImGui::Separator();
+
+    ImVec2 contentSize = ImGui::GetContentRegionAvail();
+    float canvasW = contentSize.x * 0.70f;
+    float jsonW = contentSize.x - canvasW - 8.0f;
+
+    graph.draw("DemoEditor", ImVec2(canvasW, contentSize.y));
+
+    ImGui::SameLine();
+    ImGui::BeginChild("##json_output", ImVec2(jsonW, contentSize.y), true);
+    ImGui::Text("Serialized JSON Output:");
+    ImGui::Separator();
+    
+    char* jsonPtr = s_serializedText.empty() ? const_cast<char*>("") : &s_serializedText[0];
+    ImGui::InputTextMultiline("##json_text", jsonPtr, s_serializedText.size() + 1, ImVec2(-1.0f, -1.0f), ImGuiInputTextFlags_ReadOnly);
+    
+    ImGui::EndChild();
+
+    ImGui::End();
+}
+

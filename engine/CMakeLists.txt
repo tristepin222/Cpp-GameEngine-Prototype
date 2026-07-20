@@ -58,6 +58,7 @@ set(ENGINE_SOURCES
     src/editor/EditorUIPanels.cpp
     src/editor/EditorUIComponentEditors.cpp
     src/editor/EditorUIGizmosAndPicking.cpp
+    src/editor/NodeGraphFramework.cpp
     src/scenes/Scene.cpp
     src/scenes/JSONUtils.cpp
     src/scenes/ComponentSerializerRegistry.cpp

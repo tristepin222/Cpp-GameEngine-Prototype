@@ -119,6 +119,7 @@ private:
      */
     void drawTilesetEditorWindow();
     void drawAnimationEditorWindow();
+    void drawNodeGraphDemoWindow();
     /**
      * @brief Renders the Tilemap component inspector panel.
      */

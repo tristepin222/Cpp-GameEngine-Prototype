@@ -36,6 +36,7 @@ extern ImportSettingsMetadata s_importMetadata;
 extern std::filesystem::path s_importSettingsAssetPath;
 extern bool s_openTilesetEditorWindow;
 extern bool s_openAnimationEditorWindow;
+extern bool s_openNodeGraphDemoWindow;
 extern std::string s_editingTilesetPath;
 extern Engine::TilesetAsset s_editingTileset;
 extern bool s_tilesetLoaded;
