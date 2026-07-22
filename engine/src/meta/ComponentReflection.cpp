@@ -1,4 +1,5 @@
 #include "meta/ComponentReflection.hpp"
+#include "ecs/components/Transform.hpp"
 #include "ecs/components/RigidBody.hpp"
 #include "ecs/components/PlayerControllerComponent.hpp"
 #include "ecs/components/AudioSource.hpp"
@@ -15,6 +16,20 @@ namespace Engine {
         static bool initialized = false;
         if (!initialized) {
             initialized = true;
+
+            // 0. Transform Reflection
+            ComponentReflection transRefl;
+            transRefl.name = "Transform";
+            transRefl.fields = {
+                { "position", FieldType::Vec3, offsetof(Transform, position) },
+                { "rotation", FieldType::Vec3, offsetof(Transform, rotation) },
+                { "scale", FieldType::Vec3, offsetof(Transform, scale) }
+            };
+            transRefl.add = [](Registry& reg, Entity e) { reg.emplace<Transform>(e, Transform{}); };
+            transRefl.has = [](Registry& reg, Entity e) { return reg.has<Transform>(e); };
+            transRefl.remove = [](Registry& reg, Entity e) { reg.remove<Transform>(e); };
+            transRefl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Transform>(e)); };
+            instance.registerComponent(transRefl);
 
             // 1. RigidBodyComponent Reflection
             ComponentReflection rbRefl;

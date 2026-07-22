@@ -64,6 +64,8 @@ std::filesystem::path s_importSettingsAssetPath;
 bool s_openTilesetEditorWindow = false;
 bool s_openAnimationEditorWindow = false;
 bool s_openNodeGraphDemoWindow = false;
+bool s_openAnimatorControllerWindow = false;
+
 std::string s_editingTilesetPath;
 Engine::TilesetAsset s_editingTileset;
 bool s_tilesetLoaded = false;

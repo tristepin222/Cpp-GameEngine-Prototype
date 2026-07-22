@@ -115,6 +115,9 @@ void EditorUI::drawPanels() {
             if (ImGui::MenuItem("Animation Editor")) {
                 s_openAnimationEditorWindow = true;
             }
+            if (ImGui::MenuItem("Animator Controller")) {
+                s_openAnimatorControllerWindow = true;
+            }
             if (ImGui::MenuItem("Node Graph Demo")) {
                 s_openNodeGraphDemoWindow = true;
             }
@@ -198,7 +201,10 @@ void EditorUI::drawPanels() {
     // 7c. Floating Animation Editor window
     drawAnimationEditorWindow();
 
-    // 7d. Floating Node Graph Demo window
+    // 7d. Floating Animator Controller window
+    drawAnimatorControllerWindow();
+
+    // 7e. Floating Node Graph Demo window
     drawNodeGraphDemoWindow();
 
     // 8. Build Settings panel (floating modal)
@@ -2352,89 +2358,104 @@ void EditorUI::drawAnimationEditorWindow() {
     ImGui::Separator();
     
     int trackToDelete = -1;
-    for (int t = 0; t < static_cast<int>(activeClip->propertyChannels.size()); ++t) {
-        auto& chan = activeClip->propertyChannels[t];
+    if (ImGui::BeginTable("##properties_table", 3, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoKeepColumnsVisible)) {
+        ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("KeyCol", ImGuiTableColumnFlags_WidthFixed, 45.0f);
+        ImGui::TableSetupColumn("DelCol", ImGuiTableColumnFlags_WidthFixed, 30.0f);
         
-        ImGui::PushID(t);
-        
-        bool isSelected = (s_selectedTrackIndex == t);
-        if (ImGui::Selectable("##track_select", isSelected, ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 20))) {
-            s_selectedTrackIndex = t;
-            s_selectedKeyIndex = -1;
-        }
-        ImGui::SameLine();
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() - 220.0f);
-        
-        ImGui::Text("%s.%s", chan.componentName.c_str(), chan.fieldName.c_str());
-        
-        ImGui::SameLine(leftColWidth - 80.0f);
-        if (ImGui::Button("Key")) {
-            auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
-            const Engine::ComponentReflection* targetRefl = nullptr;
-            for (const auto& refl : reflReg.getReflections()) {
-                if (refl.name == chan.componentName) {
-                    targetRefl = &refl;
-                    break;
-                }
+        for (int t = 0; t < static_cast<int>(activeClip->propertyChannels.size()); ++t) {
+            auto& chan = activeClip->propertyChannels[t];
+            ImGui::TableNextRow();
+
+            const float rowHeight = ImGui::GetFrameHeight();
+            
+            // Column 0: Property Name Selectable
+            ImGui::TableSetColumnIndex(0);
+            ImGui::PushID(t);
+            bool isSelected = (s_selectedTrackIndex == t);
+            char label[256];
+            snprintf(label, sizeof(label), "%s.%s", chan.componentName.c_str(), chan.fieldName.c_str());
+            if (ImGui::Selectable(label, isSelected, 0, ImVec2(0, rowHeight))) {
+                s_selectedTrackIndex = t;
+                s_selectedKeyIndex = -1;
             }
-            if (targetRefl && targetRefl->has(registry, selectedEntity)) {
-                void* compPtr = targetRefl->get(registry, selectedEntity);
-                if (compPtr) {
-                    const Engine::ComponentField* targetField = nullptr;
-                    for (const auto& f : targetRefl->fields) {
-                        if (f.name == chan.fieldName) {
-                            targetField = &f;
-                            break;
-                        }
+            ImGui::PopID();
+
+            // Column 1: Key Button
+            ImGui::TableSetColumnIndex(1);
+            ImGui::PushID(t + 1000);
+            if (ImGui::Button("Key", ImVec2(0, rowHeight))) {
+                auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
+                const Engine::ComponentReflection* targetRefl = nullptr;
+                for (const auto& refl : reflReg.getReflections()) {
+                    if (refl.name == chan.componentName) {
+                        targetRefl = &refl;
+                        break;
                     }
-                    if (targetField) {
-                        char* fieldPtr = static_cast<char*>(compPtr) + targetField->offset;
-                        glm::vec4 capturedVal(0.0f);
-                        
-                        if (chan.type == Engine::FieldType::Float) {
-                            capturedVal.x = *reinterpret_cast<float*>(fieldPtr);
-                        } else if (chan.type == Engine::FieldType::Bool) {
-                            capturedVal.x = *reinterpret_cast<bool*>(fieldPtr) ? 1.0f : 0.0f;
-                        } else if (chan.type == Engine::FieldType::Vec2) {
-                            auto* v = reinterpret_cast<glm::vec2*>(fieldPtr);
-                            capturedVal = glm::vec4(v->x, v->y, 0.0f, 0.0f);
-                        } else if (chan.type == Engine::FieldType::Vec3) {
-                            auto* v = reinterpret_cast<glm::vec3*>(fieldPtr);
-                            capturedVal = glm::vec4(v->x, v->y, v->z, 0.0f);
-                        } else if (chan.type == Engine::FieldType::Vec4) {
-                            capturedVal = *reinterpret_cast<glm::vec4*>(fieldPtr);
-                        }
-
-                        PropertyKeyframe newKey;
-                        newKey.time = animator->currentTime;
-                        newKey.value = capturedVal;
-
-                        bool found = false;
-                        for (auto& key : chan.keys) {
-                            if (std::abs(key.time - animator->currentTime) < 0.01f) {
-                                key.value = capturedVal;
-                                found = true;
+                }
+                if (targetRefl && targetRefl->has(registry, selectedEntity)) {
+                    void* compPtr = targetRefl->get(registry, selectedEntity);
+                    if (compPtr) {
+                        const Engine::ComponentField* targetField = nullptr;
+                        for (const auto& f : targetRefl->fields) {
+                            if (f.name == chan.fieldName) {
+                                targetField = &f;
                                 break;
                             }
                         }
+                        if (targetField) {
+                            char* fieldPtr = static_cast<char*>(compPtr) + targetField->offset;
+                            glm::vec4 capturedVal(0.0f);
+                            
+                            if (chan.type == Engine::FieldType::Float) {
+                                capturedVal.x = *reinterpret_cast<float*>(fieldPtr);
+                            } else if (chan.type == Engine::FieldType::Bool) {
+                                capturedVal.x = *reinterpret_cast<bool*>(fieldPtr) ? 1.0f : 0.0f;
+                            } else if (chan.type == Engine::FieldType::Vec2) {
+                                auto* v = reinterpret_cast<glm::vec2*>(fieldPtr);
+                                capturedVal = glm::vec4(v->x, v->y, 0.0f, 0.0f);
+                            } else if (chan.type == Engine::FieldType::Vec3) {
+                                auto* v = reinterpret_cast<glm::vec3*>(fieldPtr);
+                                capturedVal = glm::vec4(v->x, v->y, v->z, 0.0f);
+                            } else if (chan.type == Engine::FieldType::Vec4) {
+                                capturedVal = *reinterpret_cast<glm::vec4*>(fieldPtr);
+                            }
 
-                        if (!found) {
-                            chan.keys.push_back(newKey);
-                            std::sort(chan.keys.begin(), chan.keys.end(), [](const PropertyKeyframe& a, const PropertyKeyframe& b) {
-                                return a.time < b.time;
-                            });
+                            PropertyKeyframe newKey;
+                            newKey.time = animator->currentTime;
+                            newKey.value = capturedVal;
+
+                            bool found = false;
+                            for (auto& key : chan.keys) {
+                                if (std::abs(key.time - animator->currentTime) < 0.01f) {
+                                    key.value = capturedVal;
+                                    found = true;
+                                    break;
+                                }
+                            }
+
+                            if (!found) {
+                                chan.keys.push_back(newKey);
+                                std::sort(chan.keys.begin(), chan.keys.end(), [](const PropertyKeyframe& a, const PropertyKeyframe& b) {
+                                    return a.time < b.time;
+                                });
+                            }
+                            statusMessage = "Added keyframe for " + chan.componentName + "." + chan.fieldName + " at " + std::to_string(animator->currentTime) + "s";
                         }
-                        statusMessage = "Added keyframe for " + chan.componentName + "." + chan.fieldName + " at " + std::to_string(animator->currentTime) + "s";
                     }
                 }
             }
-        }
-        ImGui::SameLine(leftColWidth - 35.0f);
-        if (ImGui::Button("X")) {
-            trackToDelete = t;
-        }
+            ImGui::PopID();
 
-        ImGui::PopID();
+            // Column 2: Delete Button
+            ImGui::TableSetColumnIndex(2);
+            ImGui::PushID(t + 2000);
+            if (ImGui::Button("X", ImVec2(0, rowHeight))) {
+                trackToDelete = t;
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
     }
 
     if (trackToDelete != -1) {
@@ -2454,8 +2475,14 @@ void EditorUI::drawAnimationEditorWindow() {
     float timelineDuration = activeClip->duration;
     
     float pixelsPerSecond = 150.0f;
-    float trackWidth = timelineDuration * pixelsPerSecond;
+    float trackWidth = std::max(timelineDuration * pixelsPerSecond, 100.0f);
     float trackHeight = 20.0f;
+    float totalHeight = 25.0f + activeClip->propertyChannels.size() * trackHeight + 50.0f;
+
+    // Reserve layout space up front so that custom SetCursorPosY/SetCursorScreenPos calls
+    // stay within window bounds and scrollbars function correctly.
+    ImGui::Dummy(ImVec2(trackWidth, totalHeight));
+    ImGui::SetCursorScreenPos(startCursorPos);
 
     ImVec2 rulerStart = startCursorPos;
     ImVec2 rulerEnd = ImVec2(rulerStart.x + trackWidth, rulerStart.y + 25.0f);
@@ -2614,6 +2641,7 @@ void EditorUI::drawAnimationEditorWindow() {
     ImGui::End();
 }
 
+
 void EditorUI::drawNodeGraphDemoWindow() {
     if (!s_openNodeGraphDemoWindow) return;
 
@@ -2625,41 +2653,42 @@ void EditorUI::drawNodeGraphDemoWindow() {
 
     static Engine::NodeGraph graph;
     static bool initialized = false;
-    static std::string s_serializedText = "";
 
     if (!initialized) {
-        // Define pin types
-        Engine::NodePinType pinFloat{ "float", IM_COL32(100, 200, 100, 255) };
-        Engine::NodePinType pinExec{ "exec", IM_COL32(220, 220, 220, 255) };
+        Engine::NodePinType pinFloat   { "float",    IM_COL32(100, 200, 100, 255) };
+        Engine::NodePinType pinExec    { "exec",     IM_COL32(220, 220, 220, 255) };
         Engine::NodePinType pinDialogue{ "dialogue", IM_COL32(200, 100, 200, 255) };
-        Engine::NodePinType pinColor{ "color", IM_COL32(200, 180, 50, 255) };
+        Engine::NodePinType pinColor   { "color",    IM_COL32(200, 180,  50, 255) };
 
-        // 1. Dialogue Node
+        // 1. Speech Node — detail panel shows the text field
         graph.registerNodeType("Dialogue", "DialogueSpeech", "Speech Node",
             [pinDialogue](uint32_t nodeId) {
                 graph.addInputPin(nodeId, "Prev", pinDialogue);
                 graph.addOutputPin(nodeId, "Next", pinDialogue);
             },
+            nullptr, // no inline widget — moved to detail panel
             [](Engine::Node& nodeRef) {
-                ImGui::Text("Speech text:");
-                char textBuf[128] = "";
-                strncpy_s(textBuf, nodeRef.customData.c_str(), sizeof(textBuf) - 1);
-                if (ImGui::InputText("##speechText", textBuf, sizeof(textBuf))) {
-                    nodeRef.customData = textBuf;
-                }
+                ImGui::TextDisabled("Speech Text:");
+                char buf[256] = "";
+                strncpy_s(buf, nodeRef.customData.c_str(), sizeof(buf) - 1);
+                ImGui::PushItemWidth(-1);
+                if (ImGui::InputTextMultiline("##speechTxt", buf, sizeof(buf), ImVec2(0, 80)))
+                    nodeRef.customData = buf;
+                ImGui::PopItemWidth();
             }
         );
 
-        // 2. Dialogue Choice Node
+        // 2. Choice Node — detail panel shows choice labels
         graph.registerNodeType("Dialogue", "DialogueChoice", "Choice Node",
             [pinDialogue](uint32_t nodeId) {
                 graph.addInputPin(nodeId, "Prev", pinDialogue);
                 graph.addOutputPin(nodeId, "Option A", pinDialogue);
                 graph.addOutputPin(nodeId, "Option B", pinDialogue);
             },
+            nullptr,
             [](Engine::Node& nodeRef) {
-                ImGui::Text("Choice Details:");
-                ImGui::TextDisabled("(Extendable custom properties)");
+                ImGui::TextDisabled("Choice node.");
+                ImGui::TextWrapped("Each output pin represents a dialogue branch option.");
             }
         );
 
@@ -2669,128 +2698,780 @@ void EditorUI::drawNodeGraphDemoWindow() {
                 graph.addInputPin(nodeId, "A", pinFloat);
                 graph.addInputPin(nodeId, "B", pinFloat);
                 graph.addOutputPin(nodeId, "Result", pinFloat);
+            },
+            nullptr,
+            [](Engine::Node& nodeRef) {
+                ImGui::TextDisabled("Adds two floats.");
             }
         );
 
-        // 4. Conditional Branch Node
+        // 4. Branch Node — detail panel shows condition boolean
         graph.registerNodeType("Logic", "Branch", "Branch Node",
             [pinExec](uint32_t nodeId) {
                 graph.addInputPin(nodeId, "In", pinExec);
                 graph.addOutputPin(nodeId, "True", pinExec);
                 graph.addOutputPin(nodeId, "False", pinExec);
             },
+            nullptr,
             [](Engine::Node& nodeRef) {
+                ImGui::TextDisabled("Condition:");
                 bool val = (nodeRef.customData == "1");
-                if (ImGui::Checkbox("Condition", &val)) {
+                if (ImGui::Checkbox("Active##branch_cond", &val))
                     nodeRef.customData = val ? "1" : "0";
-                }
             }
         );
 
-        // 5. Color Node
+        // 5. Color Constant Node — detail panel shows color picker
         graph.registerNodeType("Visual", "ColorConstant", "Color Constant",
             [pinColor](uint32_t nodeId) {
                 graph.addOutputPin(nodeId, "Out", pinColor);
             },
+            nullptr,
             [](Engine::Node& nodeRef) {
                 static float color[4] = { 0.15f, 0.45f, 0.8f, 1.0f };
                 if (!nodeRef.customData.empty()) {
-                    std::stringstream ss(nodeRef.customData);
-                    ss >> color[0] >> color[1] >> color[2] >> color[3];
+                    std::stringstream css(nodeRef.customData);
+                    css >> color[0] >> color[1] >> color[2] >> color[3];
                 }
-                if (ImGui::ColorEdit4("Color", color, ImGuiColorEditFlags_NoInputs)) {
-                    std::stringstream ss;
-                    ss << color[0] << " " << color[1] << " " << color[2] << " " << color[3];
-                    nodeRef.customData = ss.str();
+                if (ImGui::ColorEdit4("Color##cc", color)) {
+                    std::stringstream css;
+                    css << color[0] << " " << color[1] << " " << color[2] << " " << color[3];
+                    nodeRef.customData = css.str();
                 }
             }
         );
 
-        // Pre-spawn default demonstration nodes
-        uint32_t n1Id = graph.createNode("Speech Node", "DialogueSpeech", ImVec2(50.0f, 150.0f));
-        Engine::Node* n1 = graph.findNode(n1Id);
-        if (n1) {
-            n1->customData = "Hello adventurer! Welcome to the realm of Antigravity.";
-            n1->customWidgetCallback = [](Engine::Node& nodeRef) {
-                ImGui::Text("Speech text:");
-                char textBuf[128] = "";
-                strncpy_s(textBuf, nodeRef.customData.c_str(), sizeof(textBuf) - 1);
-                if (ImGui::InputText("##speechText", textBuf, sizeof(textBuf))) {
-                    nodeRef.customData = textBuf;
-                }
-            };
-        }
-        graph.addInputPin(n1Id, "Prev", pinDialogue);
-        uint32_t n1OutId = graph.addOutputPin(n1Id, "Next", pinDialogue);
+        // Pre-spawn nodes
+        uint32_t n1Id    = graph.createNode("Speech Node",  "DialogueSpeech",  ImVec2( 50.0f, 150.0f));
+        if (Engine::Node* n1 = graph.findNode(n1Id))
+            n1->customData = "Hello adventurer!";
+        graph.addInputPin(n1Id,  "Prev", pinDialogue);
+        uint32_t n1Out = graph.addOutputPin(n1Id, "Next", pinDialogue);
 
-        uint32_t n2Id = graph.createNode("Choice Node", "DialogueChoice", ImVec2(320.0f, 120.0f));
-        Engine::Node* n2 = graph.findNode(n2Id);
-        if (n2) {
-            n2->customWidgetCallback = [](Engine::Node& nodeRef) {
-                ImGui::Text("Choice Details:");
-                ImGui::TextDisabled("(Extendable custom properties)");
-            };
-        }
-        uint32_t n2InId = graph.addInputPin(n2Id, "Prev", pinDialogue);
+        uint32_t n2Id    = graph.createNode("Choice Node",  "DialogueChoice",  ImVec2(320.0f, 120.0f));
+        uint32_t n2In    = graph.addInputPin(n2Id,  "Prev",     pinDialogue);
         graph.addOutputPin(n2Id, "Option A", pinDialogue);
         graph.addOutputPin(n2Id, "Option B", pinDialogue);
+        graph.addLink(n1Out, n2In);
 
-        // Pre-link them
-        graph.addLink(n1OutId, n2InId);
-
-        s_serializedText = graph.serialize();
         initialized = true;
     }
 
-    // Canvas Toolbar
-    if (ImGui::Button("Clear Canvas")) {
-        graph.clear();
-    }
+    // Toolbar
+    if (ImGui::Button("Clear")) graph.clear();
     ImGui::SameLine();
     if (ImGui::Button("Save JSON")) {
-        s_serializedText = graph.serialize();
         std::ofstream out("assets/node_graph_demo.json");
-        if (out.is_open()) {
-            out << s_serializedText;
-            out.close();
-            statusMessage = "Saved node graph to assets/node_graph_demo.json";
-        }
+        if (out.is_open()) { out << graph.serialize(); statusMessage = "Saved node graph."; }
     }
     ImGui::SameLine();
     if (ImGui::Button("Load JSON")) {
         std::ifstream in("assets/node_graph_demo.json");
         if (in.is_open()) {
-            std::stringstream ss;
-            ss << in.rdbuf();
-            in.close();
-            if (graph.deserialize(ss.str())) {
-                s_serializedText = ss.str();
-                statusMessage = "Loaded node graph from assets/node_graph_demo.json";
-            }
+            std::stringstream ss; ss << in.rdbuf();
+            graph.deserialize(ss.str()); statusMessage = "Loaded node graph.";
         }
     }
-
     ImGui::SameLine();
-    ImGui::TextDisabled("|  R-Click canvas to create nodes. Drag output-to-input slots to link. Drag headers to move.");
+    ImGui::TextDisabled("|  R-Click canvas to create nodes. Drag pins to link.");
 
     ImGui::Separator();
-
-    ImVec2 contentSize = ImGui::GetContentRegionAvail();
-    float canvasW = contentSize.x * 0.70f;
-    float jsonW = contentSize.x - canvasW - 8.0f;
-
-    graph.draw("DemoEditor", ImVec2(canvasW, contentSize.y));
-
-    ImGui::SameLine();
-    ImGui::BeginChild("##json_output", ImVec2(jsonW, contentSize.y), true);
-    ImGui::Text("Serialized JSON Output:");
-    ImGui::Separator();
-    
-    char* jsonPtr = s_serializedText.empty() ? const_cast<char*>("") : &s_serializedText[0];
-    ImGui::InputTextMultiline("##json_text", jsonPtr, s_serializedText.size() + 1, ImVec2(-1.0f, -1.0f), ImGuiInputTextFlags_ReadOnly);
-    
-    ImGui::EndChild();
+    graph.draw("DemoEditor", ImVec2(0, 0), 240.0f);
 
     ImGui::End();
 }
+
+// =============================================================================
+// Animator Controller Editor
+// =============================================================================
+
+
+void EditorUI::drawAnimatorControllerWindow() {
+    if (!s_openAnimatorControllerWindow) return;
+
+    ImGui::SetNextWindowSize(ImVec2(1050, 650), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Animator Controller", &s_openAnimatorControllerWindow,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+        ImGui::End();
+        return;
+    }
+
+    // -----------------------------------------------------------------------
+    // Guard: need selected entity with AnimatorComponent
+    // -----------------------------------------------------------------------
+    if (!hasSelection || !registry.isValid(selectedEntity)) {
+        ImGui::TextDisabled("Select an entity with an AnimatorComponent and AnimationControllerComponent.");
+        ImGui::End();
+        return;
+    }
+
+    AnimatorComponent* animator = registry.get<AnimatorComponent>(selectedEntity);
+    AnimationControllerComponent* controller = registry.get<AnimationControllerComponent>(selectedEntity);
+
+    if (!animator || !controller) {
+        ImGui::TextDisabled("The selected entity needs both AnimatorComponent and AnimationControllerComponent.");
+        if (!animator && ImGui::Button("Add AnimatorComponent"))
+            registry.emplace<AnimatorComponent>(selectedEntity, AnimatorComponent{});
+        ImGui::SameLine();
+        if (!controller && ImGui::Button("Add AnimationControllerComponent"))
+            registry.emplace<AnimationControllerComponent>(selectedEntity, AnimationControllerComponent{});
+        ImGui::End();
+        return;
+    }
+
+    // -----------------------------------------------------------------------
+    // Static per-window state
+    // -----------------------------------------------------------------------
+    static Engine::NodeGraph s_ctrlGraph;
+    static uint32_t          s_lastBuiltEntityId = 0;
+    static size_t            s_lastStateCount = 0;
+
+    // Collect clip names for combos
+    std::vector<std::string> clipNames;
+    for (const auto& clip : animator->animations)
+        clipNames.push_back(clip.name);
+
+    // -----------------------------------------------------------------------
+    // Rebuild graph when entity or state list changes
+    // -----------------------------------------------------------------------
+    auto rebuildGraph = [&]() {
+        s_ctrlGraph.clear();
+
+        // Pin type for state transitions
+        Engine::NodePinType pinState{ "state", IM_COL32(255, 165, 80, 255) };
+
+        // Register node types (no-op if already registered since we clear each time)
+        // Entry node
+        s_ctrlGraph.registerNodeType("State", "CtrlEntry", "Entry",
+            [pinState](uint32_t nodeId) {
+                s_ctrlGraph.addOutputPin(nodeId, "Start", pinState);
+            },
+            nullptr,
+            [](Engine::Node& n) {
+                ImGui::TextDisabled("Entry point of the state machine.");
+                ImGui::TextWrapped("Connect this to the first default state.");
+            }
+        );
+
+        // Any State node
+        s_ctrlGraph.registerNodeType("State", "CtrlAnyState", "Any State",
+            [pinState](uint32_t nodeId) {
+                s_ctrlGraph.addOutputPin(nodeId, "To", pinState);
+            },
+            nullptr,
+            [](Engine::Node& n) {
+                ImGui::TextDisabled("Transitions from Any State fire regardless of the current active state.");
+            }
+        );
+
+        // Regular animation state node (detail panel = full state editor)
+        s_ctrlGraph.registerNodeType("State", "CtrlState", "State",
+            [pinState](uint32_t nodeId) {
+                s_ctrlGraph.addInputPin(nodeId,  "In",  pinState);
+                s_ctrlGraph.addOutputPin(nodeId, "Out", pinState);
+            },
+            nullptr,
+            [controller, clipNames](Engine::Node& n) {
+                if (!n.userData) { ImGui::TextDisabled("Invalid state reference."); return; }
+                AnimationState* state = static_cast<AnimationState*>(n.userData);
+
+                // State name
+                ImGui::TextDisabled("State Name:");
+                char nameBuf[128];
+                strncpy_s(nameBuf, state->name.c_str(), sizeof(nameBuf) - 1);
+                ImGui::PushItemWidth(-1);
+                if (ImGui::InputText("##stateName", nameBuf, sizeof(nameBuf)))
+                    state->name = nameBuf;
+                ImGui::PopItemWidth();
+                ImGui::Spacing();
+
+                ImGui::TextDisabled("Is Blend Tree:");
+                ImGui::Checkbox("##isBlendTree", &state->isBlendTree);
+
+                if (!state->isBlendTree) {
+                    // Clip picker
+                    ImGui::Spacing();
+                    ImGui::TextDisabled("Animation Clip:");
+                    ImGui::PushItemWidth(-1);
+                    if (ImGui::BeginCombo("##stateClip", state->clipName.empty() ? "(none)" : state->clipName.c_str())) {
+                        if (ImGui::Selectable("(none)", state->clipName.empty()))
+                            state->clipName.clear();
+                        for (const auto& cn : clipNames) {
+                            bool sel = (cn == state->clipName);
+                            if (ImGui::Selectable(cn.c_str(), sel))
+                                state->clipName = cn;
+                        }
+                        ImGui::EndCombo();
+                    }
+                    ImGui::PopItemWidth();
+                } else {
+                    // Blend tree editor
+                    ImGui::Spacing();
+                    ImGui::Separator();
+                    ImGui::TextDisabled("Blend Tree");
+                    ImGui::Separator();
+
+                    ImGui::TextDisabled("Parameter:");
+                    char paramBuf[64];
+                    strncpy_s(paramBuf, state->blendTree.parameterName.c_str(), sizeof(paramBuf) - 1);
+                    ImGui::PushItemWidth(-1);
+                    if (ImGui::InputText("##btParam", paramBuf, sizeof(paramBuf)))
+                        state->blendTree.parameterName = paramBuf;
+                    ImGui::PopItemWidth();
+                    ImGui::Checkbox("2D Blend", &state->blendTree.is2D);
+                    if (state->blendTree.is2D) {
+                        ImGui::TextDisabled("Y Parameter:");
+                        char paramYBuf[64];
+                        strncpy_s(paramYBuf, state->blendTree.parameterYName.c_str(), sizeof(paramYBuf) - 1);
+                        ImGui::PushItemWidth(-1);
+                        if (ImGui::InputText("##btParamY", paramYBuf, sizeof(paramYBuf)))
+                            state->blendTree.parameterYName = paramYBuf;
+                        ImGui::PopItemWidth();
+                    }
+
+                    ImGui::Spacing();
+                    ImGui::TextDisabled("Blend Nodes:");
+                    int toRemoveBlend = -1;
+                    for (int bi = 0; bi < (int)state->blendTree.nodes.size(); ++bi) {
+                        ImGui::PushID(bi);
+                        auto& bn = state->blendTree.nodes[bi];
+                        ImGui::PushItemWidth(90);
+                        ImGui::DragFloat("##th", &bn.threshold, 0.01f, -100.0f, 100.0f, "%.2f");
+                        ImGui::PopItemWidth();
+                        ImGui::SameLine();
+                        ImGui::PushItemWidth(-30);
+                        if (ImGui::BeginCombo("##bnClip", bn.clipName.empty() ? "(none)" : bn.clipName.c_str())) {
+                            if (ImGui::Selectable("(none)", bn.clipName.empty())) bn.clipName.clear();
+                            for (const auto& cn : clipNames) {
+                                bool s2 = (cn == bn.clipName);
+                                if (ImGui::Selectable(cn.c_str(), s2)) bn.clipName = cn;
+                            }
+                            ImGui::EndCombo();
+                        }
+                        ImGui::PopItemWidth();
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("X##rmbn")) toRemoveBlend = bi;
+                        ImGui::PopID();
+                    }
+                    if (toRemoveBlend >= 0)
+                        state->blendTree.nodes.erase(state->blendTree.nodes.begin() + toRemoveBlend);
+                    if (ImGui::SmallButton("+ Blend Node"))
+                        state->blendTree.nodes.push_back(BlendNode{});
+                }
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::TextDisabled("Playback:");
+                ImGui::DragFloat("Speed##stSpeed", &state->speed, 0.01f, 0.0f, 10.0f);
+                ImGui::Checkbox("Loop##stLoop", &state->isLooping);
+
+                // Transitions from this state
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::TextDisabled("Outgoing Transitions:");
+                for (auto& trans : controller->transitions) {
+                    if (trans.fromState != state->name) continue;
+                    ImGui::PushID(&trans);
+                    ImGui::Text("-> %s", trans.toState.c_str());
+                    ImGui::SameLine();
+                    ImGui::DragFloat("Fade##xf", &trans.crossfadeDuration, 0.01f, 0.0f, 2.0f);
+
+                    int toRemoveCond = -1;
+                    for (int ci = 0; ci < (int)trans.conditions.size(); ++ci) {
+                        ImGui::PushID(ci);
+                        auto& cond = trans.conditions[ci];
+                        char pBuf[64]; strncpy_s(pBuf, cond.parameterName.c_str(), sizeof(pBuf)-1);
+                        ImGui::PushItemWidth(80);
+                        if (ImGui::InputText("##cp", pBuf, sizeof(pBuf))) cond.parameterName = pBuf;
+                        ImGui::PopItemWidth();
+                        ImGui::SameLine();
+                        const char* ops[] = { ">", "<", "==" };
+                        int opIdx = (cond.op == ">") ? 0 : (cond.op == "<") ? 1 : 2;
+                        ImGui::PushItemWidth(45);
+                        if (ImGui::Combo("##cop", &opIdx, ops, 3)) cond.op = ops[opIdx];
+                        ImGui::PopItemWidth();
+                        ImGui::SameLine();
+                        ImGui::PushItemWidth(60);
+                        ImGui::DragFloat("##cv", &cond.value, 0.01f);
+                        ImGui::PopItemWidth();
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("X##rc")) toRemoveCond = ci;
+                        ImGui::PopID();
+                    }
+                    if (toRemoveCond >= 0)
+                        trans.conditions.erase(trans.conditions.begin() + toRemoveCond);
+                    if (ImGui::SmallButton("+ Condition"))
+                        trans.conditions.push_back(TransitionCondition{});
+
+                    ImGui::PopID();
+                    ImGui::Separator();
+                }
+            }
+        );
+
+        // Blend Tree state node — shares the full state detail panel
+        // (the isBlendTree checkbox inside it switches the view)
+        s_ctrlGraph.registerNodeType("State", "CtrlBlendTree", "Blend Tree",
+            [pinState](uint32_t nodeId) {
+                s_ctrlGraph.addInputPin(nodeId,  "In",  pinState);
+                s_ctrlGraph.addOutputPin(nodeId, "Out", pinState);
+            },
+            nullptr,
+            [controller, clipNames](Engine::Node& n) {
+                // Re-use the same logic: userData points to an AnimationState
+                if (!n.userData) { ImGui::TextDisabled("Invalid state reference."); return; }
+                AnimationState* state = static_cast<AnimationState*>(n.userData);
+
+                // --- State Name ---
+                ImGui::TextDisabled("State Name:");
+                char nameBuf[128];
+                strncpy_s(nameBuf, state->name.c_str(), sizeof(nameBuf) - 1);
+                ImGui::PushItemWidth(-1);
+                if (ImGui::InputText("##btStateName", nameBuf, sizeof(nameBuf)))
+                    state->name = nameBuf;
+                ImGui::PopItemWidth();
+                ImGui::Spacing();
+
+                // Force isBlendTree = true for this node type
+                state->isBlendTree = true;
+
+                // ---------------------------------------------------------------
+                // Blend Tree Editor
+                // ---------------------------------------------------------------
+                ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(100, 220, 200, 255));
+                ImGui::TextUnformatted("Blend Tree");
+                ImGui::PopStyleColor();
+                ImGui::Separator();
+
+                // Blend type toggle
+                bool is2D = state->blendTree.is2D;
+                if (ImGui::RadioButton("1D##bt1d", !is2D)) state->blendTree.is2D = false;
+                ImGui::SameLine();
+                if (ImGui::RadioButton("2D##bt2d",  is2D)) state->blendTree.is2D = true;
+
+                ImGui::Spacing();
+
+                // Parameter name(s)
+                if (!state->blendTree.is2D) {
+                    ImGui::TextDisabled("Parameter (X):");
+                    char pBuf[64]; strncpy_s(pBuf, state->blendTree.parameterName.c_str(), sizeof(pBuf)-1);
+                    ImGui::PushItemWidth(-1);
+                    if (ImGui::InputText("##btP", pBuf, sizeof(pBuf)))
+                        state->blendTree.parameterName = pBuf;
+                    ImGui::PopItemWidth();
+                } else {
+                    ImGui::TextDisabled("Parameter X:");
+                    char pBuf[64]; strncpy_s(pBuf, state->blendTree.parameterName.c_str(), sizeof(pBuf)-1);
+                    ImGui::PushItemWidth(-1);
+                    if (ImGui::InputText("##btPX", pBuf, sizeof(pBuf)))
+                        state->blendTree.parameterName = pBuf;
+                    ImGui::PopItemWidth();
+                    ImGui::TextDisabled("Parameter Y:");
+                    char pyBuf[64]; strncpy_s(pyBuf, state->blendTree.parameterYName.c_str(), sizeof(pyBuf)-1);
+                    ImGui::PushItemWidth(-1);
+                    if (ImGui::InputText("##btPY", pyBuf, sizeof(pyBuf)))
+                        state->blendTree.parameterYName = pyBuf;
+                    ImGui::PopItemWidth();
+                }
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::TextDisabled("Motion List:");
+
+                // --- 1D visual threshold bar ---
+                if (!state->blendTree.is2D && !state->blendTree.nodes.empty()) {
+                    // Find min/max threshold range
+                    float tMin = state->blendTree.nodes[0].threshold;
+                    float tMax = state->blendTree.nodes[0].threshold;
+                    for (auto& bn : state->blendTree.nodes) {
+                        tMin = std::min(tMin, bn.threshold);
+                        tMax = std::max(tMax, bn.threshold);
+                    }
+                    if (tMax - tMin < 0.01f) tMax = tMin + 1.0f;
+
+                    ImVec2 barPos = ImGui::GetCursorScreenPos();
+                    float barW = ImGui::GetContentRegionAvail().x;
+                    float barH = 8.0f;
+                    ImDrawList* dl = ImGui::GetWindowDrawList();
+                    dl->AddRectFilled(barPos, ImVec2(barPos.x + barW, barPos.y + barH),
+                        IM_COL32(50, 50, 50, 255), 3.0f);
+                    for (auto& bn : state->blendTree.nodes) {
+                        float t = (bn.threshold - tMin) / (tMax - tMin);
+                        float px = barPos.x + t * barW;
+                        dl->AddTriangleFilled(
+                            ImVec2(px, barPos.y + barH),
+                            ImVec2(px - 5.0f, barPos.y + barH + 6.0f),
+                            ImVec2(px + 5.0f, barPos.y + barH + 6.0f),
+                            IM_COL32(255, 165, 80, 255));
+                    }
+                    ImGui::Dummy(ImVec2(barW, barH + 8.0f));
+                    ImGui::Spacing();
+                }
+
+                // --- Motion rows ---
+                int toRemove = -1;
+                for (int bi = 0; bi < (int)state->blendTree.nodes.size(); ++bi) {
+                    ImGui::PushID(bi);
+                    auto& bn = state->blendTree.nodes[bi];
+
+                    // Row: clip combo
+                    ImGui::PushItemWidth(-58);
+                    const char* clipLabel = bn.clipName.empty() ? "(none)" : bn.clipName.c_str();
+                    if (ImGui::BeginCombo("##bclip", clipLabel)) {
+                        if (ImGui::Selectable("(none)", bn.clipName.empty()))
+                            bn.clipName.clear();
+                        for (const auto& cn : clipNames) {
+                            bool sel = (cn == bn.clipName);
+                            if (ImGui::Selectable(cn.c_str(), sel)) bn.clipName = cn;
+                        }
+                        ImGui::EndCombo();
+                    }
+                    ImGui::PopItemWidth();
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("-##rm")) toRemove = bi;
+
+                    // Threshold
+                    if (!state->blendTree.is2D) {
+                        ImGui::PushItemWidth(-1);
+                        ImGui::DragFloat("##thr", &bn.threshold, 0.01f, -999.f, 999.f, "Thr %.2f");
+                        ImGui::PopItemWidth();
+                    } else {
+                        ImGui::PushItemWidth((ImGui::GetContentRegionAvail().x - 4) * 0.5f);
+                        ImGui::DragFloat("##thrX", &bn.threshold2D.x, 0.01f, -999.f, 999.f, "X:%.2f");
+                        ImGui::PopItemWidth();
+                        ImGui::SameLine(0, 4);
+                        ImGui::PushItemWidth(-1);
+                        ImGui::DragFloat("##thrY", &bn.threshold2D.y, 0.01f, -999.f, 999.f, "Y:%.2f");
+                        ImGui::PopItemWidth();
+                    }
+
+                    ImGui::PopID();
+                    ImGui::Spacing();
+                }
+                if (toRemove >= 0)
+                    state->blendTree.nodes.erase(state->blendTree.nodes.begin() + toRemove);
+                if (ImGui::Button("+ Add Motion", ImVec2(-1, 0)))
+                    state->blendTree.nodes.push_back(BlendNode{});
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::TextDisabled("Playback:");
+                ImGui::DragFloat("Speed##btSpeed", &state->speed, 0.01f, 0.0f, 10.0f);
+                ImGui::Checkbox("Loop##btLoop", &state->isLooping);
+
+                // Outgoing transitions
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::TextDisabled("Outgoing Transitions:");
+                for (auto& trans : controller->transitions) {
+                    if (trans.fromState != state->name) continue;
+                    ImGui::PushID(&trans);
+                    ImGui::Text("-> %s", trans.toState.c_str());
+                    ImGui::SameLine();
+                    ImGui::DragFloat("Fade##btxf", &trans.crossfadeDuration, 0.01f, 0.0f, 2.0f);
+                    int toRemoveCond = -1;
+                    for (int ci = 0; ci < (int)trans.conditions.size(); ++ci) {
+                        ImGui::PushID(ci);
+                        auto& cond = trans.conditions[ci];
+                        char pBuf2[64]; strncpy_s(pBuf2, cond.parameterName.c_str(), sizeof(pBuf2)-1);
+                        ImGui::PushItemWidth(75); if (ImGui::InputText("##bcp", pBuf2, sizeof(pBuf2))) cond.parameterName = pBuf2; ImGui::PopItemWidth();
+                        ImGui::SameLine();
+                        const char* ops[] = { ">", "<", "==" };
+                        int opIdx = (cond.op == ">") ? 0 : (cond.op == "<") ? 1 : 2;
+                        ImGui::PushItemWidth(42); if (ImGui::Combo("##bcop", &opIdx, ops, 3)) cond.op = ops[opIdx]; ImGui::PopItemWidth();
+                        ImGui::SameLine();
+                        ImGui::PushItemWidth(55); ImGui::DragFloat("##bcv", &cond.value, 0.01f); ImGui::PopItemWidth();
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("X##brc")) toRemoveCond = ci;
+                        ImGui::PopID();
+                    }
+                    if (toRemoveCond >= 0)
+                        trans.conditions.erase(trans.conditions.begin() + toRemoveCond);
+                    if (ImGui::SmallButton("+ Cond##btcond"))
+                        trans.conditions.push_back(TransitionCondition{});
+                    ImGui::PopID();
+                    ImGui::Separator();
+                }
+            }
+        );
+
+        // -----------------------------------------------------------------------
+        // Spawn Entry + Any State nodes
+        // -----------------------------------------------------------------------
+        uint32_t entryId = s_ctrlGraph.createNode("Entry", "CtrlEntry", ImVec2(20.0f, 160.0f));
+        s_ctrlGraph.setNodeHeaderColor(entryId, IM_COL32(40, 140, 60, 255));
+        s_ctrlGraph.addOutputPin(entryId, "Start", pinState);
+
+        uint32_t anyId = s_ctrlGraph.createNode("Any State", "CtrlAnyState", ImVec2(20.0f, 260.0f));
+        s_ctrlGraph.setNodeHeaderColor(anyId, IM_COL32(100, 40, 130, 255));
+        s_ctrlGraph.addOutputPin(anyId, "To", pinState);
+
+        // -----------------------------------------------------------------------
+        // Spawn one node per state
+        // -----------------------------------------------------------------------
+        std::vector<uint32_t> stateNodeIds;
+        float xOff = 260.0f;
+        for (size_t si = 0; si < controller->states.size(); ++si) {
+            auto& state = controller->states[si];
+            bool isBT = state.isBlendTree;
+
+            uint32_t nid = s_ctrlGraph.createNode(
+                state.name,
+                isBT ? "CtrlBlendTree" : "CtrlState",
+                ImVec2(xOff, 80.0f + si * 110.0f)
+            );
+
+            // Header color: blue for regular, teal for blend tree
+            s_ctrlGraph.setNodeHeaderColor(nid, isBT
+                ? IM_COL32(30, 110, 110, 255)
+                : IM_COL32(40, 80,  150, 255));
+
+            Engine::NodePinType pinState2{ "state", IM_COL32(255, 165, 80, 255) };
+            s_ctrlGraph.addInputPin(nid,  "In",  pinState2);
+            s_ctrlGraph.addOutputPin(nid, "Out", pinState2);
+
+            // Bind userData to the actual state (pointer is stable while controller lives)
+            if (Engine::Node* n = s_ctrlGraph.findNode(nid))
+                n->userData = &controller->states[si];
+
+            stateNodeIds.push_back(nid);
+        }
+
+        // -----------------------------------------------------------------------
+        // Spawn links for existing transitions
+        // -----------------------------------------------------------------------
+        // Build fromStateName -> node output pin id map
+        // State name -> {nodeId, inPinId, outPinId}
+        struct StateNodeInfo { uint32_t nodeId, inPinId, outPinId; };
+        std::vector<StateNodeInfo> stateInfos;
+        for (size_t si = 0; si < controller->states.size(); ++si) {
+            uint32_t nid = stateNodeIds[si];
+            Engine::Node* n = s_ctrlGraph.findNode(nid);
+            if (!n) continue;
+            uint32_t inPin = n->inputs.empty()  ? 0 : n->inputs[0].id;
+            uint32_t outPin = n->outputs.empty() ? 0 : n->outputs[0].id;
+            stateInfos.push_back({nid, inPin, outPin});
+        }
+
+        // Entry -> first state (if any)
+        if (!stateInfos.empty() && !controller->currentState.empty()) {
+            Engine::Node* entryNode = s_ctrlGraph.findNode(entryId);
+            if (entryNode && !entryNode->outputs.empty()) {
+                // Find the default state
+                for (size_t si = 0; si < controller->states.size(); ++si) {
+                    if (controller->states[si].name == controller->currentState) {
+                        s_ctrlGraph.addLink(entryNode->outputs[0].id, stateInfos[si].inPinId);
+                        break;
+                    }
+                }
+            }
+        }
+
+        for (const auto& trans : controller->transitions) {
+            uint32_t fromOutPin = 0, toInPin = 0;
+
+            // Resolve from: could be "Any State" or a regular state
+            if (trans.fromState == "Any State") {
+                Engine::Node* anyNode = s_ctrlGraph.findNode(anyId);
+                if (anyNode && !anyNode->outputs.empty())
+                    fromOutPin = anyNode->outputs[0].id;
+            } else {
+                for (size_t si = 0; si < controller->states.size(); ++si) {
+                    if (controller->states[si].name == trans.fromState && si < stateInfos.size()) {
+                        fromOutPin = stateInfos[si].outPinId;
+                        break;
+                    }
+                }
+            }
+            for (size_t si = 0; si < controller->states.size(); ++si) {
+                if (controller->states[si].name == trans.toState && si < stateInfos.size()) {
+                    toInPin = stateInfos[si].inPinId;
+                    break;
+                }
+            }
+
+            if (fromOutPin && toInPin)
+                s_ctrlGraph.addLink(fromOutPin, toInPin);
+        }
+
+        // -----------------------------------------------------------------------
+        // Register link created/deleted callbacks
+        // -----------------------------------------------------------------------
+        s_ctrlGraph.onLinkCreated = [controller, &stateInfos, anyId, entryId](uint32_t fromPin, uint32_t toPin) {
+            // Identify from/to state names from pin -> node -> state
+            auto resolveStateName = [&](uint32_t pinId, bool isOutput) -> std::string {
+                Engine::NodePin* p = s_ctrlGraph.findPin(pinId);
+                if (!p) return "";
+                Engine::Node* n = s_ctrlGraph.findNode(p->nodeId);
+                if (!n) return "";
+                if (n->id == anyId) return "Any State";
+                if (n->id == entryId) return "__Entry__";
+                if (n->userData) return static_cast<AnimationState*>(n->userData)->name;
+                return "";
+            };
+
+            std::string from = resolveStateName(fromPin, true);
+            std::string to   = resolveStateName(toPin,  false);
+            if (from.empty() || to.empty() || from == "__Entry__") return;
+
+            // Check not a duplicate
+            for (const auto& t : controller->transitions)
+                if (t.fromState == from && t.toState == to) return;
+
+            AnimationTransition newTrans;
+            newTrans.fromState = from;
+            newTrans.toState   = to;
+            newTrans.crossfadeDuration = 0.2f;
+            controller->transitions.push_back(newTrans);
+        };
+
+        s_ctrlGraph.onLinkDeleted = [controller, anyId, entryId](uint32_t fromPin, uint32_t toPin) {
+            auto resolveStateName = [&](uint32_t pinId) -> std::string {
+                Engine::NodePin* p = s_ctrlGraph.findPin(pinId);
+                if (!p) return "";
+                Engine::Node* n = s_ctrlGraph.findNode(p->nodeId);
+                if (!n) return "";
+                if (n->id == anyId) return "Any State";
+                if (n->id == entryId) return "__Entry__";
+                if (n->userData) return static_cast<AnimationState*>(n->userData)->name;
+                return "";
+            };
+
+            std::string from = resolveStateName(fromPin);
+            std::string to   = resolveStateName(toPin);
+            controller->transitions.erase(
+                std::remove_if(controller->transitions.begin(), controller->transitions.end(),
+                    [&](const AnimationTransition& t) {
+                        return t.fromState == from && t.toState == to;
+                    }),
+                controller->transitions.end());
+        };
+
+        // When a state node is deleted, remove the matching AnimationState
+        // and all transitions referencing it, then force a graph rebuild.
+        s_ctrlGraph.onNodeDeleted = [controller](uint32_t nodeId) {
+            // Find which state this node was linked to via userData
+            // (userData was already cleared by the time callback fires, so we
+            //  scan transitions for dangling state names after deletion)
+            // Simpler: force a rebuild flag so the graph re-syncs from controller->states.
+            // The actual removal is handled by the user pressing delete in the detail panel,
+            // OR we can scan the graph nodes for orphaned states.
+            // Best approach: mark rebuild needed.
+            (void)nodeId;
+            // We'll detect the mismatch next frame via s_lastStateCount check.
+            // However we also need to remove states whose userData node no longer exists.
+            // We do this by collecting all userDatas still alive in the graph:
+            std::vector<AnimationState*> alive;
+            for (const auto& gn : s_ctrlGraph.getNodes()) {
+                if (gn.userData)
+                    alive.push_back(static_cast<AnimationState*>(gn.userData));
+            }
+            // Remove states not in alive list
+            auto removedIt = std::remove_if(controller->states.begin(), controller->states.end(),
+                [&](const AnimationState& st) {
+                    for (auto* a : alive)
+                        if (a == &st) return false;
+                    return true;
+                });
+            // Remove transitions referencing deleted state names
+            std::vector<std::string> removedNames;
+            for (auto it = removedIt; it != controller->states.end(); ++it)
+                removedNames.push_back(it->name);
+            controller->states.erase(removedIt, controller->states.end());
+            for (const auto& rn : removedNames) {
+                controller->transitions.erase(
+                    std::remove_if(controller->transitions.begin(), controller->transitions.end(),
+                        [&](const AnimationTransition& t) {
+                            return t.fromState == rn || t.toState == rn;
+                        }),
+                    controller->transitions.end());
+            }
+        };
+
+        s_lastBuiltEntityId = selectedEntity.getId();
+        s_lastStateCount    = controller->states.size();
+    };
+
+    // Rebuild when entity changed or state count changed
+    if (s_lastBuiltEntityId != selectedEntity.getId() ||
+        s_lastStateCount    != controller->states.size()) {
+        rebuildGraph();
+    }
+
+    // -----------------------------------------------------------------------
+    // Layout: [Left param panel 140px] | [NodeGraph + built-in detail panel]
+    // -----------------------------------------------------------------------
+    float leftW = 140.0f;
+    ImVec2 avail = ImGui::GetContentRegionAvail();
+
+    // --- Left: Parameters ---
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(25, 25, 30, 255));
+    ImGui::BeginChild("##ctrl_params", ImVec2(leftW, avail.y), true);
+    ImGui::TextDisabled("Parameters");
+    ImGui::Separator();
+
+    // Add parameter
+    static char s_newParamName[64] = "speed";
+    ImGui::PushItemWidth(-1);
+    ImGui::InputText("##newParamName", s_newParamName, sizeof(s_newParamName));
+    ImGui::PopItemWidth();
+    if (ImGui::Button("+ Add Param", ImVec2(-1, 0))) {
+        if (strlen(s_newParamName) > 0 && controller->parameters.find(s_newParamName) == controller->parameters.end()) {
+            controller->parameters[s_newParamName] = 0.0f;
+        }
+    }
+    ImGui::Separator();
+
+    std::vector<std::string> toRemoveParams;
+    for (auto& [name, val] : controller->parameters) {
+        ImGui::PushID(name.c_str());
+        ImGui::TextUnformatted(name.c_str());
+        ImGui::PushItemWidth(-22);
+        ImGui::DragFloat("##pval", &val, 0.01f);
+        ImGui::PopItemWidth();
+        ImGui::SameLine();
+        if (ImGui::SmallButton("X")) toRemoveParams.push_back(name);
+        ImGui::PopID();
+    }
+    for (const auto& rp : toRemoveParams) controller->parameters.erase(rp);
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::TextDisabled("Add State:");
+    if (ImGui::Button("+ State", ImVec2(-1, 0))) {
+        AnimationState newState;
+        newState.name = "New State " + std::to_string(controller->states.size());
+        controller->states.push_back(newState);
+        // Force rebuild on next frame
+        s_lastStateCount = (size_t)-1;
+    }
+    if (ImGui::Button("+ Blend Tree", ImVec2(-1, 0))) {
+        AnimationState newState;
+        newState.name = "Blend Tree " + std::to_string(controller->states.size());
+        newState.isBlendTree = true;
+        controller->states.push_back(newState);
+        s_lastStateCount = (size_t)-1;
+    }
+
+    ImGui::Spacing();
+    if (!controller->currentState.empty()) {
+        ImGui::TextDisabled("Active State:");
+        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(100, 220, 100, 255));
+        ImGui::TextWrapped("%s", controller->currentState.c_str());
+        ImGui::PopStyleColor();
+    }
+
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+
+    ImGui::SameLine(0.0f, 4.0f);
+
+    // --- Center + Right: NodeGraph (framework renders canvas + detail panel) ---
+    float graphW = avail.x - leftW - 4.0f;
+    s_ctrlGraph.draw("AnimCtrlGraph", ImVec2(graphW, avail.y), 260.0f);
+
+    ImGui::End();
+}
+
+
 
