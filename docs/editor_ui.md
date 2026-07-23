@@ -34,10 +34,37 @@ The UI is divided into dockable panels providing full control over the active sc
     *   **Camera Editor**: Slides to modify Field of View (FOV), speed settings, and mouse sensitivity.
     *   **Grid Editor**: Configures infinite grid line spacing, spacing colors, and fade-off distance bounds.
 3.  **Asset Browser Panel**:
-    *   Recursively scans the local `assets/` directory and renders a neat file tree.
+    *   Recursively scans the local `assets/` directory and renders an interactive file tree.
     *   Contextually displays assignment buttons (e.g. "Use Model" or "Use Texture") next to recognized file types if an active entity is selected. Clicking these automatically loads and maps the asset onto the selection.
+    *   **Extensible Context Menu**: Integrated with `AssetBrowserRegistry`, allowing developers to create new asset files (such as `.anim` binary animation files) directly inside target folders via right-click context menus.
 4.  **Scene Controls Panel**: Contains controls to serialize/deserialize the active scene JSON file (defaults to `assets/scenes/test_scene.json`).
 5.  **Debug Console Panel**: Displays frame rate metrics (FPS), picking data (ray origin, ray direction, click ray intersects), and active state descriptions.
+
+---
+
+## Specialized Editor Windows
+
+In addition to standard dockable panels, the editor provides specialized windows available under the **Window** main menu bar:
+
+### 1. Animation Editor Window (`Window -> Animation Editor`)
+A Unity-style keyframe timeline editor for creating and modifying animation clips on the selected entity:
+*   **Reflected Property Table**: Uses an `ImGuiTable` layout powered by `ComponentReflectionRegistry` to dynamically enumerate editable properties on components (e.g., `Transform` position, rotation, scale, or custom component fields).
+*   **Property Selection & Recording**: Add or remove animated channels with `[+]` / `[-]` controls. Click **Add Keyframe** to record the current value of all animated properties into keyframes at the active playback scrubber position.
+*   **Timeline Scrubber**: Drag or click along the timeline canvas to position the playhead. Jump between existing keyframes using `<` and `>` buttons.
+*   **Playback & Clip Management**: Play/Pause controls, loop toggles, playback speed scaling, and clip selection dropdowns.
+
+### 2. Animator Controller Editor Window (`Window -> Animator Controller`)
+A visual state machine and locomotion blend tree editor built on top of the generic [Node Graph Framework](node_graph_framework.md):
+*   **State Machine Nodes**: Visual node cards for `Entry` (green), `Any State` (purple), `State` (blue), and `Blend Tree` (teal).
+*   **Parameter Manager**: Configure named float parameters (e.g. `velocityX`, `velocityY`, `speed`) used to drive transitions and blend trees.
+*   **Visual Blend Tree Editor**: Configure 1D and 2D Freeform Cartesian blend trees with a visual 1D threshold bar, motion list, and clip pickers inside the framework's right-side detail panel.
+*   **Transition Rules**: Connect state nodes using Bezier curves to create transitions. Set crossfade blending durations and condition rules (`>`, `<`, `==`).
+*   *For a complete guide, see [Animator Controller Editor Guide](animator_controller_editor.md).*
+
+### 3. Node Graph Demo Window (`Window -> Node Graph Demo`)
+Demonstrates the reusable generic [Node Graph Framework](node_graph_framework.md):
+*   Features lightweight node cards, Bezier curve links, custom pin colors, panning grid canvas, right-side detail panel (`detailPanelCallback`), and full JSON serialization/deserialization.
+*   *For a complete guide, see [Node Graph Framework Guide](node_graph_framework.md).*
 
 ---
 

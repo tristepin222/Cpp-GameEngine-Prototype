@@ -112,7 +112,10 @@ During play mode, the `PlayerControllerSystem` maps the player's keyboard WASD i
 *   Pressing **W** or **S** slides the target `velocityY` parameter smoothly towards `1.0` or `-1.0` (with **W** representing forward and **S** representing backward).
 *   Pressing **D** or **A** slides the target `velocityX` parameter smoothly towards `1.0` or `-1.0` (strafing right/left).
 *   The `speed` parameter is continuously set to the magnitude of the horizontal velocity vector: \(\sqrt{\text{velocityX}^2 + \text{velocityY}^2}\).
-*   An exponential decay filter smooths inputs over time to guarantee fluid, seamless animation blending transitions in all directions.
+### Visual Editing & Tooling Integration
+The locomotion state machine, blend trees, and keyframe clips are fully editable through dedicated editor tools:
+*   **[Animator Controller Editor](animator_controller_editor.md)**: A visual node-graph editor (`Window -> Animator Controller`) powered by the generic [Node Graph Framework](node_graph_framework.md) for visually editing states (`Entry`, `Any State`, `State`, `Blend Tree`), parameter lists, blend tree threshold bars, and transition condition rules (`>`, `<`, `==`).
+*   **Animation Timeline Editor**: An interactive window (`Window -> Animation Editor`) for creating clips, viewing component properties via reflection, scrubbing the keyframe timeline, and recording keyframes manually.
 
 ---
 

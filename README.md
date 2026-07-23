@@ -39,6 +39,10 @@ For a comprehensive explanation of execution flow and frame sequence, see the [A
 11. **Skeletal Animation, 2D Blend Trees & IK Solvers**: Linear Blend Skinning (LBS) math executed in Vulkan vertex shaders, Forward Kinematics, analytical 2-bone and FABRIK IK solvers, interactive 1D/2D animation blend trees, custom binary `.anim` baking pipeline, and direct WASD controller mapping.
 12. **Static Reflection Engine**: Uses a custom parser and code generator (`reflection_generator`) that scans source file annotations to generate static reflection descriptors. This enables automatic JSON serialization and dynamic editor UI property fields without manual code mapping.
 13. **Physics & Animation Showcase Game**: An interactive sandbox play mode demonstrating rigid body physics, collision resolution (using SAT and impulses), a fully controllable character utilizing 2D blend trees, and a physics gravity gun script.
+14. **Generic Node Graph Framework**: A flexible, reusable visual node graph system featuring customizable node cards, Bezier curve links, an infinite panning canvas, right-side detail panels, event callbacks, and full JSON serialization. Designed to power visual toolsets such as shader editors, dialogue trees, and visual scripting.
+    *   *Read more: [Node Graph Framework Guide](docs/node_graph_framework.md)*
+15. **Animator Controller & Timeline Editors**: Unity-like visual state machine editor for designing locomotion state graphs, 1D/2D blend trees, parameters, and transition rules (`>`, `<`, `==`), plus a timeline Animation Editor with static reflection property inspection and manual keyframe recording.
+    *   *Read more: [Animator Controller Editor Guide](docs/animator_controller_editor.md)*
 
 ---
 
@@ -49,9 +53,11 @@ To understand the engineering behind this prototype, explore the detailed docume
 *   **[System Architecture](docs/architecture.md)**: Bootstrapping, game loop, frame lifecycle sequences, and layer boundaries.
 *   **[Custom ECS Engine](docs/ecs_system.md)**: Registry, EntityManager, dense `ComponentStorage` vectors, swap-remove mechanics, compile-time views, and Structure of Arrays (SoA) memory optimizations.
 *   **[Vulkan Graphics Pipeline](docs/vulkan_renderer.md)**: Custom API wrappers, double-buffered frame synchronization (fences/semaphores), pipeline assembly, instanced drawing batch loop, and push constant parameters.
-*   **[Editor UI & Viewport Raycasting](docs/editor_ui.md)**: ImGui backend integration, viewport coordinate translation math (unprojecting NDC space), ray-sphere intersection solver, and JSON scene parser.
+*   **[Editor UI & Viewport Raycasting](docs/editor_ui.md)**: ImGui backend integration, viewport coordinate translation math (unprojecting NDC space), ray-sphere intersection solver, timeline animation editor, and JSON scene parser.
 *   **[Skeletal Animation & Skinning](docs/animation_system.md)**: Linear Blend Skinning (LBS) math, keyframe translation/rotation (SLERP) interpolation, hierarchical forward kinematics (FK), 1D and 2D Freeform Cartesian blend trees, and Inverse Kinematics (IK) solvers.
 *   **[Static Reflection & Serialization](docs/reflection_system.md)**: Compile-time pre-processor code generator parsing source annotations, static type descriptors, automatic scene serialization, and dynamic ImGui property drawers.
+*   **[Node Graph Framework](docs/node_graph_framework.md)**: Architecture, data structures (`NodeGraph`, `Node`, `NodePin`), infinite grid canvas rendering, built-in right-side detail panel, event callbacks, and JSON serialization.
+*   **[Animator Controller Editor](docs/animator_controller_editor.md)**: Visual state machine nodes (`Entry`, `Any State`, `State`, `Blend Tree`), 1D/2D blend tree threshold bar, parameter manager, and transition condition evaluation.
 
 ---
 
