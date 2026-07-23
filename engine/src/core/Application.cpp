@@ -268,19 +268,21 @@ namespace Engine {
 
             if (editorUI) {
                 if (config.enableEditor) {
-                    // Draw ImGui editor panels
                     editorUI->beginFrame();
-                    editorUI->drawPanels();
-                    
-                    // Draw Game UI canvas
+
+                    // Draw Game UI canvas first so it renders beneath editor UI panels and windows
                     if (uiSystem) {
                         uiSystem->draw();
                     }
+
+                    // Draw ImGui editor panels second (menu bar, inspector, floating editor windows)
+                    editorUI->drawPanels();
 
                     renderSystem->drawFrame([this](VkCommandBuffer cmd) {
                         editorUI->render(cmd);
                     });
                 } else {
+
                     // Standalone mode: draw viewport and Game UI fullscreen
                     editorUI->beginFrame();
                     if (uiSystem) {
