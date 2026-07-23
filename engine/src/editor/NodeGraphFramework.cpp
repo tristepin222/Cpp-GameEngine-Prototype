@@ -500,8 +500,21 @@ namespace Engine {
         }
 
         ImGui::EndChild();
+
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+                if (onDetailPanelAssetDropped && payload->Data) {
+                    std::string pathStr(static_cast<const char*>(payload->Data));
+                    onDetailPanelAssetDropped(pathStr);
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+
         ImGui::PopStyleColor();
     }
+
+
 
     // =========================================================================
     // Canvas draw (extracted for clarity)
@@ -520,6 +533,8 @@ namespace Engine {
 
         // Grid
         float gridSize  = 64.0f;
+
+
         ImU32 gridColor = IM_COL32(42, 42, 42, 255);
         for (float x = std::fmod(m_pan.x, gridSize); x < canvasSize.x; x += gridSize)
             drawList->AddLine(ImVec2(canvasPos.x + x, canvasPos.y), ImVec2(canvasPos.x + x, canvasPos.y + canvasSize.y), gridColor);
@@ -723,9 +738,25 @@ namespace Engine {
         }
 
         ImGui::EndChild();
+
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+                if (onCanvasAssetDropped && payload->Data) {
+                    std::string pathStr(static_cast<const char*>(payload->Data));
+                    ImVec2 mousePos = ImGui::GetMousePos();
+                    ImVec2 spawnPos = ImVec2(mousePos.x - canvasPos.x - m_pan.x,
+                                              mousePos.y - canvasPos.y - m_pan.y);
+                    onCanvasAssetDropped(pathStr, spawnPos);
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+
         ImGui::PopStyleColor();
         ImGui::PopStyleVar(2);
     }
+
+
 
     // =========================================================================
     // Main draw entry point

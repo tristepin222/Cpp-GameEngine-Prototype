@@ -167,6 +167,7 @@ namespace Engine {
 
         const std::vector<NodeRegistryEntry>& getRegisteredNodeTypes() const { return m_registeredTypes; }
 
+
         // -----------------------------------------------------------------------
         // Framework-level event callbacks (optional, set by the host editor)
         // -----------------------------------------------------------------------
@@ -182,6 +183,12 @@ namespace Engine {
 
         /** Fired when the user clicks / selects a node (nodeId = 0 means deselect). */
         std::function<void(uint32_t nodeId)> onNodeSelected;
+
+        /** Fired when an asset path is dropped onto the canvas grid area. */
+        std::function<void(const std::string& assetPath, const ImVec2& dropCanvasPos)> onCanvasAssetDropped;
+
+        /** Fired when an asset path is dropped onto the detail panel area. */
+        std::function<void(const std::string& assetPath)> onDetailPanelAssetDropped;
 
     private:
         uint32_t generateId();

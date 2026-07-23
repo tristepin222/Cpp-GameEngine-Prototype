@@ -181,6 +181,13 @@ std::function<void(uint32_t nodeId)> onNodeSelected;
 
 // Fired after a node and its attached links are deleted
 std::function<void(uint32_t nodeId)> onNodeDeleted;
+
+// Fired when an asset path is dropped onto the canvas grid area
+std::function<void(const std::string& assetPath, const ImVec2& dropCanvasPos)> onCanvasAssetDropped;
+
+// Fired when an asset path is dropped onto the right-side detail panel
+std::function<void(const std::string& assetPath)> onDetailPanelAssetDropped;
+
 ```
 
 ---

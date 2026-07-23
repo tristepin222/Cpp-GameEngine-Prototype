@@ -21,6 +21,21 @@ The Animator Controller Editor provides a visual workflow for designing characte
 |  + Add State      |  [Any State] (Purple)          |    & Conditions       |
 |  + Add BlendTree  |                                |                       |
 +-------------------+--------------------------------+-----------------------+
+
+---
+
+## Drag-and-Drop Asset Workflow
+
+The editor supports intuitive drag-and-drop workflows directly from the **Asset Browser** panel (dragging `.anim`, `.gltf`, `.glb`, or `.fbx` files):
+
+1. **Dragging onto the Grid Canvas**:
+   - Dragging an animation file onto empty grid space automatically loads the animation clip and spawns a new `AnimationState` node at the dropped mouse position on the canvas.
+2. **Dragging onto the Detail Panel**:
+   - Dragging an animation file onto the right-side detail panel while a **Standard State** is selected assigns that clip to the state.
+   - Dragging an animation file onto the detail panel while a **Blend Tree State** is selected appends a new `BlendNode` to the motion list.
+3. **Dragging onto Clip Pickers**:
+   - Dragging an animation file directly onto the Animation Clip combo or Motion List dropdown immediately maps the file to that slot.
+
 ```
 
 ---

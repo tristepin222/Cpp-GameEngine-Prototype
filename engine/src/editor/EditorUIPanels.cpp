@@ -2825,17 +2825,41 @@ void EditorUI::drawAnimatorControllerWindow() {
     static Engine::NodeGraph s_ctrlGraph;
     static uint32_t          s_lastBuiltEntityId = 0;
     static size_t            s_lastStateCount = 0;
+    static std::unordered_map<std::string, ImVec2> s_statePositions;
 
     // Collect clip names for combos
     std::vector<std::string> clipNames;
     for (const auto& clip : animator->animations)
         clipNames.push_back(clip.name);
 
+    // Helper: processes dropped animation files (.anim, .fbx, .gltf, etc.),
+    // loads clips into animator, and returns the resolved clip name.
+    auto processDroppedAnimationAsset = [this, animator](const std::string& pathStr) -> std::string {
+
+        std::filesystem::path p(pathStr);
+        std::string ext = p.extension().string();
+        if (ext == ".anim" || ext == ".fbx" || ext == ".FBX" || ext == ".gltf" || ext == ".glb") {
+            SkeletonComponent* skeleton = registry.get<SkeletonComponent>(selectedEntity);
+            if (!skeleton) {
+                registry.emplace<SkeletonComponent>(selectedEntity, SkeletonComponent{});
+                skeleton = registry.get<SkeletonComponent>(selectedEntity);
+            }
+            size_t prevCount = animator->animations.size();
+            renderer.resourceManager->loadSkeletonAndAnimations(pathStr, *skeleton, *animator, true);
+            if (animator->animations.size() > prevCount) {
+                return animator->animations.back().name;
+            }
+            return p.stem().string();
+        }
+        return "";
+    };
+
     // -----------------------------------------------------------------------
     // Rebuild graph when entity or state list changes
     // -----------------------------------------------------------------------
     auto rebuildGraph = [&]() {
         s_ctrlGraph.clear();
+
 
         // Pin type for state transitions
         Engine::NodePinType pinState{ "state", IM_COL32(255, 165, 80, 255) };
@@ -2871,7 +2895,8 @@ void EditorUI::drawAnimatorControllerWindow() {
                 s_ctrlGraph.addOutputPin(nodeId, "Out", pinState);
             },
             nullptr,
-            [controller, clipNames](Engine::Node& n) {
+            [controller, clipNames, processDroppedAnimationAsset, this](Engine::Node& n) {
+
                 if (!n.userData) { ImGui::TextDisabled("Invalid state reference."); return; }
                 AnimationState* state = static_cast<AnimationState*>(n.userData);
 
@@ -2903,7 +2928,19 @@ void EditorUI::drawAnimatorControllerWindow() {
                         }
                         ImGui::EndCombo();
                     }
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+                            const char* droppedPath = (const char*)payload->Data;
+                            std::string resName = processDroppedAnimationAsset(droppedPath);
+                            if (!resName.empty()) {
+                                state->clipName = resName;
+                                statusMessage = "Set clip for state '" + state->name + "' to '" + resName + "'.";
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
                     ImGui::PopItemWidth();
+
                 } else {
                     // Blend tree editor
                     ImGui::Spacing();
@@ -2948,7 +2985,19 @@ void EditorUI::drawAnimatorControllerWindow() {
                             }
                             ImGui::EndCombo();
                         }
+                        if (ImGui::BeginDragDropTarget()) {
+                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+                                const char* droppedPath = (const char*)payload->Data;
+                                std::string resName = processDroppedAnimationAsset(droppedPath);
+                                if (!resName.empty()) {
+                                    bn.clipName = resName;
+                                    statusMessage = "Set blend motion clip to '" + resName + "'.";
+                                }
+                            }
+                            ImGui::EndDragDropTarget();
+                        }
                         ImGui::PopItemWidth();
+
                         ImGui::SameLine();
                         if (ImGui::SmallButton("X##rmbn")) toRemoveBlend = bi;
                         ImGui::PopID();
@@ -3017,7 +3066,8 @@ void EditorUI::drawAnimatorControllerWindow() {
                 s_ctrlGraph.addOutputPin(nodeId, "Out", pinState);
             },
             nullptr,
-            [controller, clipNames](Engine::Node& n) {
+            [controller, clipNames, processDroppedAnimationAsset, this](Engine::Node& n) {
+
                 // Re-use the same logic: userData points to an AnimationState
                 if (!n.userData) { ImGui::TextDisabled("Invalid state reference."); return; }
                 AnimationState* state = static_cast<AnimationState*>(n.userData);
@@ -3126,6 +3176,17 @@ void EditorUI::drawAnimatorControllerWindow() {
                         }
                         ImGui::EndCombo();
                     }
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+                            const char* droppedPath = (const char*)payload->Data;
+                            std::string resName = processDroppedAnimationAsset(droppedPath);
+                            if (!resName.empty()) {
+                                bn.clipName = resName;
+                                statusMessage = "Set motion clip to '" + resName + "'.";
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
                     ImGui::PopItemWidth();
                     ImGui::SameLine();
                     if (ImGui::SmallButton("-##rm")) toRemove = bi;
@@ -3152,6 +3213,20 @@ void EditorUI::drawAnimatorControllerWindow() {
                     state->blendTree.nodes.erase(state->blendTree.nodes.begin() + toRemove);
                 if (ImGui::Button("+ Add Motion", ImVec2(-1, 0)))
                     state->blendTree.nodes.push_back(BlendNode{});
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+                        const char* droppedPath = (const char*)payload->Data;
+                        std::string resName = processDroppedAnimationAsset(droppedPath);
+                        if (!resName.empty()) {
+                            BlendNode newBn;
+                            newBn.clipName = resName;
+                            state->blendTree.nodes.push_back(newBn);
+                            statusMessage = "Added motion clip '" + resName + "' to blend tree.";
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+
 
                 ImGui::Spacing();
                 ImGui::Separator();
@@ -3215,11 +3290,18 @@ void EditorUI::drawAnimatorControllerWindow() {
             auto& state = controller->states[si];
             bool isBT = state.isBlendTree;
 
+            ImVec2 spawnPos = ImVec2(xOff, 80.0f + si * 110.0f);
+            auto itPos = s_statePositions.find(state.name);
+            if (itPos != s_statePositions.end()) {
+                spawnPos = itPos->second;
+            }
+
             uint32_t nid = s_ctrlGraph.createNode(
                 state.name,
                 isBT ? "CtrlBlendTree" : "CtrlState",
-                ImVec2(xOff, 80.0f + si * 110.0f)
+                spawnPos
             );
+
 
             // Header color: blue for regular, teal for blend tree
             s_ctrlGraph.setNodeHeaderColor(nid, isBT
@@ -3388,7 +3470,49 @@ void EditorUI::drawAnimatorControllerWindow() {
             }
         };
 
+        // Drag and drop animation files from Asset Browser onto grid area -> create state node at drop position
+        s_ctrlGraph.onCanvasAssetDropped = [controller, processDroppedAnimationAsset, this](const std::string& assetPath, const ImVec2& dropCanvasPos) {
+
+            std::string clipName = processDroppedAnimationAsset(assetPath);
+            if (!clipName.empty()) {
+                bool exists = false;
+                for (const auto& st : controller->states) {
+                    if (st.name == clipName) { exists = true; break; }
+                }
+                if (!exists) {
+                    AnimationState newState;
+                    newState.name = clipName;
+                    newState.clipName = clipName;
+                    controller->states.push_back(newState);
+                    s_statePositions[clipName] = dropCanvasPos;
+                    s_lastStateCount = (size_t)-1; // Force graph rebuild next tick
+                    statusMessage = "Created animation state '" + clipName + "' from asset drop onto grid.";
+                }
+            }
+        };
+
+        // Drag and drop animation files from Asset Browser onto details area -> set clip or add motion
+        s_ctrlGraph.onDetailPanelAssetDropped = [controller, processDroppedAnimationAsset, this](const std::string& assetPath) {
+            uint32_t selId = s_ctrlGraph.getSelectedNodeId();
+            Engine::Node* selNode = s_ctrlGraph.findNode(selId);
+            if (!selNode || !selNode->userData) return;
+            AnimationState* state = static_cast<AnimationState*>(selNode->userData);
+            std::string clipName = processDroppedAnimationAsset(assetPath);
+            if (clipName.empty()) return;
+
+            if (!state->isBlendTree) {
+                state->clipName = clipName;
+                statusMessage = "Assigned animation clip '" + clipName + "' to state '" + state->name + "'.";
+            } else {
+                BlendNode bn;
+                bn.clipName = clipName;
+                state->blendTree.nodes.push_back(bn);
+                statusMessage = "Added motion clip '" + clipName + "' to blend tree.";
+            }
+        };
+
         s_lastBuiltEntityId = selectedEntity.getId();
+
         s_lastStateCount    = controller->states.size();
     };
 
