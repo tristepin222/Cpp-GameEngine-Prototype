@@ -14,9 +14,11 @@ set CMAKE_GENERATOR=Visual Studio 17 2022
 set CMAKE_GENERATOR_PLATFORM=x64
 set CMAKE_GENERATOR_TOOLSET=v143
 
-if exist %BUILD_DIR% (
-    echo [Engine Build] Removing stale CMake build directory...
-    rmdir /s /q %BUILD_DIR%
+if "%1"=="--clean" (
+    if exist %BUILD_DIR% (
+        echo [Engine Build] Cleaning CMake build directory...
+        rmdir /s /q %BUILD_DIR%
+    )
 )
 
 echo [Engine Build] Configuring CMake (engine-only)...

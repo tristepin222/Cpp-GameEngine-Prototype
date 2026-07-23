@@ -6,6 +6,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Set forgiving timeouts
+set(ENV{GIT_HTTP_LOW_SPEED_LIMIT} 10000)
+set(ENV{GIT_HTTP_LOW_SPEED_TIME} 12000)
+
 # --- Dependencies Configuration (Shared across projects) ---
 
 # 1. Vulkan SDK
