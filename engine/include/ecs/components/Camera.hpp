@@ -8,19 +8,19 @@
  * @struct Camera
  * @brief Represents a camera component for rendering and viewing.
  */
+// @reflect
 struct ENGINE_API Camera {
-    /** @brief Field of view in degrees. */
+    // @reflect
     float fov = 45.f;
-    /** @brief Aspect ratio (width / height). */
+    // @reflect
     float aspect = 1.0f;   // window width / height
-    /** @brief Distance to the near clipping plane. */
+    // @reflect
     float nearPlane = 0.1f;
-    /** @brief Distance to the far clipping plane. */
+    // @reflect
     float farPlane = 100.f;
-    /** @brief Speed of camera movement. */
     float moveSpeed = 5.f;
-    /** @brief Mouse sensitivity for rotation. */
     float mouseSensitivity = 0.1f;
+
 
     /**
      * @brief Calculates the view matrix based on the given transform.
@@ -61,3 +61,7 @@ struct ENGINE_API Camera {
         return projection() * view(transform);
     }
 };
+
+#include "meta/ComponentReflection.hpp"
+REGISTER_COMPONENT(Camera, "Rendering & Lights");
+

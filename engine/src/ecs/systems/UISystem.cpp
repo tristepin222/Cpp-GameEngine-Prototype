@@ -158,7 +158,86 @@ namespace Engine {
             ImGui::PopStyleColor(4);
         }
 
-        // Draw children hierarchically
+        // Slider Component
+        if (auto* slider = registry.get<UISliderComponent>(entity)) {
+            // Track background
+            drawList->AddRectFilled(
+                ImVec2(absX, absY + h * 0.35f),
+                ImVec2(absX + w, absY + h * 0.65f),
+                ImColor(slider->backgroundColor.r, slider->backgroundColor.g, slider->backgroundColor.b, slider->backgroundColor.a),
+                4.0f
+            );
+            // Fill bar
+            float fillRatio = glm::clamp((slider->value - slider->minValue) / (slider->maxValue - slider->minValue), 0.0f, 1.0f);
+            float fillW = w * fillRatio;
+            if (fillW > 0.0f) {
+                drawList->AddRectFilled(
+                    ImVec2(absX, absY + h * 0.35f),
+                    ImVec2(absX + fillW, absY + h * 0.65f),
+                    ImColor(slider->fillColor.r, slider->fillColor.g, slider->fillColor.b, slider->fillColor.a),
+                    4.0f
+                );
+            }
+            // Handle knob
+            float handleRadius = std::max(6.0f, h * 0.45f);
+            ImVec2 handleCenter(absX + fillW, absY + h * 0.5f);
+            drawList->AddCircleFilled(
+                handleCenter, handleRadius,
+                ImColor(slider->handleColor.r, slider->handleColor.g, slider->handleColor.b, slider->handleColor.a)
+            );
+
+            // Interactive dragging
+            ImGui::SetCursorScreenPos(ImVec2(absX, absY));
+            std::string sliderId = "##uislider_" + std::to_string(entity.getId());
+            ImGui::InvisibleButton(sliderId.c_str(), ImVec2(w, h));
+            if (ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+                float mouseX = ImGui::GetMousePos().x - absX;
+                float norm = glm::clamp(mouseX / w, 0.0f, 1.0f);
+                slider->value = slider->minValue + norm * (slider->maxValue - slider->minValue);
+            }
+        }
+
+        // Toggle Component
+        if (auto* toggle = registry.get<UIToggleComponent>(entity)) {
+            float boxSize = glm::min(h, 24.0f);
+            float boxY = absY + (h - boxSize) * 0.5f;
+
+            // Box
+            drawList->AddRectFilled(
+                ImVec2(absX, boxY),
+                ImVec2(absX + boxSize, boxY + boxSize),
+                ImColor(toggle->boxColor.r, toggle->boxColor.g, toggle->boxColor.b, toggle->boxColor.a),
+                4.0f
+            );
+
+            // Checkmark
+            if (toggle->isOn) {
+                drawList->AddRectFilled(
+                    ImVec2(absX + 4.0f, boxY + 4.0f),
+                    ImVec2(absX + boxSize - 4.0f, boxY + boxSize - 4.0f),
+                    ImColor(toggle->checkmarkColor.r, toggle->checkmarkColor.g, toggle->checkmarkColor.b, toggle->checkmarkColor.a),
+                    2.0f
+                );
+            }
+
+            // Label
+            if (!toggle->label.empty()) {
+                ImGui::SetCursorScreenPos(ImVec2(absX + boxSize + 8.0f, absY + (h - 14.0f) * 0.5f));
+                ImGui::TextColored(
+                    ImVec4(toggle->textColor.r, toggle->textColor.g, toggle->textColor.b, toggle->textColor.a),
+                    "%s", toggle->label.c_str()
+                );
+            }
+
+            // Click handling
+            ImGui::SetCursorScreenPos(ImVec2(absX, absY));
+            std::string toggleId = "##uitoggle_" + std::to_string(entity.getId());
+            if (ImGui::InvisibleButton(toggleId.c_str(), ImVec2(w, h))) {
+                toggle->isOn = !toggle->isOn;
+            }
+        }
+
+        // Gather children
         std::vector<Entity> children;
         for (auto [child, hierarchy] : registry.view<HierarchyComponent>()) {
             if (hierarchy.parent == entity && registry.has<RectTransform>(child)) {
@@ -166,11 +245,98 @@ namespace Engine {
             }
         }
 
+        // Apply UIGridLayoutGroupComponent auto-positioning
+        if (auto* gridLayout = registry.get<UIGridLayoutGroupComponent>(entity)) {
+            int numChildren = (int)children.size();
+            int cols = 1;
+            int rows = 1;
+
+            if (gridLayout->constraint == GridConstraint::FixedColumnCount) {
+                cols = std::max(1, gridLayout->constraintCount);
+            } else if (gridLayout->constraint == GridConstraint::FixedRowCount) {
+                rows = std::max(1, gridLayout->constraintCount);
+                cols = std::max(1, (int)std::ceil((float)numChildren / (float)rows));
+            } else {
+                // Flexible: calculate columns dynamically based on available container width
+                float availW = w - (gridLayout->padding.y + gridLayout->padding.w);
+                float itemStepW = gridLayout->cellSize.x + gridLayout->spacing.x;
+                cols = std::max(1, (int)std::floor((availW + gridLayout->spacing.x) / std::max(1.0f, itemStepW)));
+            }
+
+            for (int i = 0; i < numChildren; ++i) {
+                int row = 0;
+                int col = 0;
+                if (gridLayout->constraint == GridConstraint::FixedRowCount) {
+                    col = i / rows;
+                    row = i % rows;
+                } else {
+                    row = i / cols;
+                    col = i % cols;
+                }
+
+                float cx = gridLayout->padding.w + col * (gridLayout->cellSize.x + gridLayout->spacing.x);
+                float cy = gridLayout->padding.x + row * (gridLayout->cellSize.y + gridLayout->spacing.y);
+                if (auto* childRect = registry.get<RectTransform>(children[i])) {
+                    childRect->anchorMin = glm::vec2(0.0f, 0.0f);
+                    childRect->anchorMax = glm::vec2(0.0f, 0.0f);
+                    childRect->pivot = glm::vec2(0.0f, 0.0f);
+                    childRect->anchoredPosition = glm::vec2(cx, cy);
+                    childRect->sizeDelta = gridLayout->cellSize;
+                }
+            }
+        }
+
+
+        // Apply UILayoutGroupComponent auto-positioning
+        if (auto* layoutGroup = registry.get<UILayoutGroupComponent>(entity)) {
+            float offset = layoutGroup->isVertical ? layoutGroup->padding.x : layoutGroup->padding.w;
+            for (Entity child : children) {
+                if (auto* childRect = registry.get<RectTransform>(child)) {
+                    childRect->anchorMin = glm::vec2(0.0f, 0.0f);
+                    childRect->anchorMax = glm::vec2(0.0f, 0.0f);
+                    childRect->pivot = glm::vec2(0.0f, 0.0f);
+                    if (layoutGroup->isVertical) {
+                        childRect->anchoredPosition = glm::vec2(layoutGroup->padding.w, offset);
+                        offset += childRect->sizeDelta.y + layoutGroup->spacing;
+                    } else {
+                        childRect->anchoredPosition = glm::vec2(offset, layoutGroup->padding.x);
+                        offset += childRect->sizeDelta.x + layoutGroup->spacing;
+                    }
+                }
+            }
+        }
+
+        // Scroll View Clipping & Scrolling
+        auto* scrollRect = registry.get<UIScrollRectComponent>(entity);
+        if (scrollRect) {
+            // Check mouse wheel scrolling when hovered over container
+            ImGui::SetCursorScreenPos(ImVec2(absX, absY));
+            std::string scrollId = "##uiscroll_" + std::to_string(entity.getId());
+            ImGui::InvisibleButton(scrollId.c_str(), ImVec2(w, h));
+            if (ImGui::IsItemHovered()) {
+                float wheel = ImGui::GetIO().MouseWheel;
+                if (wheel != 0.0f && scrollRect->vertical) {
+                    scrollRect->scrollPosition.y -= wheel * scrollRect->scrollSpeed;
+                    scrollRect->scrollPosition.y = std::max(0.0f, scrollRect->scrollPosition.y);
+                }
+            }
+            drawList->PushClipRect(ImVec2(absX, absY), ImVec2(absX + w, absY + h), true);
+        }
+
         // Render children
         for (Entity child : children) {
-            drawWidget(child, viewportPos, viewportSize, drawList);
+            glm::vec2 childViewportPos = viewportPos;
+            if (scrollRect) {
+                childViewportPos -= scrollRect->scrollPosition;
+            }
+            drawWidget(child, childViewportPos, viewportSize, drawList);
+        }
+
+        if (scrollRect) {
+            drawList->PopClipRect();
         }
     }
+
 
     glm::vec4 UISystem::getRect(Entity entity, const glm::vec2& viewportSize) {
         auto* rectTransform = registry.get<RectTransform>(entity);

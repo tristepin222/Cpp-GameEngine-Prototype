@@ -149,7 +149,9 @@ Entity Scene::createEntityOfType(const std::string& entityType) {
         registry.emplace<Name>(entity, Name{ makeUniqueEntityName("Canvas") });
         registry.emplace<Transform>(entity, Transform{ glm::vec3(0.0f) });
         registry.emplace<Engine::CanvasComponent>(entity, Engine::CanvasComponent{});
-    } else if (entityType == "UI Panel" || entityType == "UI Image" || entityType == "UI Text" || entityType == "UI Button") {
+    } else if (entityType == "UI Panel" || entityType == "UI Image" || entityType == "UI Text" ||
+               entityType == "UI Button" || entityType == "UI Slider" || entityType == "UI Toggle" ||
+               entityType == "UI Grid Layout" || entityType == "UI Scroll View") {
         // Find existing Canvas or create one
         Entity canvasEnt;
         bool found = false;
@@ -182,8 +184,44 @@ Entity Scene::createEntityOfType(const std::string& entityType) {
         } else if (entityType == "UI Button") {
             registry.emplace<Name>(entity, Name{ makeUniqueEntityName("Button") });
             registry.emplace<Engine::UIButtonComponent>(entity, Engine::UIButtonComponent{});
+        } else if (entityType == "UI Slider") {
+            registry.emplace<Name>(entity, Name{ makeUniqueEntityName("Slider") });
+            if (auto* rt = registry.get<Engine::RectTransform>(entity)) rt->sizeDelta = glm::vec2(160.0f, 20.0f);
+            registry.emplace<Engine::UISliderComponent>(entity, Engine::UISliderComponent{});
+        } else if (entityType == "UI Toggle") {
+            registry.emplace<Name>(entity, Name{ makeUniqueEntityName("Toggle") });
+            if (auto* rt = registry.get<Engine::RectTransform>(entity)) rt->sizeDelta = glm::vec2(140.0f, 24.0f);
+            registry.emplace<Engine::UIToggleComponent>(entity, Engine::UIToggleComponent{});
+        } else if (entityType == "UI Grid Layout") {
+            registry.emplace<Name>(entity, Name{ makeUniqueEntityName("Grid Layout") });
+            if (auto* rt = registry.get<Engine::RectTransform>(entity)) rt->sizeDelta = glm::vec2(340.0f, 220.0f);
+            registry.emplace<Engine::UIPanelComponent>(entity, Engine::UIPanelComponent{ glm::vec4(0.1f, 0.1f, 0.12f, 0.6f), 6.0f });
+            registry.emplace<Engine::UIGridLayoutGroupComponent>(entity, Engine::UIGridLayoutGroupComponent{ glm::vec2(90.0f, 90.0f), glm::vec2(10.0f, 10.0f), glm::vec4(10.0f), Engine::GridConstraint::FixedColumnCount, 3 });
+        } else if (entityType == "UI Scroll View") {
+
+            registry.emplace<Name>(entity, Name{ makeUniqueEntityName("Scroll View") });
+            if (auto* rt = registry.get<Engine::RectTransform>(entity)) rt->sizeDelta = glm::vec2(220.0f, 240.0f);
+            registry.emplace<Engine::UIPanelComponent>(entity, Engine::UIPanelComponent{ glm::vec4(0.12f, 0.12f, 0.15f, 0.8f), 6.0f });
+            registry.emplace<Engine::UIScrollRectComponent>(entity, Engine::UIScrollRectComponent{});
+            // Create vertical layout content inside scroll view
+            Entity content = registry.create();
+            registry.emplace<Name>(content, Name{ "ScrollContent" });
+            registry.emplace<HierarchyComponent>(content, HierarchyComponent{ entity });
+            registry.emplace<Engine::RectTransform>(content, Engine::RectTransform{});
+            registry.emplace<Engine::UILayoutGroupComponent>(content, Engine::UILayoutGroupComponent{ true, 8.0f, glm::vec4(8.0f), false });
+            trackEntity(content);
+            for (int i = 1; i <= 8; ++i) {
+                Entity item = registry.create();
+                registry.emplace<Name>(item, Name{ "ScrollItem_" + std::to_string(i) });
+                registry.emplace<HierarchyComponent>(item, HierarchyComponent{ content });
+                auto& itemRt = registry.emplace<Engine::RectTransform>(item, Engine::RectTransform{});
+                itemRt.sizeDelta = glm::vec2(180.0f, 36.0f);
+                registry.emplace<Engine::UIPanelComponent>(item, Engine::UIPanelComponent{ glm::vec4(0.25f, 0.25f, 0.3f, 0.9f), 4.0f });
+                trackEntity(item);
+            }
         }
     } else {
+
         return Entity();
     }
 

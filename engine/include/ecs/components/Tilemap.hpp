@@ -12,18 +12,16 @@ namespace Engine {
      *        The TilemapSystem loads the tileset, builds a packed atlas, and
      *        generates a single mesh + material per tilemap entity.
      */
+    // @reflect
     struct ENGINE_API TilemapComponent {
-        /** @brief Grid width in tiles. */
+        // @reflect
         int width = 0;
-        /** @brief Grid height in tiles. */
+        // @reflect
         int height = 0;
-        /** @brief World-space size of one tile cell. */
+        // @reflect
         float tileSize = 1.0f;
 
-        /**
-         * @brief Path to the .tileset asset file (e.g. "assets/tilesets/forest.tileset").
-         *        Stored as a project-relative path.
-         */
+        // @reflect
         std::string tilesetPath;
 
         /**
@@ -37,3 +35,7 @@ namespace Engine {
     };
 
 } // namespace Engine
+
+#include "meta/ComponentReflection.hpp"
+REGISTER_COMPONENT(Engine::TilemapComponent, "Rendering & Lights");
+

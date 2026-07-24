@@ -121,14 +121,16 @@ public:
  * @struct Transform
  * @brief Represents the position, rotation, and scale of an entity in 3D space.
  */
+// @reflect
 struct ENGINE_API Transform {
 
-    /** @brief Position of the entity in 3D space. */
+    // @reflect
     glm::vec3 position{ 0.0f };
-    /** @brief Rotation of the entity stored natively as a quaternion compatibility field. */
+    // @reflect
     RotationField rotation;
-    /** @brief Scale of the entity in 3D space. */
+    // @reflect
     glm::vec3 scale{ 1.0f };
+
 
     /**
      * @brief Converts the Euler rotation angles to a quaternion.
@@ -190,3 +192,7 @@ struct ENGINE_API Transform {
         : position(pos), rotation(rot), scale(s) {
     }
 };
+
+#include "meta/ComponentReflection.hpp"
+REGISTER_COMPONENT(Transform, "General");
+

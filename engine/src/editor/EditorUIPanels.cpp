@@ -265,27 +265,34 @@ void EditorUI::drawHierarchyPanel() {
     }
 
     if (ImGui::BeginPopup("CreateEntityPopup")) {
-        ImGui::TextDisabled("Primitives");
-        ImGui::Separator();
-        if (ImGui::MenuItem("Cube"))          { if (currentScene) { auto e = currentScene->createPrimitiveEntity("Cube");     selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-        if (ImGui::MenuItem("Triangle"))      { if (currentScene) { auto e = currentScene->createPrimitiveEntity("Triangle"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-        ImGui::Separator();
-        ImGui::TextDisabled("Entities");
-        ImGui::Separator();
-        if (ImGui::MenuItem("Camera"))        { if (currentScene) { auto e = currentScene->createEntityOfType("Camera"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-        if (ImGui::MenuItem("Grid"))          { if (currentScene) { auto e = currentScene->createEntityOfType("Grid");   selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-        if (ImGui::MenuItem("Empty GameObject")) { if (currentScene) { auto e = currentScene->createEntityOfType("Empty");  selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-        ImGui::Separator();
-        if (ImGui::BeginMenu("UI")) {
-            if (ImGui::MenuItem("Canvas")) { if (currentScene) { auto e = currentScene->createEntityOfType("Canvas"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            if (ImGui::MenuItem("Panel"))  { if (currentScene) { auto e = currentScene->createEntityOfType("UI Panel"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            if (ImGui::MenuItem("Image"))  { if (currentScene) { auto e = currentScene->createEntityOfType("UI Image"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            if (ImGui::MenuItem("Text"))   { if (currentScene) { auto e = currentScene->createEntityOfType("UI Text"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            if (ImGui::MenuItem("Button")) { if (currentScene) { auto e = currentScene->createEntityOfType("UI Button"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+        if (ImGui::BeginMenu("3D Objects")) {
+            if (ImGui::MenuItem("Cube"))     { if (currentScene) { auto e = currentScene->createPrimitiveEntity("Cube");     selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            if (ImGui::MenuItem("Triangle")) { if (currentScene) { auto e = currentScene->createPrimitiveEntity("Triangle"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("Rendering & Lights")) {
+            if (ImGui::MenuItem("Camera"))   { if (currentScene) { auto e = currentScene->createEntityOfType("Camera"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            if (ImGui::MenuItem("Grid"))     { if (currentScene) { auto e = currentScene->createEntityOfType("Grid");   selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("UI")) {
+            if (ImGui::MenuItem("Canvas"))      { if (currentScene) { auto e = currentScene->createEntityOfType("Canvas"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            if (ImGui::MenuItem("Panel"))       { if (currentScene) { auto e = currentScene->createEntityOfType("UI Panel"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            if (ImGui::MenuItem("Image"))       { if (currentScene) { auto e = currentScene->createEntityOfType("UI Image"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            if (ImGui::MenuItem("Text"))        { if (currentScene) { auto e = currentScene->createEntityOfType("UI Text"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            if (ImGui::MenuItem("Button"))      { if (currentScene) { auto e = currentScene->createEntityOfType("UI Button"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            if (ImGui::MenuItem("Slider"))      { if (currentScene) { auto e = currentScene->createEntityOfType("UI Slider"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            if (ImGui::MenuItem("Toggle"))      { if (currentScene) { auto e = currentScene->createEntityOfType("UI Toggle"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Grid Layout")) { if (currentScene) { auto e = currentScene->createEntityOfType("UI Grid Layout"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            if (ImGui::MenuItem("Scroll View")) { if (currentScene) { auto e = currentScene->createEntityOfType("UI Scroll View"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            ImGui::EndMenu();
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Empty GameObject")) { if (currentScene) { auto e = currentScene->createEntityOfType("Empty");  selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
         ImGui::EndPopup();
     }
+
 
     ImGui::SameLine();
 
@@ -620,9 +627,8 @@ void EditorUI::drawInspectorPanel() {
     ImGui::Separator();
     if (ImGui::Button("+ Add Component", ImVec2(-1, 30))) {
         ImGui::OpenPopup("AddComponentPopup");
-    }
-
-    if (ImGui::BeginPopup("AddComponentPopup")) {
+    }    if (ImGui::BeginPopup("AddComponentPopup")) {
+        // Special initialization setup for Material and Skeleton if selected
         if (!registry.has<Material>(selectedEntity) && ImGui::MenuItem("Material")) {
             glm::vec4 color(1.0f);
             registry.emplace<Material>(selectedEntity, Material{ color });
@@ -640,89 +646,34 @@ void EditorUI::drawInspectorPanel() {
             }
             statusMessage = "Added Material component.";
         }
-        if (!registry.has<Camera>(selectedEntity) && ImGui::MenuItem("Camera")) {
-            registry.emplace<Camera>(selectedEntity, Camera{});
-            statusMessage = "Added Camera component.";
-        }
-        if (!registry.has<Grid>(selectedEntity) && ImGui::MenuItem("Grid")) {
-            registry.emplace<Grid>(selectedEntity, Grid{});
-            statusMessage = "Added Grid component.";
-        }
-        if (!registry.has<SkeletonComponent>(selectedEntity) && ImGui::MenuItem("Skeleton")) {
-            registry.emplace<SkeletonComponent>(selectedEntity, SkeletonComponent{});
-            if (auto* material = registry.get<Material>(selectedEntity)) {
-                std::string vertShader = (material->shaderName == "Lit") ? "skinned_lit.vert.spv" : "skinned.vert.spv";
-                std::string fragShader = (material->shaderName == "Lit") ? "lit.frag.spv" : "unlit.frag.spv";
-                PipelineHandle pipeline = renderer.createPipelineForShaders(
-                    renderer.resolveShaderPath("build/shaders/" + vertShader),
-                    renderer.resolveShaderPath("build/shaders/" + fragShader)
-                );
-                material->pipeline = pipeline.pipeline;
-                material->pipelineLayout = pipeline.layout;
-            }
-            statusMessage = "Added Skeleton Component.";
-        }
-        if (!registry.has<AnimatorComponent>(selectedEntity) && ImGui::MenuItem("Animator")) {
-            registry.emplace<AnimatorComponent>(selectedEntity, AnimatorComponent{});
-            statusMessage = "Added Animator component.";
-        }
-        if (!registry.has<AnimationControllerComponent>(selectedEntity) && ImGui::MenuItem("Animation Controller")) {
-            registry.emplace<AnimationControllerComponent>(selectedEntity, AnimationControllerComponent{});
-            statusMessage = "Added Animation Controller component.";
-        }
-        if (!registry.has<IKSolverComponent>(selectedEntity) && ImGui::MenuItem("IK Solver")) {
-            registry.emplace<IKSolverComponent>(selectedEntity, IKSolverComponent{});
-            statusMessage = "Added IK Solver component.";
-        }
-        if (!registry.has<HierarchyComponent>(selectedEntity) && ImGui::MenuItem("Hierarchy Link")) {
-            registry.emplace<HierarchyComponent>(selectedEntity, HierarchyComponent{});
-            statusMessage = "Added Hierarchy Component.";
-        }
-        if (!registry.has<ColliderComponent>(selectedEntity) && ImGui::MenuItem("Collider")) {
-            registry.emplace<ColliderComponent>(selectedEntity, ColliderComponent{});
-            statusMessage = "Added Collider component.";
-        }
-        if (!registry.has<Engine::TilemapComponent>(selectedEntity) && ImGui::MenuItem("Tilemap")) {
-            Engine::TilemapComponent tm{};
-            tm.width = 10; tm.height = 10; tm.tileSize = 1.f;
-            tm.tiles.assign(100, -1);
-            registry.emplace<Engine::TilemapComponent>(selectedEntity, std::move(tm));
-            statusMessage = "Added Tilemap component.";
-        }
-        if (!registry.has<Engine::CanvasComponent>(selectedEntity) && ImGui::MenuItem("UI Canvas")) {
-            registry.emplace<Engine::CanvasComponent>(selectedEntity, Engine::CanvasComponent{});
-            statusMessage = "Added Canvas component.";
-        }
-        if (!registry.has<Engine::RectTransform>(selectedEntity) && ImGui::MenuItem("UI RectTransform")) {
-            registry.emplace<Engine::RectTransform>(selectedEntity, Engine::RectTransform{});
-            statusMessage = "Added RectTransform component.";
-        }
-        if (!registry.has<Engine::UIPanelComponent>(selectedEntity) && ImGui::MenuItem("UI Panel")) {
-            registry.emplace<Engine::UIPanelComponent>(selectedEntity, Engine::UIPanelComponent{});
-            statusMessage = "Added Panel component.";
-        }
-        if (!registry.has<Engine::UIImageComponent>(selectedEntity) && ImGui::MenuItem("UI Image")) {
-            registry.emplace<Engine::UIImageComponent>(selectedEntity, Engine::UIImageComponent{});
-            statusMessage = "Added Image component.";
-        }
-        if (!registry.has<Engine::UITextComponent>(selectedEntity) && ImGui::MenuItem("UI Text")) {
-            registry.emplace<Engine::UITextComponent>(selectedEntity, Engine::UITextComponent{});
-            statusMessage = "Added Text component.";
-        }
-        if (!registry.has<Engine::UIButtonComponent>(selectedEntity) && ImGui::MenuItem("UI Button")) {
-            registry.emplace<Engine::UIButtonComponent>(selectedEntity, Engine::UIButtonComponent{});
-            statusMessage = "Added Button component.";
-        }
 
-        // Render reflected components dynamically (skip those with dedicated hardcoded menu items)
+        // Render all reflected components dynamically without needing any explicit per-class code!
         for (const auto& refl : Engine::ComponentReflectionRegistry::getInstance().getReflections()) {
+            if (refl.name == "Material") continue; // Handled with custom shader setup above
             if (!refl.has(registry, selectedEntity)) {
-                if (refl.name == "Tilemap") continue; // handled by the hardcoded entry above
+                if (refl.name == "Transform" || refl.name == "Name" || refl.name == "Hierarchy") continue;
+
                 std::string menuName = refl.name;
                 if (menuName == "PlayerController") menuName = "Player Controller";
+                else if (menuName == "UIGridLayoutGroup") menuName = "UI Grid Layout Group";
+                else if (menuName == "UILayoutGroup") menuName = "UI Layout Group";
+                else if (menuName == "UIScrollRect") menuName = "UI Scroll Rect";
+                else if (menuName == "UISlider") menuName = "UI Slider";
+                else if (menuName == "UIToggle") menuName = "UI Toggle";
+                else if (menuName == "UIPanel") menuName = "UI Panel";
+                else if (menuName == "UIImage") menuName = "UI Image";
+                else if (menuName == "UIText") menuName = "UI Text";
+                else if (menuName == "UIButton") menuName = "UI Button";
+
                 if (ImGui::MenuItem(menuName.c_str())) {
                     refl.add(registry, selectedEntity);
-                    statusMessage = "Added " + refl.name + " component.";
+                    // Automatically attach RectTransform if a UI component is added to an entity without one
+                    if ((menuName.rfind("UI", 0) == 0 || refl.name.rfind("UI", 0) == 0) &&
+                        refl.name != "Canvas" &&
+                        !registry.has<Engine::RectTransform>(selectedEntity)) {
+                        registry.emplace<Engine::RectTransform>(selectedEntity, Engine::RectTransform{});
+                    }
+                    statusMessage = "Added " + menuName + " component.";
                 }
             }
         }
@@ -742,6 +693,7 @@ void EditorUI::drawInspectorPanel() {
 
     End();
 }
+
 
 void EditorUI::drawDebugPanel() {
     Begin("Debug", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);

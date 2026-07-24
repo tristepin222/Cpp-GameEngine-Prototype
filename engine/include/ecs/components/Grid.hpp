@@ -5,20 +5,23 @@
  * @struct Grid
  * @brief Represents a grid component used for rendering a grid overlay.
  */
+// @reflect
 struct Grid {
 
 
-    /** @brief ID associated with the grid color. */
+
+    // @reflect
     uint32_t colorID;
-    /** @brief ID associated with the grid mesh. */
+    // @reflect
     uint32_t meshID;
 
-    /** @brief Spacing between grid lines. */
+    // @reflect
     float spacing = 1.0f;    // Distance between lines
-    /** @brief Render size area around the camera. */
+    // @reflect
     float size = 100.0f;     // Render area around the camera
-    /** @brief Color of the grid lines. */
+    // @reflect
     glm::vec4 color = { 0.5f, 0.5f, 0.5f, 1.0f };
+
 
 
     /**
@@ -31,3 +34,7 @@ struct Grid {
         : spacing(s), size(sz), color(c) {
     }
 };
+
+#include "meta/ComponentReflection.hpp"
+REGISTER_COMPONENT(Grid, "Rendering & Lights");
+

@@ -35,12 +35,17 @@ std::string trim(const std::string& str) {
 
 std::string getFieldTypeEnum(const std::string& type) {
     if (type == "float" || type == "double") return "Engine::FieldType::Float";
+    if (type == "int" || type == "int32_t" || type == "uint32_t" || type == "size_t") return "Engine::FieldType::Float";
     if (type == "bool") return "Engine::FieldType::Bool";
+    if (type == "glm::vec2" || type == "vec2") return "Engine::FieldType::Vec2";
     if (type == "glm::vec3" || type == "vec3") return "Engine::FieldType::Vec3";
+    if (type == "glm::vec4" || type == "vec4") return "Engine::FieldType::Vec4";
+    if (type == "std::string" || type == "string") return "Engine::FieldType::String";
     if (type == "RigidBodyType") return "Engine::FieldType::RigidBodyType";
     if (type == "Entity") return "Engine::FieldType::Entity";
     return "";
 }
+
 
 // Calculate the correct relative include path for both user scripts and engine public headers
 std::string getIncludePath(const fs::path& filePath, const fs::path& inputDir) {

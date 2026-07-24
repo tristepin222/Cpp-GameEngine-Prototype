@@ -1365,8 +1365,28 @@ void EditorUI::drawReflectedComponentsEditor() {
     auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
     for (const auto& refl : reflReg.getReflections()) {
         if (!refl.has(registry, selectedEntity)) continue;
-        // Skip components that have dedicated custom inspector panels
-        if (refl.name == "Tilemap") continue;
+        // Skip components that have dedicated custom inspector panels or structural base components
+        if (refl.name == "Transform" || refl.name == "Name" || refl.name == "Hierarchy" ||
+            refl.name == "Material" || refl.name == "Collider" || refl.name == "ColliderComponent" ||
+            refl.name == "Skeleton" || refl.name == "SkeletonComponent" ||
+            refl.name == "Animator" || refl.name == "AnimatorComponent" ||
+            refl.name == "AnimationController" || refl.name == "AnimationControllerComponent" ||
+            refl.name == "IKSolver" || refl.name == "IKSolverComponent" ||
+            refl.name == "Camera" || refl.name == "Light" || refl.name == "LightComponent" ||
+            refl.name == "Grid" || refl.name == "Tilemap" || refl.name == "TilemapComponent" ||
+            refl.name == "Canvas" || refl.name == "CanvasComponent" ||
+            refl.name == "RectTransform" ||
+            refl.name == "UIPanel" || refl.name == "UIPanelComponent" ||
+            refl.name == "UIImage" || refl.name == "UIImageComponent" ||
+            refl.name == "UIText" || refl.name == "UITextComponent" ||
+            refl.name == "UIButton" || refl.name == "UIButtonComponent" ||
+            refl.name == "UIGridLayoutGroup" || refl.name == "UIGridLayoutGroupComponent" ||
+            refl.name == "UILayoutGroup" || refl.name == "UILayoutGroupComponent" ||
+            refl.name == "UIScrollRect" || refl.name == "UIScrollRectComponent" ||
+            refl.name == "UISlider" || refl.name == "UISliderComponent" ||
+            refl.name == "UIToggle" || refl.name == "UIToggleComponent") continue;
+
+
 
         void* compPtr = refl.get(registry, selectedEntity);
         bool visible = true;
@@ -1866,4 +1886,118 @@ void EditorUI::drawUIComponentsEditor() {
             statusMessage = "Removed Button component.";
         }
     }
+
+    // 7. Grid Layout Group Component
+    if (auto* grid = registry.get<Engine::UIGridLayoutGroupComponent>(selectedEntity)) {
+        PushStyleColor(ImGuiCol_Header,        ImVec4(0.30f, 0.35f, 0.20f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.40f, 0.45f, 0.25f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.22f, 0.28f, 0.15f, 1.f));
+        bool visible = true;
+        if (CollapsingHeader("UI Grid Layout Group", &visible, ImGuiTreeNodeFlags_DefaultOpen)) {
+            DragFloat2("Cell Size##grid_cs", &grid->cellSize.x, 1.0f, 1.0f, 1024.0f);
+            DragFloat2("Spacing##grid_sp", &grid->spacing.x, 1.0f, 0.0f, 256.0f);
+            DragFloat4("Padding (T/R/B/L)##grid_pad", &grid->padding.x, 1.0f, 0.0f, 256.0f);
+
+            int mode = static_cast<int>(grid->constraint);
+            const char* modes[] = { "Flexible", "Fixed Column Count", "Fixed Row Count" };
+            if (Combo("Constraint Mode##grid_mode", &mode, modes, IM_ARRAYSIZE(modes))) {
+                grid->constraint = static_cast<Engine::GridConstraint>(mode);
+            }
+
+            if (grid->constraint == Engine::GridConstraint::FixedColumnCount) {
+                DragInt("Max Columns##grid_cols", &grid->constraintCount, 0.2f, 1, 64);
+            } else if (grid->constraint == Engine::GridConstraint::FixedRowCount) {
+                DragInt("Max Rows##grid_rows", &grid->constraintCount, 0.2f, 1, 64);
+            }
+        }
+
+        PopStyleColor(3);
+        if (!visible) {
+            registry.remove<Engine::UIGridLayoutGroupComponent>(selectedEntity);
+            statusMessage = "Removed Grid Layout Group component.";
+        }
+    }
+
+    // 8. Layout Group Component
+    if (auto* layout = registry.get<Engine::UILayoutGroupComponent>(selectedEntity)) {
+        PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.35f, 0.35f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.45f, 0.45f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.15f, 0.28f, 0.28f, 1.f));
+        bool visible = true;
+        if (CollapsingHeader("UI Layout Group", &visible, ImGuiTreeNodeFlags_DefaultOpen)) {
+            Checkbox("Vertical Layout##lg_vert", &layout->isVertical);
+            DragFloat("Spacing##lg_sp", &layout->spacing, 1.0f, 0.0f, 256.0f);
+            DragFloat4("Padding (T/R/B/L)##lg_pad", &layout->padding.x, 1.0f, 0.0f, 256.0f);
+        }
+        PopStyleColor(3);
+        if (!visible) {
+            registry.remove<Engine::UILayoutGroupComponent>(selectedEntity);
+            statusMessage = "Removed Layout Group component.";
+        }
+    }
+
+    // 9. Scroll Rect Component
+    if (auto* scroll = registry.get<Engine::UIScrollRectComponent>(selectedEntity)) {
+        PushStyleColor(ImGuiCol_Header,        ImVec4(0.40f, 0.25f, 0.20f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.50f, 0.32f, 0.25f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.30f, 0.18f, 0.15f, 1.f));
+        bool visible = true;
+        if (CollapsingHeader("UI Scroll Rect", &visible, ImGuiTreeNodeFlags_DefaultOpen)) {
+            Checkbox("Vertical Scrolling##scroll_v", &scroll->vertical);
+            Checkbox("Horizontal Scrolling##scroll_h", &scroll->horizontal);
+            DragFloat2("Scroll Position##scroll_pos", &scroll->scrollPosition.x, 1.0f);
+            DragFloat("Scroll Speed##scroll_spd", &scroll->scrollSpeed, 0.5f, 1.0f, 200.0f);
+        }
+        PopStyleColor(3);
+        if (!visible) {
+            registry.remove<Engine::UIScrollRectComponent>(selectedEntity);
+            statusMessage = "Removed Scroll Rect component.";
+        }
+    }
+
+    // 10. Slider Component
+    if (auto* slider = registry.get<Engine::UISliderComponent>(selectedEntity)) {
+        PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.30f, 0.50f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.40f, 0.60f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.15f, 0.22f, 0.38f, 1.f));
+        bool visible = true;
+        if (CollapsingHeader("UI Slider", &visible, ImGuiTreeNodeFlags_DefaultOpen)) {
+            SliderFloat("Value##slider_val", &slider->value, slider->minValue, slider->maxValue);
+            DragFloat("Min Value##slider_min", &slider->minValue, 0.1f);
+            DragFloat("Max Value##slider_max", &slider->maxValue, 0.1f);
+            ColorEdit4("Background Color##slider_bg", &slider->backgroundColor.x);
+            ColorEdit4("Fill Color##slider_fill", &slider->fillColor.x);
+            ColorEdit4("Handle Color##slider_handle", &slider->handleColor.x);
+        }
+        PopStyleColor(3);
+        if (!visible) {
+            registry.remove<Engine::UISliderComponent>(selectedEntity);
+            statusMessage = "Removed Slider component.";
+        }
+    }
+
+    // 11. Toggle Component
+    if (auto* toggle = registry.get<Engine::UIToggleComponent>(selectedEntity)) {
+        PushStyleColor(ImGuiCol_Header,        ImVec4(0.25f, 0.40f, 0.25f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.32f, 0.50f, 0.32f, 1.f));
+        PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.18f, 0.30f, 0.18f, 1.f));
+        bool visible = true;
+        if (CollapsingHeader("UI Toggle", &visible, ImGuiTreeNodeFlags_DefaultOpen)) {
+            Checkbox("Is On##toggle_on", &toggle->isOn);
+            char labelBuf[128];
+            strncpy_s(labelBuf, toggle->label.c_str(), sizeof(labelBuf) - 1);
+            if (InputText("Toggle Label##toggle_lbl", labelBuf, sizeof(labelBuf))) {
+                toggle->label = labelBuf;
+            }
+            ColorEdit4("Box Color##toggle_box", &toggle->boxColor.x);
+            ColorEdit4("Checkmark Color##toggle_chk", &toggle->checkmarkColor.x);
+            ColorEdit4("Text Color##toggle_txt", &toggle->textColor.x);
+        }
+        PopStyleColor(3);
+        if (!visible) {
+            registry.remove<Engine::UIToggleComponent>(selectedEntity);
+            statusMessage = "Removed Toggle component.";
+        }
+    }
+
 }

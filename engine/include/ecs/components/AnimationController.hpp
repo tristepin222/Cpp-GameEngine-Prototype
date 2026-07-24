@@ -63,9 +63,11 @@ struct AnimationTransition {
  * @struct AnimationControllerComponent
  * @brief Component that manages parameters, state machines, transitions, and blending.
  */
+// @reflect
 struct AnimationControllerComponent {
     std::vector<AnimationState> states;
     std::vector<AnimationTransition> transitions;
+    // @reflect
     std::string currentState;
     
     // Named parameters for transitions and blend trees
@@ -80,3 +82,8 @@ struct AnimationControllerComponent {
     float crossfadeDuration = 0.0f;
     bool isCrossfading = false;
 };
+
+#include "meta/ComponentReflection.hpp"
+REGISTER_COMPONENT(AnimationControllerComponent, "Animation");
+
+
