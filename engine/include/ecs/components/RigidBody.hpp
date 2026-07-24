@@ -2,6 +2,8 @@
 #include <glm/glm.hpp>
 
 #include "core/EngineAPI.hpp"
+#include "meta/ComponentReflection.hpp"
+
 
 enum class RigidBodyType {
     Dynamic,
@@ -62,6 +64,26 @@ struct ENGINE_API RigidBodyComponent {
     bool freezeRotationZ = false;
 };
 
-#include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(RigidBodyComponent, "Physics");
+REFLECT_COMPONENT(RigidBodyComponent, "Physics", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(RigidBodyComponent, type);
+    REFLECT_FIELD(RigidBodyComponent, mass);
+    REFLECT_FIELD(RigidBodyComponent, velocity);
+    REFLECT_FIELD(RigidBodyComponent, acceleration);
+    REFLECT_FIELD(RigidBodyComponent, force);
+    REFLECT_FIELD(RigidBodyComponent, gravityScale);
+    REFLECT_FIELD(RigidBodyComponent, restitution);
+    REFLECT_FIELD(RigidBodyComponent, friction);
+    REFLECT_FIELD(RigidBodyComponent, angularVelocity);
+    REFLECT_FIELD(RigidBodyComponent, torque);
+    REFLECT_FIELD(RigidBodyComponent, angularDrag);
+    REFLECT_FIELD(RigidBodyComponent, linearDrag);
+    REFLECT_FIELD(RigidBodyComponent, freezePositionX);
+    REFLECT_FIELD(RigidBodyComponent, freezePositionY);
+    REFLECT_FIELD(RigidBodyComponent, freezePositionZ);
+    REFLECT_FIELD(RigidBodyComponent, freezeRotationX);
+    REFLECT_FIELD(RigidBodyComponent, freezeRotationY);
+    REFLECT_FIELD(RigidBodyComponent, freezeRotationZ);
+});
+
+
 

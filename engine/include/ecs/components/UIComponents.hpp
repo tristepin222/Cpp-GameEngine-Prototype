@@ -1,8 +1,10 @@
 #pragma once
 #include <string>
 #include <glm/glm.hpp>
+#include "meta/ComponentReflection.hpp"
 
 namespace Engine {
+
 
 // @reflect
     struct CanvasComponent {
@@ -143,17 +145,83 @@ namespace Engine {
 
 } // namespace Engine
 
-#include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(Engine::CanvasComponent, "UI");
-REGISTER_COMPONENT(Engine::RectTransform, "UI");
-REGISTER_COMPONENT(Engine::UIPanelComponent, "UI");
-REGISTER_COMPONENT(Engine::UIImageComponent, "UI");
-REGISTER_COMPONENT(Engine::UITextComponent, "UI");
-REGISTER_COMPONENT(Engine::UIButtonComponent, "UI");
-REGISTER_COMPONENT(Engine::UIGridLayoutGroupComponent, "UI");
-REGISTER_COMPONENT(Engine::UILayoutGroupComponent, "UI");
-REGISTER_COMPONENT(Engine::UIScrollRectComponent, "UI");
-REGISTER_COMPONENT(Engine::UISliderComponent, "UI");
-REGISTER_COMPONENT(Engine::UIToggleComponent, "UI");
+REFLECT_COMPONENT(Engine::CanvasComponent, "UI", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(Engine::CanvasComponent, isScreenSpace);
+});
+
+REFLECT_COMPONENT(Engine::RectTransform, "UI", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(Engine::RectTransform, anchorMin);
+    REFLECT_FIELD(Engine::RectTransform, anchorMax);
+    REFLECT_FIELD(Engine::RectTransform, anchoredPosition);
+    REFLECT_FIELD(Engine::RectTransform, sizeDelta);
+    REFLECT_FIELD(Engine::RectTransform, pivot);
+});
+
+REFLECT_COMPONENT(Engine::UIPanelComponent, "UI", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(Engine::UIPanelComponent, color);
+    REFLECT_FIELD(Engine::UIPanelComponent, borderRadius);
+});
+
+REFLECT_COMPONENT(Engine::UIImageComponent, "UI", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(Engine::UIImageComponent, texturePath);
+    REFLECT_FIELD(Engine::UIImageComponent, tintColor);
+});
+
+REFLECT_COMPONENT(Engine::UITextComponent, "UI", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(Engine::UITextComponent, text);
+    REFLECT_FIELD(Engine::UITextComponent, color);
+    REFLECT_FIELD(Engine::UITextComponent, fontSize);
+    REFLECT_FIELD(Engine::UITextComponent, alignCenter);
+});
+
+REFLECT_COMPONENT(Engine::UIButtonComponent, "UI", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(Engine::UIButtonComponent, label);
+    REFLECT_FIELD(Engine::UIButtonComponent, normalColor);
+    REFLECT_FIELD(Engine::UIButtonComponent, hoverColor);
+    REFLECT_FIELD(Engine::UIButtonComponent, pressedColor);
+    REFLECT_FIELD(Engine::UIButtonComponent, textColor);
+    REFLECT_FIELD(Engine::UIButtonComponent, clickEventName);
+});
+
+REFLECT_COMPONENT(Engine::UIGridLayoutGroupComponent, "UI", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(Engine::UIGridLayoutGroupComponent, cellSize);
+    REFLECT_FIELD(Engine::UIGridLayoutGroupComponent, spacing);
+    REFLECT_FIELD(Engine::UIGridLayoutGroupComponent, padding);
+    REFLECT_FIELD(Engine::UIGridLayoutGroupComponent, constraintCount);
+});
+
+REFLECT_COMPONENT(Engine::UILayoutGroupComponent, "UI", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(Engine::UILayoutGroupComponent, isVertical);
+    REFLECT_FIELD(Engine::UILayoutGroupComponent, spacing);
+    REFLECT_FIELD(Engine::UILayoutGroupComponent, padding);
+});
+
+REFLECT_COMPONENT(Engine::UIScrollRectComponent, "UI", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(Engine::UIScrollRectComponent, horizontal);
+    REFLECT_FIELD(Engine::UIScrollRectComponent, vertical);
+    REFLECT_FIELD(Engine::UIScrollRectComponent, scrollPosition);
+    REFLECT_FIELD(Engine::UIScrollRectComponent, scrollSpeed);
+});
+
+REFLECT_COMPONENT(Engine::UISliderComponent, "UI", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(Engine::UISliderComponent, value);
+    REFLECT_FIELD(Engine::UISliderComponent, minValue);
+    REFLECT_FIELD(Engine::UISliderComponent, maxValue);
+    REFLECT_FIELD(Engine::UISliderComponent, backgroundColor);
+    REFLECT_FIELD(Engine::UISliderComponent, fillColor);
+    REFLECT_FIELD(Engine::UISliderComponent, handleColor);
+});
+
+REFLECT_COMPONENT(Engine::UIToggleComponent, "UI", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(Engine::UIToggleComponent, isOn);
+    REFLECT_FIELD(Engine::UIToggleComponent, label);
+    REFLECT_FIELD(Engine::UIToggleComponent, boxColor);
+    REFLECT_FIELD(Engine::UIToggleComponent, checkmarkColor);
+    REFLECT_FIELD(Engine::UIToggleComponent, textColor);
+});
+
+
+
+
 
 

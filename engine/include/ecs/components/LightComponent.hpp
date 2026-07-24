@@ -1,6 +1,8 @@
 #pragma once
 #include <glm/glm.hpp>
 #include "core/EngineAPI.hpp"
+#include "meta/ComponentReflection.hpp"
+
 
 namespace Engine {
 
@@ -28,6 +30,11 @@ namespace Engine {
 
 }
 
-#include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(Engine::LightComponent, "Rendering & Lights");
+REFLECT_COMPONENT(Engine::LightComponent, "Rendering & Lights", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(Engine::LightComponent, color);
+    REFLECT_FIELD(Engine::LightComponent, intensity);
+    REFLECT_FIELD(Engine::LightComponent, range);
+});
+
+
 

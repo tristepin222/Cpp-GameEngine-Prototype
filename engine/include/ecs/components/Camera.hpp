@@ -3,6 +3,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "../components/Transform.hpp"
 #include "core/EngineAPI.hpp"
+#include "meta/ComponentReflection.hpp"
+
 
 /**
  * @struct Camera
@@ -62,6 +64,11 @@ struct ENGINE_API Camera {
     }
 };
 
-#include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(Camera, "Rendering & Lights");
+REFLECT_COMPONENT(Camera, "Rendering & Lights", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(Camera, fov);
+    REFLECT_FIELD(Camera, nearPlane);
+    REFLECT_FIELD(Camera, farPlane);
+});
+
+
 

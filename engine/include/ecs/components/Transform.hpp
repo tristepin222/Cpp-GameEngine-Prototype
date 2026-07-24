@@ -5,6 +5,8 @@
 #include <glm/gtc/quaternion.hpp>
 #include <initializer_list>
 #include "core/EngineAPI.hpp"
+#include "meta/ComponentReflection.hpp"
+
 
 /**
  * @struct RotationField
@@ -193,6 +195,13 @@ struct ENGINE_API Transform {
     }
 };
 
-#include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(Transform, "General");
+REFLECT_COMPONENT(Transform, "General", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(Transform, position);
+    REFLECT_FIELD(Transform, rotation);
+    REFLECT_FIELD(Transform, scale);
+});
+
+
+
+
 

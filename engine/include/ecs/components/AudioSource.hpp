@@ -2,6 +2,8 @@
 #include <string>
 #include <glm/glm.hpp>
 #include "core/EngineAPI.hpp"
+#include "meta/ComponentReflection.hpp"
+
 
 /**
  * @struct AudioSourceComponent
@@ -33,7 +35,17 @@ struct ENGINE_API AudioSourceComponent {
     std::string currentLoadedPath = ""; // To track if we need to reload the clip
 };
 
-#include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(AudioSourceComponent, "Audio");
+REFLECT_COMPONENT(AudioSourceComponent, "Audio", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(AudioSourceComponent, clipPath);
+    REFLECT_FIELD(AudioSourceComponent, volume);
+    REFLECT_FIELD(AudioSourceComponent, pitch);
+    REFLECT_FIELD(AudioSourceComponent, loop);
+    REFLECT_FIELD(AudioSourceComponent, playOnAwake);
+    REFLECT_FIELD(AudioSourceComponent, spatialized);
+    REFLECT_FIELD(AudioSourceComponent, minDistance);
+    REFLECT_FIELD(AudioSourceComponent, maxDistance);
+});
+
+
 
 

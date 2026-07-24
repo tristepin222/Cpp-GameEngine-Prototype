@@ -2,6 +2,8 @@
 #include <glm/glm.hpp>
 
 #include "core/EngineAPI.hpp"
+#include "meta/ComponentReflection.hpp"
+
 
 enum class ColliderShape {
     Sphere,
@@ -27,7 +29,13 @@ struct ENGINE_API ColliderComponent {
     glm::vec3 offset = glm::vec3(0.0f);        // Local position offset relative to transform
 };
 
-#include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(ColliderComponent, "Physics");
+REFLECT_COMPONENT(ColliderComponent, "Physics", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(ColliderComponent, radius);
+    REFLECT_FIELD(ColliderComponent, height);
+    REFLECT_FIELD(ColliderComponent, extents);
+    REFLECT_FIELD(ColliderComponent, offset);
+});
+
+
 
 

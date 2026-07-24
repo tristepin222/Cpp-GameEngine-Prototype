@@ -1,6 +1,8 @@
 #pragma once
 
 #include "core/EngineAPI.hpp"
+#include "meta/ComponentReflection.hpp"
+
 
 /**
  * @struct PlayerControllerComponent
@@ -29,7 +31,13 @@ struct ENGINE_API PlayerControllerComponent {
     float debugMoveDirLength = 0.0f;
 };
 
-#include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(PlayerControllerComponent, "Gameplay");
+REFLECT_COMPONENT(PlayerControllerComponent, "Gameplay", [](Engine::ComponentReflection& refl) {
+    REFLECT_FIELD(PlayerControllerComponent, speed);
+    REFLECT_FIELD(PlayerControllerComponent, jumpForce);
+    REFLECT_FIELD(PlayerControllerComponent, interactRange);
+    REFLECT_FIELD(PlayerControllerComponent, orientToMovement);
+});
+
+
 
 

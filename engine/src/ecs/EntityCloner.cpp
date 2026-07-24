@@ -9,13 +9,17 @@
 #include "ecs/components/Camera.hpp"
 #include "ecs/components/Grid.hpp"
 #include "ecs/components/Skeleton.hpp"
+#include "ecs/components/UIComponents.hpp"
 #include "renderer/ResourceManager.hpp"
+
 
 /**
  * @namespace EntityCloner
  * @brief Utility functions for duplicating entities and their components.
  */
 namespace EntityCloner {
+    using namespace Engine;
+
 
     /**
      * @brief Clones a source entity and offsets its position slightly.
@@ -31,12 +35,37 @@ namespace EntityCloner {
 
         Name* name = registry.get<Name>(source);
         Transform* transform = registry.get<Transform>(source);
-        if (!name || !transform) {
+        bool isUI = registry.has<Engine::RectTransform>(source);
+        if (!name || (!transform && !isUI)) {
             return Entity();
         }
 
         const std::string cloneName = name->value + " Copy";
+
+        if (isUI) {
+            Entity duplicated = registry.create();
+            registry.emplace<Name>(duplicated, Name{ cloneName });
+            if (auto* srcRect = registry.get<Engine::RectTransform>(source)) {
+                auto& dupRect = registry.emplace<Engine::RectTransform>(duplicated, Engine::RectTransform{*srcRect});
+                dupRect.anchoredPosition += glm::vec2(10.0f, -10.0f);
+            }
+            if (auto* c = registry.get<Engine::CanvasComponent>(source)) registry.emplace<Engine::CanvasComponent>(duplicated, Engine::CanvasComponent{*c});
+            if (auto* c = registry.get<Engine::UIPanelComponent>(source)) registry.emplace<Engine::UIPanelComponent>(duplicated, Engine::UIPanelComponent{*c});
+            if (auto* c = registry.get<Engine::UIImageComponent>(source)) registry.emplace<Engine::UIImageComponent>(duplicated, Engine::UIImageComponent{*c});
+            if (auto* c = registry.get<Engine::UITextComponent>(source)) registry.emplace<Engine::UITextComponent>(duplicated, Engine::UITextComponent{*c});
+            if (auto* c = registry.get<Engine::UIButtonComponent>(source)) registry.emplace<Engine::UIButtonComponent>(duplicated, Engine::UIButtonComponent{*c});
+            if (auto* c = registry.get<Engine::UIGridLayoutGroupComponent>(source)) registry.emplace<Engine::UIGridLayoutGroupComponent>(duplicated, Engine::UIGridLayoutGroupComponent{*c});
+            if (auto* c = registry.get<Engine::UILayoutGroupComponent>(source)) registry.emplace<Engine::UILayoutGroupComponent>(duplicated, Engine::UILayoutGroupComponent{*c});
+            if (auto* c = registry.get<Engine::UIScrollRectComponent>(source)) registry.emplace<Engine::UIScrollRectComponent>(duplicated, Engine::UIScrollRectComponent{*c});
+            if (auto* c = registry.get<Engine::UISliderComponent>(source)) registry.emplace<Engine::UISliderComponent>(duplicated, Engine::UISliderComponent{*c});
+            if (auto* c = registry.get<Engine::UIToggleComponent>(source)) registry.emplace<Engine::UIToggleComponent>(duplicated, Engine::UIToggleComponent{*c});
+
+            return duplicated;
+        }
+
+
         const glm::vec3 offsetPosition = transform->position + glm::vec3(1.0f, 0.0f, 1.0f);
+
 
         if (Camera* camera = registry.get<Camera>(source)) {
             Entity duplicated = EntityFactory::spawnCamera(registry, renderer, cloneName, offsetPosition, transform->rotation, camera->fov);

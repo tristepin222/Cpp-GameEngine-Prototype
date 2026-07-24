@@ -177,9 +177,13 @@ static bool registerBuiltinComponents() {
             
             if (type == "Camera" || type == "Grid" || type == "Tilemap" || type == "Canvas" || type == "UIElement" ||
                 json.find("\"hasRectTransform\":") != std::string::npos ||
-                json.find("\"hasCanvas\":") != std::string::npos) {
+                json.find("\"hasRectTransformComponent\":") != std::string::npos ||
+                json.find("\"hasCanvas\":") != std::string::npos ||
+                json.find("\"hasCanvasComponent\":") != std::string::npos ||
+                json.find("\"anchorMin\":") != std::string::npos) {
                 return; // Managed by separate component deserializers
             }
+
 
             // Skip grids using key detection to avoid double parsing
             float dummySpacing = 0.0f;
@@ -905,8 +909,24 @@ static bool registerBuiltinComponents() {
                 }
             },
             [refl](Registry& registry, VulkanRenderer&, Entity entity, const std::string& json) {
-                bool hasComp = (json.find("\"has" + refl.name + "\":") != std::string::npos);
+                bool hasComp = (json.find("\"has" + refl.name + "\":") != std::string::npos) ||
+                               (json.find("\"has" + refl.name + "Component\":") != std::string::npos);
+
+                if (!hasComp) {
+                    if (refl.name == "Canvas" && (json.find("\"isScreenSpace\":") != std::string::npos)) hasComp = true;
+                    else if (refl.name == "RectTransform" && (json.find("\"anchorMin\":") != std::string::npos || json.find("\"anchoredPosition\":") != std::string::npos || json.find("\"sizeDelta\":") != std::string::npos)) hasComp = true;
+                    else if (refl.name == "UIPanel" && (json.find("\"borderRadius\":") != std::string::npos)) hasComp = true;
+                    else if (refl.name == "UIImage" && (json.find("\"tintColor\":") != std::string::npos)) hasComp = true;
+                    else if (refl.name == "UIText" && (json.find("\"fontSize\":") != std::string::npos || json.find("\"alignCenter\":") != std::string::npos)) hasComp = true;
+                    else if (refl.name == "UIButton" && (json.find("\"clickEventName\":") != std::string::npos || json.find("\"normalColor\":") != std::string::npos)) hasComp = true;
+                    else if (refl.name == "UIGridLayoutGroup" && (json.find("\"cellSize\":") != std::string::npos)) hasComp = true;
+                    else if (refl.name == "UILayoutGroup" && (json.find("\"isVertical\":") != std::string::npos)) hasComp = true;
+                    else if (refl.name == "UIScrollRect" && (json.find("\"scrollPosition\":") != std::string::npos)) hasComp = true;
+                    else if (refl.name == "UISlider" && (json.find("\"handleColor\":") != std::string::npos || json.find("\"minValue\":") != std::string::npos)) hasComp = true;
+                    else if (refl.name == "UIToggle" && (json.find("\"checkmarkColor\":") != std::string::npos || json.find("\"boxColor\":") != std::string::npos)) hasComp = true;
+                }
                 if (hasComp) {
+
                     if (!refl.has(registry, entity)) {
                         refl.add(registry, entity);
                     }
