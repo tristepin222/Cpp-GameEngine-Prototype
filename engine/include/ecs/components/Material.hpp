@@ -13,15 +13,15 @@ enum class TextureFilterMode {
  * @struct Material
  * @brief Represents a material component defining rendering properties.
  */
-// @reflect
+// [ReflectClass]
 struct Material {
 
     /** @brief Unique identifier for this material. */
     uint32_t id;
 
-    // @reflect
+    // [ReflectField]
     glm::vec4 color{ 1.0f }; // RGBA
-    // @reflect
+    // [ReflectField]
     std::string texturePath;
     /** @brief Vulkan descriptor set representing resource bindings. */
     VkDescriptorSet descriptorSet{ VK_NULL_HANDLE };
@@ -33,16 +33,17 @@ struct Material {
     TextureFilterMode filterMode = TextureFilterMode::Bilinear;
 
     // Shader and mapping properties
-    // @reflect
+    // [ReflectField]
     std::string shaderName = "Unlit";
-    // @reflect
+    // [ReflectField]
     std::string normalMapPath;
-    // @reflect
+    // [ReflectField]
     std::string metallicMapPath;
-    // @reflect
+    // [ReflectField]
     float roughness = 0.5f;
-    // @reflect
+    // [ReflectField]
     float metallic = 0.0f;
+
 
 
     /**

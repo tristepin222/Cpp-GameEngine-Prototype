@@ -14,32 +14,32 @@ enum class RigidBodyType {
  * @struct RigidBodyComponent
  * @brief Holds mass, velocity, acceleration, forces, restitution, bounciness, and gravity settings.
  */
-// @reflect
+// [ReflectClass]
 struct ENGINE_API RigidBodyComponent {
     RigidBodyType type = RigidBodyType::Dynamic;
-    // @reflect
+    // [ReflectField]
     float mass = 1.0f;
-    // @reflect
+    // [ReflectField]
     glm::vec3 velocity = glm::vec3(0.0f);
-    // @reflect
+    // [ReflectField]
     glm::vec3 acceleration = glm::vec3(0.0f);
-    // @reflect
+    // [ReflectField]
     glm::vec3 force = glm::vec3(0.0f);
-    // @reflect
+    // [ReflectField]
     float gravityScale = 1.0f;
-    // @reflect
+    // [ReflectField]
     float restitution = 0.5f; // Bounciness coefficient
-    // @reflect
+    // [ReflectField]
     float friction = 0.3f;    // Sliding friction coefficient
 
     // Rotational physics fields
-    // @reflect
+    // [ReflectField]
     glm::vec3 angularVelocity = glm::vec3(0.0f); // Rad/s
-    // @reflect
+    // [ReflectField]
     glm::vec3 torque = glm::vec3(0.0f);
-    // @reflect
+    // [ReflectField]
     float angularDrag = 0.5f; // Damping
-    // @reflect
+    // [ReflectField]
     float linearDrag = 0.0f;  // Damping
 
     // Sleep system
@@ -50,40 +50,25 @@ struct ENGINE_API RigidBodyComponent {
     bool  unstableContactThisFrame = false; // Contact support is producing torque; don't sleep yet
 
     // Constraints (Freeze axes)
-    // @reflect
+    // [ReflectField]
     bool freezePositionX = false;
-    // @reflect
+    // [ReflectField]
     bool freezePositionY = false;
-    // @reflect
+    // [ReflectField]
     bool freezePositionZ = false;
-    // @reflect
+    // [ReflectField]
     bool freezeRotationX = false;
-    // @reflect
+    // [ReflectField]
     bool freezeRotationY = false;
-    // @reflect
+    // [ReflectField]
     bool freezeRotationZ = false;
 };
 
-REFLECT_COMPONENT(RigidBodyComponent, "Physics", [](Engine::ComponentReflection& refl) {
-    REFLECT_FIELD(RigidBodyComponent, type);
-    REFLECT_FIELD(RigidBodyComponent, mass);
-    REFLECT_FIELD(RigidBodyComponent, velocity);
-    REFLECT_FIELD(RigidBodyComponent, acceleration);
-    REFLECT_FIELD(RigidBodyComponent, force);
-    REFLECT_FIELD(RigidBodyComponent, gravityScale);
-    REFLECT_FIELD(RigidBodyComponent, restitution);
-    REFLECT_FIELD(RigidBodyComponent, friction);
-    REFLECT_FIELD(RigidBodyComponent, angularVelocity);
-    REFLECT_FIELD(RigidBodyComponent, torque);
-    REFLECT_FIELD(RigidBodyComponent, angularDrag);
-    REFLECT_FIELD(RigidBodyComponent, linearDrag);
-    REFLECT_FIELD(RigidBodyComponent, freezePositionX);
-    REFLECT_FIELD(RigidBodyComponent, freezePositionY);
-    REFLECT_FIELD(RigidBodyComponent, freezePositionZ);
-    REFLECT_FIELD(RigidBodyComponent, freezeRotationX);
-    REFLECT_FIELD(RigidBodyComponent, freezeRotationY);
-    REFLECT_FIELD(RigidBodyComponent, freezeRotationZ);
-});
+
+REGISTER_COMPONENT(RigidBodyComponent, "Physics");
+
+
+
 
 
 

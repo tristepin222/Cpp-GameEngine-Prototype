@@ -882,7 +882,9 @@ static bool registerBuiltinComponents() {
             [refl](Registry& registry, Entity entity, std::ostream& out, int indent) {
                 if (refl.has(registry, entity)) {
                     void* compPtr = refl.get(registry, entity);
+                    if (!compPtr) return;
                     out << ",\n" << JSONUtils::indent(indent) << "\"has" << refl.name << "\": true";
+
                     for (const auto& field : refl.fields) {
                         char* fieldPtr = static_cast<char*>(compPtr) + field.offset;
                         out << ",\n" << JSONUtils::indent(indent) << "\"" << field.name << "\": ";
@@ -913,25 +915,23 @@ static bool registerBuiltinComponents() {
                                (json.find("\"has" + refl.name + "Component\":") != std::string::npos);
 
                 if (!hasComp) {
-                    if (refl.name == "Canvas" && (json.find("\"isScreenSpace\":") != std::string::npos)) hasComp = true;
-                    else if (refl.name == "RectTransform" && (json.find("\"anchorMin\":") != std::string::npos || json.find("\"anchoredPosition\":") != std::string::npos || json.find("\"sizeDelta\":") != std::string::npos)) hasComp = true;
-                    else if (refl.name == "UIPanel" && (json.find("\"borderRadius\":") != std::string::npos)) hasComp = true;
-                    else if (refl.name == "UIImage" && (json.find("\"tintColor\":") != std::string::npos)) hasComp = true;
-                    else if (refl.name == "UIText" && (json.find("\"fontSize\":") != std::string::npos || json.find("\"alignCenter\":") != std::string::npos)) hasComp = true;
-                    else if (refl.name == "UIButton" && (json.find("\"clickEventName\":") != std::string::npos || json.find("\"normalColor\":") != std::string::npos)) hasComp = true;
-                    else if (refl.name == "UIGridLayoutGroup" && (json.find("\"cellSize\":") != std::string::npos)) hasComp = true;
-                    else if (refl.name == "UILayoutGroup" && (json.find("\"isVertical\":") != std::string::npos)) hasComp = true;
-                    else if (refl.name == "UIScrollRect" && (json.find("\"scrollPosition\":") != std::string::npos)) hasComp = true;
-                    else if (refl.name == "UISlider" && (json.find("\"handleColor\":") != std::string::npos || json.find("\"minValue\":") != std::string::npos)) hasComp = true;
-                    else if (refl.name == "UIToggle" && (json.find("\"checkmarkColor\":") != std::string::npos || json.find("\"boxColor\":") != std::string::npos)) hasComp = true;
+                    for (const auto& field : refl.fields) {
+                        if (json.find("\"" + field.name + "\":") != std::string::npos) {
+                            hasComp = true;
+                            break;
+                        }
+                    }
                 }
+
                 if (hasComp) {
 
                     if (!refl.has(registry, entity)) {
                         refl.add(registry, entity);
                     }
                     void* compPtr = refl.get(registry, entity);
+                    if (!compPtr) return;
                     for (const auto& field : refl.fields) {
+
                         char* fieldPtr = static_cast<char*>(compPtr) + field.offset;
                         if (field.type == Engine::FieldType::Float) {
                             JSONUtils::extractFloatValue(json, field.name, *reinterpret_cast<float*>(fieldPtr));
@@ -998,6 +998,7 @@ SceneSerializer::SceneSerializer(Registry& registry, VulkanRenderer& renderer)
  * @return True if successful, false otherwise.
  */
 bool SceneSerializer::serialize(const std::string& path, const std::vector<Entity>& entities) {
+
     std::filesystem::path outputPath(path);
     if (outputPath.has_parent_path()) {
         std::filesystem::create_directories(outputPath.parent_path());
@@ -1020,6 +1021,7 @@ bool SceneSerializer::serialize(const std::string& path, const std::vector<Entit
         if (!name || (!transform && !isUI)) {
             continue;
         }
+
 
         if (!first) {
             out << ",\n";
@@ -1075,6 +1077,7 @@ bool SceneSerializer::deserializeFromString(const std::string& jsonContent, std:
 
 bool SceneSerializer::deserialize(const std::string& path, std::vector<Entity>& outEntities) {
     std::ifstream in(path);
+
     if (!in.is_open()) {
         return false;
     }

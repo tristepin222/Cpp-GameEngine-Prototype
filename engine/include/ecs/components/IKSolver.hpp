@@ -16,35 +16,36 @@ enum class IKSolverType {
  * @struct IKSolverComponent
  * @brief Specifies target joint chains and goal targets for analytical 2-Bone or iterative FABRIK IK.
  */
-// @reflect
+// [ReflectClass]
 struct IKSolverComponent {
     IKSolverType solverType = IKSolverType::TwoBone;
     
     // For 2-Bone Solver
-    // @reflect
+    // [ReflectField]
     std::string startJointName;  // e.g. "thigh.L"
-    // @reflect
+    // [ReflectField]
     std::string middleJointName; // e.g. "shin.L"
-    // @reflect
+    // [ReflectField]
     std::string endJointName;    // e.g. "foot.L"
     
     // For FABRIK Solver
     std::vector<std::string> jointChainNames; // List of joint names from base to tip
-    // @reflect
+    // [ReflectField]
     int maxIterations = 10;
-    // @reflect
+    // [ReflectField]
     float tolerance = 0.001f;
     
-    // @reflect
+    // [ReflectField]
     glm::vec3 targetPosition{ 0.0f };            // Target location in world space
-    // @reflect
+    // [ReflectField]
     glm::vec3 polePosition{ 0.0f, 0.0f, 1.0f };   // bend helper vector
     
-    // @reflect
+    // [ReflectField]
     float targetWeight = 1.0f;                    // Blend weight between raw FK (0.0) and IK (1.0)
-    // @reflect
+    // [ReflectField]
     bool enabled = false;
 };
+
 
 #include "meta/ComponentReflection.hpp"
 REGISTER_COMPONENT(IKSolverComponent, "Animation");

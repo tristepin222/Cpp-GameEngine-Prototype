@@ -16,6 +16,7 @@ struct ReflectedField {
 
 struct ReflectedComponent {
     std::string name;
+    std::string qualifiedName;
     std::string headerName;
     std::vector<ReflectedField> fields;
 };
@@ -70,13 +71,19 @@ void parseHeader(const fs::path& filePath, const fs::path& inputDir, std::vector
     bool inComponent = false;
     ReflectedComponent currentComp;
     bool nextLineIsReflected = false;
+    bool nextLineIsReflectedField = false;
+    bool inEngineNamespace = false;
 
     while (std::getline(file, line)) {
         std::string trimmed = trim(line);
         if (trimmed.empty()) continue;
 
-        // Check if this line is a reflection marker (only skip if we are not already parsing a component's fields)
-        if (trimmed.find("@reflect") != std::string::npos && !inComponent) {
+        if (trimmed.find("namespace Engine") != std::string::npos) {
+            inEngineNamespace = true;
+        }
+
+        // Check if this line is a class reflection marker
+        if ((trimmed.find("@reflect") != std::string::npos || trimmed.find("ReflectClass") != std::string::npos) && !inComponent) {
             nextLineIsReflected = true;
             continue;
         }
@@ -86,7 +93,7 @@ void parseHeader(const fs::path& filePath, const fs::path& inputDir, std::vector
 
             // Check if it's a system class (inherits from System)
             if (trimmed.find("class") != std::string::npos && trimmed.find(": public System") != std::string::npos) {
-                std::regex sysRegex("class\\s+(\\w+)");
+                std::regex sysRegex("class\\s+(?:ENGINE_API\\s+)?(\\w+)");
                 std::smatch match;
                 if (std::regex_search(trimmed, match, sysRegex)) {
                     ReflectedSystem sys;
@@ -99,12 +106,18 @@ void parseHeader(const fs::path& filePath, const fs::path& inputDir, std::vector
 
             // Check if it's a component struct/class
             if (trimmed.find("struct") != std::string::npos || trimmed.find("class") != std::string::npos) {
-                std::regex compRegex("(?:struct|class)\\s+(\\w+)");
+                std::regex compRegex("(?:struct|class)\\s+(?:ENGINE_API\\s+)?(\\w+)");
                 std::smatch match;
                 if (std::regex_search(trimmed, match, compRegex)) {
                     inComponent = true;
                     currentComp = ReflectedComponent();
                     currentComp.name = match[1].str();
+                    if (inEngineNamespace) {
+                        currentComp.qualifiedName = "Engine::" + currentComp.name;
+                    } else {
+                        currentComp.qualifiedName = currentComp.name;
+                    }
+
                     currentComp.headerName = getIncludePath(filePath, inputDir);
                 }
                 continue;
@@ -116,19 +129,28 @@ void parseHeader(const fs::path& filePath, const fs::path& inputDir, std::vector
             if (trimmed.rfind("};", 0) == 0 || trimmed == "};") {
                 outComponents.push_back(currentComp);
                 inComponent = false;
+                nextLineIsReflectedField = false;
+                continue;
+            }
+
+            // Check if this line is a field reflection marker on its own line
+            if (trimmed.find("ReflectField") != std::string::npos && trimmed.find(';') == std::string::npos && trimmed.find('=') == std::string::npos) {
+                nextLineIsReflectedField = true;
                 continue;
             }
 
             // Check if the field is annotated
-            bool isReflectedField = (trimmed.find("@reflect") != std::string::npos);
+            bool isReflectedField = nextLineIsReflectedField || (trimmed.find("@reflect") != std::string::npos) || (trimmed.find("ReflectField") != std::string::npos);
 
             if (isReflectedField) {
+                nextLineIsReflectedField = false;
                 // Strip comments
                 size_t commentPos = trimmed.find("//");
                 if (commentPos != std::string::npos) {
                     trimmed = trimmed.substr(0, commentPos);
                 }
                 trimmed = trim(trimmed);
+
 
                 // Strip trailing semicolon
                 if (!trimmed.empty() && trimmed.back() == ';') {
@@ -161,31 +183,34 @@ void parseHeader(const fs::path& filePath, const fs::path& inputDir, std::vector
 
 int main(int argc, char* argv[]) {
     if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <input_directory> <output_file>" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " <input_dir_1> [<input_dir_2> ...] <output_file>" << std::endl;
         return 1;
     }
 
-    std::string inputDir = argv[1];
-    std::string outputFile = argv[2];
+    std::string outputFile = argv[argc - 1];
+    std::vector<std::string> inputDirs;
+    for (int i = 1; i < argc - 1; ++i) {
+        inputDirs.push_back(argv[i]);
+    }
 
     std::vector<ReflectedComponent> components;
     std::vector<ReflectedSystem> systems;
 
-    // Scan input directory recursively for headers
-    try {
-        if (fs::exists(inputDir)) {
-            for (const auto& entry : fs::recursive_directory_iterator(inputDir)) {
-                if (entry.is_regular_file()) {
-                    std::string ext = entry.path().extension().string();
-                    if (ext == ".hpp" || ext == ".h") {
-                        parseHeader(entry.path(), inputDir, components, systems);
+    for (const auto& inputDir : inputDirs) {
+        try {
+            if (fs::exists(inputDir)) {
+                for (const auto& entry : fs::recursive_directory_iterator(inputDir)) {
+                    if (entry.is_regular_file()) {
+                        std::string ext = entry.path().extension().string();
+                        if (ext == ".hpp" || ext == ".h") {
+                            parseHeader(entry.path(), inputDir, components, systems);
+                        }
                     }
                 }
             }
+        } catch (const std::exception& e) {
+            std::cerr << "Error scanning directory " << inputDir << ": " << e.what() << std::endl;
         }
-    } catch (const std::exception& e) {
-        std::cerr << "Error scanning directory: " << e.what() << std::endl;
-        return 1;
     }
 
     // Open output file
@@ -226,30 +251,36 @@ int main(int argc, char* argv[]) {
     out << "    #define PLUGIN_API extern \"C\"\n";
     out << "#endif\n\n";
 
+        // Generate static component reflection registration
     out << "PLUGIN_API void initPlugin(PluginContext* context) {\n";
     out << "    ImGui::SetCurrentContext(context->imguiContext);\n\n";
-
     // Register reflected components
+
     for (const auto& comp : components) {
+        std::string compName = comp.name;
+        if (compName.size() > 9 && compName.rfind("Component") == compName.size() - 9) {
+            compName = compName.substr(0, compName.size() - 9);
+        }
         out << "    // Register " << comp.name << "\n";
         out << "    {\n";
         out << "        Engine::ComponentReflection refl;\n";
-        out << "        refl.name = \"" << comp.name << "\";\n";
+        out << "        refl.name = \"" << compName << "\";\n";
         out << "        refl.fields = {\n";
         for (size_t i = 0; i < comp.fields.size(); ++i) {
             const auto& field = comp.fields[i];
             std::string enumStr = getFieldTypeEnum(field.type);
             if (!enumStr.empty()) {
-                out << "            { \"" << field.name << "\", " << enumStr << ", offsetof(" << comp.name << ", " << field.name << ") }";
+                out << "            { \"" << field.name << "\", " << enumStr << ", offsetof(" << comp.qualifiedName << ", " << field.name << ") }";
                 if (i < comp.fields.size() - 1) out << ",";
                 out << "\n";
             }
         }
         out << "        };\n";
-        out << "        refl.add = [](Registry& reg, Entity e) { reg.emplace<" << comp.name << ">(e, " << comp.name << "{}); };\n";
-        out << "        refl.has = [](Registry& reg, Entity e) { return reg.has<" << comp.name << ">(e); };\n";
-        out << "        refl.remove = [](Registry& reg, Entity e) { reg.remove<" << comp.name << ">(e); };\n";
-        out << "        refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<" << comp.name << ">(e)); };\n";
+        out << "        refl.add = [](Registry& reg, Entity e) { reg.emplace<" << comp.qualifiedName << ">(e, " << comp.qualifiedName << "{}); };\n";
+        out << "        refl.has = [](Registry& reg, Entity e) { return reg.has<" << comp.qualifiedName << ">(e); };\n";
+        out << "        refl.remove = [](Registry& reg, Entity e) { reg.remove<" << comp.qualifiedName << ">(e); };\n";
+        out << "        refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<" << comp.qualifiedName << ">(e)); };\n";
+
         out << "        Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);\n";
         out << "    }\n\n";
     }

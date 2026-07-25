@@ -7,17 +7,24 @@ class Registry;
 class VulkanRenderer;
 struct EditorModeState;
 
-// @reflect
+// [ReflectClass]
 struct PhysgunScript {
-    float Kp = 450.0f; // @reflect
-    float Kd = 25.0f; // @reflect
-    float holdDistance = 5.0f; // @reflect
+    // [ReflectField]
+    float Kp = 450.0f;
+    // [ReflectField]
+    float Kd = 25.0f;
+    // [ReflectField]
+    float holdDistance = 5.0f;
 
     // Diagnostic fields exposed in the inspector
-    bool isHolding = false; // @reflect
-    float currentHoldDistance = 0.0f; // @reflect
-    bool debugShowRay = false; // @reflect
-    Entity originEntity; // @reflect
+    // [ReflectField]
+    bool isHolding = false;
+    // [ReflectField]
+    float currentHoldDistance = 0.0f;
+    // [ReflectField]
+    bool debugShowRay = false;
+    // [ReflectField]
+    Entity originEntity;
 
     glm::vec3 rayOrigin{ 0.0f };
     glm::vec3 rayDirection{ 0.0f, 0.0f, -1.0f };
@@ -28,7 +35,7 @@ struct PhysgunScript {
     Entity heldEntity;
 };
 
-// @reflect
+// [ReflectClass]
 class PhysgunSystem : public System {
 private:
     Registry& registry;
@@ -41,3 +48,6 @@ public:
     PhysgunSystem(Registry& reg, VulkanRenderer& rend, EditorModeState& mode);
     void update(float dt) override;
 };
+
+#include "meta/ComponentReflection.hpp"
+REGISTER_COMPONENT(PhysgunScript, "Player Interaction");

@@ -12,17 +12,18 @@ namespace Engine {
      *        The TilemapSystem loads the tileset, builds a packed atlas, and
      *        generates a single mesh + material per tilemap entity.
      */
-    // @reflect
+    // [ReflectClass]
     struct ENGINE_API TilemapComponent {
-        // @reflect
+        // [ReflectField]
         int width = 0;
-        // @reflect
+        // [ReflectField]
         int height = 0;
-        // @reflect
+        // [ReflectField]
         float tileSize = 1.0f;
 
-        // @reflect
+        // [ReflectField]
         std::string tilesetPath;
+
 
         /**
          * @brief 1D tile grid of size width*height.

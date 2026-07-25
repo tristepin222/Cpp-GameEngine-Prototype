@@ -16,25 +16,20 @@ namespace Engine {
      * @struct LightComponent
      * @brief Component representing a light source in the scene.
      */
-    // @reflect
+    // [ReflectClass]
     struct ENGINE_API LightComponent {
         LightType type = LightType::Directional;
-        // @reflect
+        // [ReflectField]
         glm::vec3 color{ 1.0f, 1.0f, 1.0f };
-        // @reflect
+        // [ReflectField]
         float intensity = 1.0f;
-        // @reflect
-        float range = 10.0f;
+        // [ReflectField]
+        float range = 10.0f; 
     };
 
+} // namespace Engine
 
-}
-
-REFLECT_COMPONENT(Engine::LightComponent, "Rendering & Lights", [](Engine::ComponentReflection& refl) {
-    REFLECT_FIELD(Engine::LightComponent, color);
-    REFLECT_FIELD(Engine::LightComponent, intensity);
-    REFLECT_FIELD(Engine::LightComponent, range);
-});
+REGISTER_COMPONENT(Engine::LightComponent, "Rendering & Lights");
 
 
 

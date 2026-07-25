@@ -123,15 +123,16 @@ public:
  * @struct Transform
  * @brief Represents the position, rotation, and scale of an entity in 3D space.
  */
-// @reflect
+// [ReflectClass]
 struct ENGINE_API Transform {
 
-    // @reflect
+    // [ReflectField]
     glm::vec3 position{ 0.0f };
-    // @reflect
+    // [ReflectField]
     RotationField rotation;
-    // @reflect
+    // [ReflectField]
     glm::vec3 scale{ 1.0f };
+
 
 
     /**
@@ -195,11 +196,10 @@ struct ENGINE_API Transform {
     }
 };
 
-REFLECT_COMPONENT(Transform, "General", [](Engine::ComponentReflection& refl) {
-    REFLECT_FIELD(Transform, position);
-    REFLECT_FIELD(Transform, rotation);
-    REFLECT_FIELD(Transform, scale);
-});
+REGISTER_COMPONENT(Transform, "General");
+
+
+
 
 
 

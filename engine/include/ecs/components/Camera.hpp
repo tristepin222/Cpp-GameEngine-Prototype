@@ -10,16 +10,17 @@
  * @struct Camera
  * @brief Represents a camera component for rendering and viewing.
  */
-// @reflect
+// [ReflectClass]
 struct ENGINE_API Camera {
-    // @reflect
+    // [ReflectField]
     float fov = 45.f;
-    // @reflect
+    // [ReflectField]
     float aspect = 1.0f;   // window width / height
-    // @reflect
+    // [ReflectField]
     float nearPlane = 0.1f;
-    // @reflect
+    // [ReflectField]
     float farPlane = 100.f;
+
     float moveSpeed = 5.f;
     float mouseSensitivity = 0.1f;
 
@@ -64,11 +65,11 @@ struct ENGINE_API Camera {
     }
 };
 
-REFLECT_COMPONENT(Camera, "Rendering & Lights", [](Engine::ComponentReflection& refl) {
-    REFLECT_FIELD(Camera, fov);
-    REFLECT_FIELD(Camera, nearPlane);
-    REFLECT_FIELD(Camera, farPlane);
-});
+REGISTER_COMPONENT(Camera, "Rendering & Lights");
+
+
+
+
 
 
 

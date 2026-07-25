@@ -30,6 +30,8 @@ add_custom_command(
     COMMENT "[Reflection Generator] Parsing annotations and generating registration code..."
 )
 
+
+
 # Include the generated source file in compilation target
 list(APPEND SCRIPT_SOURCES src/generated_reflection.cpp)
 

@@ -33,8 +33,9 @@ struct Joint {
  * @struct SkeletonComponent
  * @brief Component managing the list of joints and generating the offset matrices palette.
  */
-// @reflect
+// [ReflectClass]
 struct SkeletonComponent {
+
     /** @brief List of joints forming the skeleton hierarchy. */
     std::vector<Joint> joints;
     /** @brief Calculated final joint offsets list uploaded to VRAM descriptors. */

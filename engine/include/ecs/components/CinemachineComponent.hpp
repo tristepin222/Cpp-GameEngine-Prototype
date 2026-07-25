@@ -15,47 +15,48 @@ enum class CinemachineMode {
  * @brief Addon component that represents a virtual camera.
  *        Managed by CinemachineSystem to calculate tracking offsets, damping, and priority-blending.
  */
-// @reflect
+// [ReflectClass]
 struct CinemachineVirtualCamera {
     Entity followTarget = Entity();
     Entity lookAtTarget = Entity();
 
-    // @reflect
+    // [ReflectField]
     std::string followTargetName;
-    // @reflect
+    // [ReflectField]
     std::string lookAtTargetName;
-    // @reflect
+    // [ReflectField]
     std::string lockToBone = "Head";
 
     CinemachineMode mode = CinemachineMode::ThirdPersonFollow;
-    // @reflect
+    // [ReflectField]
     bool mouseOrbit = true;
-    // @reflect
+    // [ReflectField]
     bool mouseLook = true;
-    // @reflect
+    // [ReflectField]
     float orbitSensitivity = 0.1f;
-    // @reflect
+    // [ReflectField]
     float orbitYaw = 0.0f;
-    // @reflect
+    // [ReflectField]
     float orbitPitch = 0.0f;
-    // @reflect
+    // [ReflectField]
     float cameraYaw = 0.0f;
-    // @reflect
+    // [ReflectField]
     float cameraPitch = 0.0f;
 
-    // @reflect
+    // [ReflectField]
     glm::vec3 followOffset = glm::vec3(0.0f, 4.0f, 8.0f);
-    // @reflect
+    // [ReflectField]
     float followDamping = 2.0f; // Damping rate (higher = slower, 0.0f = instant)
-    // @reflect
+    // [ReflectField]
     float lookAtDamping = 1.0f; // Damping rate for rotation
 
-    // @reflect
+    // [ReflectField]
     float fov = 45.0f;
-    // @reflect
+    // [ReflectField]
     int priority = 10;
-    // @reflect
+    // [ReflectField]
     bool active = true;
+
 
     // Internal tracking positions (cached to smooth out from frame to frame)
     glm::vec3 currentPosition = glm::vec3(0.0f);
@@ -63,6 +64,4 @@ struct CinemachineVirtualCamera {
     bool initialized = false;
 };
 
-#include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(CinemachineVirtualCamera, "Rendering & Lights");
 

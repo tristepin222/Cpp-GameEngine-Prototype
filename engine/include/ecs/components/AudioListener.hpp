@@ -5,11 +5,12 @@
  * @struct AudioListenerComponent
  * @brief Component representing a 3D audio listener.
  */
-// @reflect
+// [ReflectClass]
 struct ENGINE_API AudioListenerComponent {
-    // @reflect
+    // [ReflectField]
     bool active = true;
 };
+
 
 #include "meta/ComponentReflection.hpp"
 REGISTER_COMPONENT(AudioListenerComponent, "Audio");

@@ -68,7 +68,11 @@ set(ENGINE_SOURCES
     src/scenes/TilesetAsset.cpp
     src/renderer/ResourceManager.cpp
     src/meta/ComponentReflection.cpp
+    src/meta/engine_generated_reflection.cpp
+
+
     src/ufbx.cpp
+
     src/miniaudio.cpp
     src/ecs/systems/AudioSystem.cpp
     src/ecs/systems/TilemapSystem.cpp
@@ -150,14 +154,35 @@ if(MSVC)
     target_link_options(editor PRIVATE /DEBUG)
 endif()
 
+add_custom_command(
+    TARGET engine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:engine> "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/bin/"
+    COMMENT "Copying engine.dll to SDK bin directory..."
+)
+
+add_custom_command(
+    TARGET editor POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:editor> "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/bin/"
+    COMMENT "Copying editor.exe to SDK bin directory..."
+)
+
+
 # --- Headless Game Runtime Executable (no editor UI) ---
 add_executable(game_runtime runtime/main.cpp)
 target_link_libraries(game_runtime PRIVATE engine)
 set_target_properties(game_runtime PROPERTIES OUTPUT_NAME "game_runtime")
 target_include_directories(game_runtime PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-# --- Reflection Generator Host Tool ---
 add_executable(reflection_generator src/tools/reflection_generator.cpp)
 set_target_properties(reflection_generator PROPERTIES OUTPUT_NAME "reflection_generator")
+
+add_custom_command(
+    TARGET reflection_generator POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:reflection_generator> "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/bin/"
+    COMMAND $<TARGET_FILE:reflection_generator> "${CMAKE_CURRENT_SOURCE_DIR}/include/ecs/components" "${CMAKE_CURRENT_SOURCE_DIR}/src/meta/engine_generated_reflection.cpp"
+    COMMENT "Copying reflection_generator to SDK bin and generating engine reflection..."
+)
+
+
 
 message(STATUS "Configured editor, game_runtime, and reflection_generator executables")

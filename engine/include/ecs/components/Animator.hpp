@@ -79,7 +79,7 @@ struct AnimationClip {
  * @struct AnimatorComponent
  * @brief Animator controller managing active clips and tracking playback timing.
  */
-// @reflect
+// [ReflectClass]
 struct AnimatorComponent {
     /** @brief List of all clips loaded from the model asset. */
     std::vector<AnimationClip> animations;
@@ -87,13 +87,14 @@ struct AnimatorComponent {
     int activeAnimationIndex = -1;
     /** @brief Current playback time offset in seconds. */
     float currentTime = 0.0f;
-    // @reflect
+    // [ReflectField]
     float playbackSpeed = 1.0f;
-    // @reflect
+    // [ReflectField]
     bool loop = true;
-    // @reflect
+    // [ReflectField]
     std::string loadedAnimPath;
 };
+
 
 REGISTER_COMPONENT(AnimatorComponent, "Animation");
 

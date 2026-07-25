@@ -11,11 +11,17 @@ namespace Engine {
 
 
     void ComponentReflectionRegistry::registerComponent(const ComponentReflection& refl) {
-        for (const auto& existing : reflections) {
-            if (existing.name == refl.name) return;
+        for (auto& existing : reflections) {
+            if (existing.name == refl.name) {
+                if (existing.fields.empty() && !refl.fields.empty()) {
+                    existing.fields = refl.fields;
+                }
+                return;
+            }
         }
         reflections.push_back(refl);
     }
+
 
     const std::vector<ComponentReflection>& ComponentReflectionRegistry::getReflections() const {
         return reflections;

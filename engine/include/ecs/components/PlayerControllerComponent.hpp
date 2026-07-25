@@ -8,18 +8,19 @@
  * @struct PlayerControllerComponent
  * @brief Component to mark and control player movement and interaction.
  */
-// @reflect
+// [ReflectClass]
 struct ENGINE_API PlayerControllerComponent {
-    // @reflect
+    // [ReflectField]
     float speed = 5.0f;
-    // @reflect
+    // [ReflectField]
     float jumpForce = 6.0f;
-    // @reflect
+    // [ReflectField]
     float interactRange = 3.0f;
 
     // Configuration flags
-    // @reflect
+    // [ReflectField]
     bool orientToMovement = true;
+
 
     // Transient input state
     bool wasJumpPressed = false;
@@ -31,12 +32,10 @@ struct ENGINE_API PlayerControllerComponent {
     float debugMoveDirLength = 0.0f;
 };
 
-REFLECT_COMPONENT(PlayerControllerComponent, "Gameplay", [](Engine::ComponentReflection& refl) {
-    REFLECT_FIELD(PlayerControllerComponent, speed);
-    REFLECT_FIELD(PlayerControllerComponent, jumpForce);
-    REFLECT_FIELD(PlayerControllerComponent, interactRange);
-    REFLECT_FIELD(PlayerControllerComponent, orientToMovement);
-});
+REGISTER_COMPONENT(PlayerControllerComponent, "Gameplay");
+
+
+
 
 
 

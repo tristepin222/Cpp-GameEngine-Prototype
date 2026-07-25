@@ -5,13 +5,14 @@
  * @struct Renderable
  * @brief Component that associates an entity with a mesh and material for rendering.
  */
-// @reflect
+// [ReflectClass]
 struct Renderable {
-    // @reflect
+    // [ReflectField]
     uint32_t meshID;
-    // @reflect
+    // [ReflectField]
     uint32_t materialID;
 };
+
 
 #include "meta/ComponentReflection.hpp"
 REGISTER_COMPONENT(Renderable, "Rendering & Lights");

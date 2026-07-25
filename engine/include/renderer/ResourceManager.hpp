@@ -26,8 +26,11 @@ struct Texture {
     VkSampler sampler = VK_NULL_HANDLE;
     /** @brief Descriptor set updated for shader binding. */
     VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+    /** @brief Vulkan image format (e.g. UNORM or SRGB). */
+    VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
     /** @brief Width in pixels. */
     int width = 0;
+
     /** @brief Height in pixels. */
     int height = 0;
     /** @brief Filepath from which texture was loaded. */

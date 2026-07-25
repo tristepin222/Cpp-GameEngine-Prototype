@@ -16,25 +16,25 @@ enum class ColliderShape {
  * @struct ColliderComponent
  * @brief Represents a collision volume (Sphere, Axis-Aligned Bounding Box, Oriented Bounding Box, or Capsule).
  */
-// @reflect
+// [ReflectClass]
 struct ENGINE_API ColliderComponent {
     ColliderShape shape = ColliderShape::AABB;
-    // @reflect
+    // [ReflectField]
     float radius = 1.0f;                       // Used for Sphere and Capsule colliders
-    // @reflect
+    // [ReflectField]
     float height = 2.0f;                       // Total height (including caps) for Capsule colliders
-    // @reflect
+    // [ReflectField]
     glm::vec3 extents = glm::vec3(0.5f);       // Half-extents for AABB/OBB colliders
-    // @reflect
+    // [ReflectField]
     glm::vec3 offset = glm::vec3(0.0f);        // Local position offset relative to transform
+
 };
 
-REFLECT_COMPONENT(ColliderComponent, "Physics", [](Engine::ComponentReflection& refl) {
-    REFLECT_FIELD(ColliderComponent, radius);
-    REFLECT_FIELD(ColliderComponent, height);
-    REFLECT_FIELD(ColliderComponent, extents);
-    REFLECT_FIELD(ColliderComponent, offset);
-});
+REGISTER_COMPONENT(ColliderComponent, "Physics");
+
+
+
+
 
 
 

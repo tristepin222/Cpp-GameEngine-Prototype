@@ -156,7 +156,8 @@ void ResourceManager::createTextureImageView(VkDevice device, Texture& texture) 
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = texture.image;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+    viewInfo.format = (texture.format != VK_FORMAT_UNDEFINED) ? texture.format : VK_FORMAT_R8G8B8A8_SRGB;
+
     viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     viewInfo.subresourceRange.baseMipLevel = 0;
     viewInfo.subresourceRange.levelCount = 1;
@@ -349,6 +350,8 @@ void ResourceManager::createDefaultTextures(VulkanRenderer& renderer) {
     defaultNormalTexture.path = "";
     defaultNormalTexture.width = 1;
     defaultNormalTexture.height = 1;
+    defaultNormalTexture.format = VK_FORMAT_R8G8B8A8_UNORM;
+
 
     uint8_t normalPixel[4] = { 128, 128, 255, 255 };
     stagingBuffer.create(
@@ -385,6 +388,8 @@ void ResourceManager::createDefaultTextures(VulkanRenderer& renderer) {
     defaultMetallicTexture.path = "";
     defaultMetallicTexture.width = 1;
     defaultMetallicTexture.height = 1;
+    defaultMetallicTexture.format = VK_FORMAT_R8G8B8A8_UNORM;
+
 
     uint8_t metallicPixel[4] = { 0, 128, 0, 255 };
     stagingBuffer.create(

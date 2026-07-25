@@ -63,12 +63,13 @@ struct AnimationTransition {
  * @struct AnimationControllerComponent
  * @brief Component that manages parameters, state machines, transitions, and blending.
  */
-// @reflect
+// [ReflectClass]
 struct AnimationControllerComponent {
     std::vector<AnimationState> states;
     std::vector<AnimationTransition> transitions;
-    // @reflect
+    // [ReflectField]
     std::string currentState;
+
     
     // Named parameters for transitions and blend trees
     std::unordered_map<std::string, float> parameters;
