@@ -891,17 +891,20 @@ static bool registerBuiltinComponents() {
         if (alreadyRegistered) continue;
 
         reg.registerComponent(
-
             refl.name,
             [refl](Registry& registry, Entity entity, std::ostream& out, int indent) {
                 if (refl.has(registry, entity)) {
                     void* compPtr = refl.get(registry, entity);
                     if (!compPtr) return;
-                    out << ",\n" << JSONUtils::indent(indent) << "\"has" << refl.name << "\": true";
+                    out << JSONUtils::indent(indent) << "\"" << refl.name << "\": {\n";
 
+                    bool firstField = true;
                     for (const auto& field : refl.fields) {
                         char* fieldPtr = static_cast<char*>(compPtr) + field.offset;
-                        out << ",\n" << JSONUtils::indent(indent) << "\"" << field.name << "\": ";
+                        if (!firstField) out << ",\n";
+                        firstField = false;
+
+                        out << JSONUtils::indent(indent + 1) << "\"" << field.name << "\": ";
                         if (field.type == Engine::FieldType::Float) {
                             out << *reinterpret_cast<float*>(fieldPtr);
                         } else if (field.type == Engine::FieldType::Int) {
@@ -924,18 +927,34 @@ static bool registerBuiltinComponents() {
                             out << JSONUtils::vec4ToJson(*reinterpret_cast<glm::vec4*>(fieldPtr));
                         }
                     }
+                    out << "\n" << JSONUtils::indent(indent) << "}";
                 }
             },
             [refl](Registry& registry, VulkanRenderer&, Entity entity, const std::string& json) {
-                bool hasComp = (json.find("\"has" + refl.name + "\":") != std::string::npos) ||
-                               (json.find("\"has" + refl.name + "Component\":") != std::string::npos);
+                if (json.empty()) return;
 
-                if (!hasComp) {
-                    for (const auto& field : refl.fields) {
-                        if (json.find("\"" + field.name + "\":") != std::string::npos) {
-                            hasComp = true;
-                            break;
-                        }
+                bool hasComp = false;
+                std::string compJson;
+
+                // 1. Check if json is an inner component object passed directly from components map
+                if (json.find("\"" + refl.name + "\":") == std::string::npos &&
+                    json.find("\"" + refl.name + "Component\":") == std::string::npos &&
+                    json.find('{') != std::string::npos) {
+                    hasComp = true;
+                    compJson = json;
+                } else {
+                    // 2. Extract sub-object if json contains refl.name wrapper key
+                    compJson = JSONUtils::extractSubObject(json, refl.name);
+                    if (compJson.empty()) {
+                        compJson = JSONUtils::extractSubObject(json, refl.name + "Component");
+                    }
+                    if (!compJson.empty()) {
+                        hasComp = true;
+                    } else {
+                        // 3. Fallback for legacy scene format with "has<Comp>": true
+                        hasComp = (json.find("\"has" + refl.name + "\":") != std::string::npos) ||
+                                   (json.find("\"has" + refl.name + "Component\":") != std::string::npos);
+                        if (hasComp) compJson = json;
                     }
                 }
 
@@ -947,48 +966,46 @@ static bool registerBuiltinComponents() {
                     void* compPtr = refl.get(registry, entity);
                     if (!compPtr) return;
                     for (const auto& field : refl.fields) {
-
                         char* fieldPtr = static_cast<char*>(compPtr) + field.offset;
                         if (field.type == Engine::FieldType::Float) {
-                            JSONUtils::extractFloatValue(json, field.name, *reinterpret_cast<float*>(fieldPtr));
+                            JSONUtils::extractFloatValue(compJson, field.name, *reinterpret_cast<float*>(fieldPtr));
                         } else if (field.type == Engine::FieldType::Int) {
                             float fVal = 0.0f;
-                            if (JSONUtils::extractFloatValue(json, field.name, fVal)) {
+                            if (JSONUtils::extractFloatValue(compJson, field.name, fVal)) {
                                 *reinterpret_cast<int*>(fieldPtr) = static_cast<int>(fVal);
                             }
                         } else if (field.type == Engine::FieldType::Bool) {
                             float fVal = 0.0f;
-                            if (JSONUtils::extractFloatValue(json, field.name, fVal)) {
+                            if (JSONUtils::extractFloatValue(compJson, field.name, fVal)) {
                                 *reinterpret_cast<bool*>(fieldPtr) = (fVal > 0.5f);
                             }
-                        }
- else if (field.type == Engine::FieldType::Vec3) {
+                        } else if (field.type == Engine::FieldType::Vec3) {
                             float vals[3]{};
-                            if (JSONUtils::extractFloatArray(json, field.name, vals, 3)) {
+                            if (JSONUtils::extractFloatArray(compJson, field.name, vals, 3)) {
                                 *reinterpret_cast<glm::vec3*>(fieldPtr) = glm::vec3(vals[0], vals[1], vals[2]);
                             }
                         } else if (field.type == Engine::FieldType::RigidBodyType) {
-                            std::string typeStr = JSONUtils::extractStringValue(json, field.name);
+                            std::string typeStr = JSONUtils::extractStringValue(compJson, field.name);
                             if (!typeStr.empty()) {
                                 *reinterpret_cast<RigidBodyType*>(fieldPtr) = (typeStr == "Static") ? RigidBodyType::Static : RigidBodyType::Dynamic;
                             }
                         } else if (field.type == Engine::FieldType::Entity) {
                             float idVal = 0.0f;
-                            if (JSONUtils::extractFloatValue(json, field.name, idVal)) {
+                            if (JSONUtils::extractFloatValue(compJson, field.name, idVal)) {
                                 *reinterpret_cast<Entity*>(fieldPtr) = Entity(static_cast<std::uint32_t>(idVal));
                             }
                         } else if (field.type == Engine::FieldType::String) {
-                            if (json.find("\"" + field.name + "\":") != std::string::npos) {
-                                *reinterpret_cast<std::string*>(fieldPtr) = JSONUtils::extractStringValue(json, field.name);
+                            if (compJson.find("\"" + field.name + "\":") != std::string::npos) {
+                                *reinterpret_cast<std::string*>(fieldPtr) = JSONUtils::extractStringValue(compJson, field.name);
                             }
                         } else if (field.type == Engine::FieldType::Vec2) {
                             float vals[2]{};
-                            if (JSONUtils::extractFloatArray(json, field.name, vals, 2)) {
+                            if (JSONUtils::extractFloatArray(compJson, field.name, vals, 2)) {
                                 *reinterpret_cast<glm::vec2*>(fieldPtr) = glm::vec2(vals[0], vals[1]);
                             }
                         } else if (field.type == Engine::FieldType::Vec4) {
                             float vals[4]{};
-                            if (JSONUtils::extractFloatArray(json, field.name, vals, 4)) {
+                            if (JSONUtils::extractFloatArray(compJson, field.name, vals, 4)) {
                                 *reinterpret_cast<glm::vec4*>(fieldPtr) = glm::vec4(vals[0], vals[1], vals[2], vals[3]);
                             }
                         }
@@ -996,6 +1013,7 @@ static bool registerBuiltinComponents() {
                 }
             }
         );
+
     }
 
     return true;
@@ -1020,7 +1038,6 @@ SceneSerializer::SceneSerializer(Registry& registry, VulkanRenderer& renderer)
  * @return True if successful, false otherwise.
  */
 bool SceneSerializer::serialize(const std::string& path, const std::vector<Entity>& entities) {
-
     std::filesystem::path outputPath(path);
     if (outputPath.has_parent_path()) {
         std::filesystem::create_directories(outputPath.parent_path());
@@ -1045,7 +1062,6 @@ bool SceneSerializer::serialize(const std::string& path, const std::vector<Entit
             continue;
         }
 
-
         if (!first) {
             out << ",\n";
         }
@@ -1053,18 +1069,46 @@ bool SceneSerializer::serialize(const std::string& path, const std::vector<Entit
 
         out << JSONUtils::indent(2) << "{\n";
         out << JSONUtils::indent(3) << "\"name\": " << JSONUtils::quote(name->value);
-        if (transform) {
-            out << ",\n" << JSONUtils::indent(3) << "\"position\": " << JSONUtils::vec3ToJson(transform->position) << ",\n";
-            out << JSONUtils::indent(3) << "\"rotation\": " << JSONUtils::vec3ToJson(transform->rotation) << ",\n";
-            out << JSONUtils::indent(3) << "\"scale\": " << JSONUtils::vec3ToJson(transform->scale);
+        if (transform && !isUI) {
+            out << ",\n" << JSONUtils::indent(3) << "\"transform\": {\n";
+            out << JSONUtils::indent(4) << "\"position\": " << JSONUtils::vec3ToJson(transform->position) << ",\n";
+            out << JSONUtils::indent(4) << "\"rotation\": " << JSONUtils::vec3ToJson(transform->rotation) << ",\n";
+            out << JSONUtils::indent(4) << "\"scale\": " << JSONUtils::vec3ToJson(transform->scale) << "\n";
+            out << JSONUtils::indent(3) << "}";
         }
 
-        // Dynamically invoke all registered component serializers to append custom properties
+
+        // Dynamically invoke all registered component serializers to append component sub-objects
+        out << ",\n" << JSONUtils::indent(3) << "\"components\": {\n";
+        bool firstComp = true;
         for (const auto& reg : ComponentSerializerRegistry::getInstance().getRegistrations()) {
-            reg.serialize(registry, entity, out, 3);
+            std::ostringstream compStream;
+            reg.serialize(registry, entity, compStream, 5);
+            std::string compStr = compStream.str();
+            if (!compStr.empty()) {
+                size_t startPos = compStr.find_first_not_of(" \t\r\n,");
+                if (startPos != std::string::npos) {
+                    compStr = compStr.substr(startPos);
+                }
+                if (!compStr.empty()) {
+                    if (!firstComp) out << ",\n";
+                    firstComp = false;
+
+                    // If already formatted as a key object (e.g., "UIPanelComponent": { ... })
+                    if (compStr.find("\"" + reg.componentName + "\":") == 0 ||
+                        compStr.find("\"" + reg.componentName + "Component\":") == 0) {
+                        out << compStr;
+                    } else {
+                        out << JSONUtils::indent(4) << "\"" << reg.componentName << "\": {\n";
+                        out << compStr << "\n";
+                        out << JSONUtils::indent(4) << "}";
+                    }
+                }
+            }
         }
 
-        out << "\n" << JSONUtils::indent(2) << "}";
+        out << "\n" << JSONUtils::indent(3) << "}\n";
+        out << JSONUtils::indent(2) << "}";
     }
 
     out << "\n" << JSONUtils::indent(1) << "]\n";
@@ -1131,7 +1175,21 @@ bool SceneSerializer::deserialize(const std::string& path, std::vector<Entity>& 
         // Initialize core components
         registry.emplace<Name>(entity, Name{ name });
 
-        bool isUI = (entityJson.find("\"hasRectTransform\":") != std::string::npos);
+        std::string componentsJson = JSONUtils::extractSubObject(entityJson, "components");
+        std::string transformJson = JSONUtils::extractSubObject(entityJson, "transform");
+
+        bool isUI = (entityJson.find("\"hasRectTransform\":") != std::string::npos) ||
+                    (!componentsJson.empty() && (
+                        componentsJson.find("\"RectTransform\":") != std::string::npos ||
+                        componentsJson.find("\"Canvas\":") != std::string::npos ||
+                        componentsJson.find("\"CanvasComponent\":") != std::string::npos ||
+                        componentsJson.find("\"UIPanel\":") != std::string::npos ||
+                        componentsJson.find("\"UIImage\":") != std::string::npos ||
+                        componentsJson.find("\"UIText\":") != std::string::npos ||
+                        componentsJson.find("\"UIButton\":") != std::string::npos
+                    ));
+
+
         if (!isUI) {
             registry.emplace<Transform>(entity, Transform{});
             Transform* transform = registry.get<Transform>(entity);
@@ -1140,13 +1198,14 @@ bool SceneSerializer::deserialize(const std::string& path, std::vector<Entity>& 
                 float rotation[3]{};
                 float scale[3]{1.0f, 1.0f, 1.0f};
 
-                if (JSONUtils::extractFloatArray(entityJson, "position", position, 3)) {
+                const std::string& tSource = !transformJson.empty() ? transformJson : entityJson;
+                if (JSONUtils::extractFloatArray(tSource, "position", position, 3)) {
                     transform->position = glm::vec3(position[0], position[1], position[2]);
                 }
-                if (JSONUtils::extractFloatArray(entityJson, "rotation", rotation, 3)) {
+                if (JSONUtils::extractFloatArray(tSource, "rotation", rotation, 3)) {
                     transform->rotation = glm::vec3(rotation[0], rotation[1], rotation[2]);
                 }
-                if (JSONUtils::extractFloatArray(entityJson, "scale", scale, 3)) {
+                if (JSONUtils::extractFloatArray(tSource, "scale", scale, 3)) {
                     transform->scale = glm::vec3(scale[0], scale[1], scale[2]);
                 }
             }
@@ -1154,11 +1213,27 @@ bool SceneSerializer::deserialize(const std::string& path, std::vector<Entity>& 
 
         // Invoke all registered component deserializers
         for (const auto& reg : ComponentSerializerRegistry::getInstance().getRegistrations()) {
-            reg.deserialize(registry, renderer, entity, entityJson);
+            std::string targetJson;
+            if (!componentsJson.empty()) {
+                // Structured scene format: component MUST exist in componentsJson dictionary
+                targetJson = JSONUtils::extractSubObject(componentsJson, reg.componentName);
+                if (targetJson.empty()) {
+                    targetJson = JSONUtils::extractSubObject(componentsJson, reg.componentName + "Component");
+                }
+            } else {
+                // Legacy flat scene format fallback
+                targetJson = entityJson;
+            }
+
+            if (!targetJson.empty()) {
+                reg.deserialize(registry, renderer, entity, targetJson);
+            }
         }
+
 
         outEntities.push_back(entity);
     }
+
 
     // Resolve parent entity links in HierarchyComponent using temporary ParentNameComponent records
     for (auto [entity, parentNameComp] : registry.view<ParentNameComponent>()) {

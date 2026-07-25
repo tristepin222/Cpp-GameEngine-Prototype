@@ -79,4 +79,13 @@ namespace JSONUtils {
      * @return True if the key was found and at least one string was parsed.
      */
     bool extractStringVector(const std::string& source, const std::string& key, std::vector<std::string>& values);
+
+    /**
+     * @brief Extracts a sub-object JSON string (enclosed in { ... }) for a given key.
+     * @param source Raw JSON text.
+     * @param key Property key.
+     * @return Extracted JSON object string including surrounding braces, or empty string if not found.
+     */
+    std::string extractSubObject(const std::string& source, const std::string& key);
 }
+

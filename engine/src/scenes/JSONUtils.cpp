@@ -269,5 +269,59 @@ namespace JSONUtils {
         }
         return !values.empty();
     }
+
+    std::string extractSubObject(const std::string& source, const std::string& key) {
+        const std::string token = "\"" + key + "\"";
+        size_t pos = 0;
+        while ((pos = source.find(token, pos)) != std::string::npos) {
+            // Verify token is followed by optional whitespace and ':'
+            size_t afterKey = pos + token.length();
+            while (afterKey < source.size() && (source[afterKey] == ' ' || source[afterKey] == '\t' || source[afterKey] == '\r' || source[afterKey] == '\n')) {
+                ++afterKey;
+            }
+
+            if (afterKey < source.size() && source[afterKey] == ':') {
+                size_t open = source.find('{', afterKey);
+                if (open != std::string::npos) {
+                    bool validObj = true;
+                    for (size_t k = afterKey + 1; k < open; ++k) {
+                        if (source[k] != ' ' && source[k] != '\t' && source[k] != '\r' && source[k] != '\n') {
+                            validObj = false;
+                            break;
+                        }
+                    }
+
+                    if (validObj) {
+                        int depth = 0;
+                        bool inQuotes = false;
+                        size_t close = std::string::npos;
+                        for (size_t i = open; i < source.size(); ++i) {
+                            char c = source[i];
+                            if (c == '"' && (i == 0 || source[i - 1] != '\\')) {
+                                inQuotes = !inQuotes;
+                            } else if (!inQuotes) {
+                                if (c == '{') {
+                                    ++depth;
+                                } else if (c == '}') {
+                                    --depth;
+                                    if (depth == 0) {
+                                        close = i;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (close != std::string::npos) {
+                            return source.substr(open, close - open + 1);
+                        }
+                    }
+                }
+            }
+            pos += token.length();
+        }
+        return {};
+    }
 }
+
+
 
