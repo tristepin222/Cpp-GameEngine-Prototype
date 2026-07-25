@@ -268,6 +268,7 @@ void EditorUI::drawHierarchyPanel() {
         if (ImGui::BeginMenu("3D Objects")) {
             if (ImGui::MenuItem("Cube"))     { if (currentScene) { auto e = currentScene->createPrimitiveEntity("Cube");     selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
             if (ImGui::MenuItem("Triangle")) { if (currentScene) { auto e = currentScene->createPrimitiveEntity("Triangle"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+            if (ImGui::MenuItem("Quad"))     { if (currentScene) { auto e = currentScene->createPrimitiveEntity("Quad");     selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Rendering & Lights")) {
@@ -292,6 +293,7 @@ void EditorUI::drawHierarchyPanel() {
         if (ImGui::MenuItem("Empty GameObject")) { if (currentScene) { auto e = currentScene->createEntityOfType("Empty");  selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
         ImGui::EndPopup();
     }
+
 
 
     ImGui::SameLine();
@@ -412,19 +414,59 @@ void EditorUI::drawHierarchyPanel() {
                 }
             }
 
-            if (ImGui::MenuItem("Create Empty Child")) {
-                if (currentScene) {
-                    Entity child = registry.create();
-                    registry.emplace<Name>(child, Name{ currentScene->makeUniqueEntityName("Empty GameObject") });
-                    registry.emplace<Transform>(child, Transform{ glm::vec3(0.0f) });
-                    registry.emplace<HierarchyComponent>(child, HierarchyComponent{ entity });
-                    currentScene->trackEntity(child);
-                    selectedEntity = child;
-                    hasSelection = true;
-                    renameBuffer = "Empty GameObject";
-                    statusMessage = "Created empty child object.";
+            auto createAndParentChild = [&](const std::string& typeStr, bool isPrimitive) {
+                if (!currentScene) return;
+                Entity created;
+                if (isPrimitive) {
+                    created = currentScene->createPrimitiveEntity(typeStr);
+                } else {
+                    created = currentScene->createEntityOfType(typeStr);
                 }
+                if (created.getId() != Entity::INVALID_ENTITY) {
+                    if (typeStr != "Canvas") {
+                        if (auto* hc = registry.get<HierarchyComponent>(created)) {
+                            hc->parent = entity;
+                        } else {
+                            registry.emplace<HierarchyComponent>(created, HierarchyComponent{ entity });
+                        }
+                    }
+                    selectedEntity = created;
+                    hasSelection = true;
+                    if (auto* n = registry.get<Name>(created)) renameBuffer = n->value;
+                    statusMessage = "Created " + typeStr + " child under " + nameComp->value;
+                }
+            };
+
+            if (ImGui::BeginMenu("Create Child")) {
+                if (ImGui::BeginMenu("3D Objects")) {
+                    if (ImGui::MenuItem("Cube"))     { createAndParentChild("Cube", true); }
+                    if (ImGui::MenuItem("Triangle")) { createAndParentChild("Triangle", true); }
+                    if (ImGui::MenuItem("Quad"))     { createAndParentChild("Quad", true); }
+                    ImGui::EndMenu();
+                }
+                if (ImGui::BeginMenu("Rendering & Lights")) {
+                    if (ImGui::MenuItem("Camera"))   { createAndParentChild("Camera", false); }
+                    if (ImGui::MenuItem("Grid"))     { createAndParentChild("Grid", false); }
+                    ImGui::EndMenu();
+                }
+                if (ImGui::BeginMenu("UI")) {
+                    if (ImGui::MenuItem("Canvas"))      { createAndParentChild("Canvas", false); }
+                    if (ImGui::MenuItem("Panel"))       { createAndParentChild("UI Panel", false); }
+                    if (ImGui::MenuItem("Image"))       { createAndParentChild("UI Image", false); }
+                    if (ImGui::MenuItem("Text"))        { createAndParentChild("UI Text", false); }
+                    if (ImGui::MenuItem("Button"))      { createAndParentChild("UI Button", false); }
+                    if (ImGui::MenuItem("Slider"))      { createAndParentChild("UI Slider", false); }
+                    if (ImGui::MenuItem("Toggle"))      { createAndParentChild("UI Toggle", false); }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Grid Layout")) { createAndParentChild("UI Grid Layout", false); }
+                    if (ImGui::MenuItem("Scroll View")) { createAndParentChild("UI Scroll View", false); }
+                    ImGui::EndMenu();
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Empty GameObject")) { createAndParentChild("Empty", false); }
+                ImGui::EndMenu();
             }
+
 
             if (auto* hc = registry.get<HierarchyComponent>(entity)) {
                 if (hc->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hc->parent)) {
@@ -508,7 +550,56 @@ void EditorUI::drawHierarchyPanel() {
         ImGui::EndDragDropTarget();
     }
 
+    // Right-click context menu on empty background area of Hierarchy panel
+
+    if (ImGui::BeginPopupContextWindow("HierarchyBgCtx", ImGuiPopupFlags_NoOpenOverItems | ImGuiPopupFlags_MouseButtonRight)) {
+        auto createRootObject = [&](const std::string& typeStr, bool isPrimitive) {
+            if (!currentScene) return;
+            Entity created;
+            if (isPrimitive) {
+                created = currentScene->createPrimitiveEntity(typeStr);
+            } else {
+                created = currentScene->createEntityOfType(typeStr);
+            }
+            if (created.getId() != Entity::INVALID_ENTITY) {
+                selectedEntity = created;
+                hasSelection = true;
+                if (auto* n = registry.get<Name>(created)) renameBuffer = n->value;
+                statusMessage = "Created " + typeStr + ".";
+            }
+        };
+
+        if (ImGui::BeginMenu("3D Objects")) {
+            if (ImGui::MenuItem("Cube"))     { createRootObject("Cube", true); }
+            if (ImGui::MenuItem("Triangle")) { createRootObject("Triangle", true); }
+            if (ImGui::MenuItem("Quad"))     { createRootObject("Quad", true); }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Rendering & Lights")) {
+            if (ImGui::MenuItem("Camera"))   { createRootObject("Camera", false); }
+            if (ImGui::MenuItem("Grid"))     { createRootObject("Grid", false); }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("UI")) {
+            if (ImGui::MenuItem("Canvas"))      { createRootObject("Canvas", false); }
+            if (ImGui::MenuItem("Panel"))       { createRootObject("UI Panel", false); }
+            if (ImGui::MenuItem("Image"))       { createRootObject("UI Image", false); }
+            if (ImGui::MenuItem("Text"))        { createRootObject("UI Text", false); }
+            if (ImGui::MenuItem("Button"))      { createRootObject("UI Button", false); }
+            if (ImGui::MenuItem("Slider"))      { createRootObject("UI Slider", false); }
+            if (ImGui::MenuItem("Toggle"))      { createRootObject("UI Toggle", false); }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Grid Layout")) { createRootObject("UI Grid Layout", false); }
+            if (ImGui::MenuItem("Scroll View")) { createRootObject("UI Scroll View", false); }
+            ImGui::EndMenu();
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Empty GameObject")) { createRootObject("Empty", false); }
+        ImGui::EndPopup();
+    }
+
     ImGui::EndChild(); // End of HierarchyTreeChild scrolling area
+
 
     PopStyleVar();
 
