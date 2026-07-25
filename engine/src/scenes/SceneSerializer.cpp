@@ -37,8 +37,12 @@ struct ParentNameComponent {
  * @brief Static function registering component serializers for built-in camera, grid, and primitive types.
  * @return True when registered.
  */
+extern "C" ENGINE_API void registerEngineReflection();
+
 static bool registerBuiltinComponents() {
+    registerEngineReflection();
     auto& reg = ComponentSerializerRegistry::getInstance();
+
     
     // 1. Camera Component
     reg.registerComponent(
@@ -874,10 +878,20 @@ static bool registerBuiltinComponents() {
         }
     );
 
-    // Register all components from the reflection registry dynamically
+    // Register all components from the reflection registry dynamically (only if not already registered with a custom serializer)
     auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
     for (const auto& refl : reflReg.getReflections()) {
+        bool alreadyRegistered = false;
+        for (const auto& regComp : reg.getRegistrations()) {
+            if (regComp.componentName == refl.name) {
+                alreadyRegistered = true;
+                break;
+            }
+        }
+        if (alreadyRegistered) continue;
+
         reg.registerComponent(
+
             refl.name,
             [refl](Registry& registry, Entity entity, std::ostream& out, int indent) {
                 if (refl.has(registry, entity)) {
@@ -890,6 +904,8 @@ static bool registerBuiltinComponents() {
                         out << ",\n" << JSONUtils::indent(indent) << "\"" << field.name << "\": ";
                         if (field.type == Engine::FieldType::Float) {
                             out << *reinterpret_cast<float*>(fieldPtr);
+                        } else if (field.type == Engine::FieldType::Int) {
+                            out << *reinterpret_cast<int*>(fieldPtr);
                         } else if (field.type == Engine::FieldType::Bool) {
                             out << (*reinterpret_cast<bool*>(fieldPtr) ? "1.0" : "0.0");
                         } else if (field.type == Engine::FieldType::Vec3) {
@@ -935,12 +951,18 @@ static bool registerBuiltinComponents() {
                         char* fieldPtr = static_cast<char*>(compPtr) + field.offset;
                         if (field.type == Engine::FieldType::Float) {
                             JSONUtils::extractFloatValue(json, field.name, *reinterpret_cast<float*>(fieldPtr));
+                        } else if (field.type == Engine::FieldType::Int) {
+                            float fVal = 0.0f;
+                            if (JSONUtils::extractFloatValue(json, field.name, fVal)) {
+                                *reinterpret_cast<int*>(fieldPtr) = static_cast<int>(fVal);
+                            }
                         } else if (field.type == Engine::FieldType::Bool) {
                             float fVal = 0.0f;
                             if (JSONUtils::extractFloatValue(json, field.name, fVal)) {
                                 *reinterpret_cast<bool*>(fieldPtr) = (fVal > 0.5f);
                             }
-                        } else if (field.type == Engine::FieldType::Vec3) {
+                        }
+ else if (field.type == Engine::FieldType::Vec3) {
                             float vals[3]{};
                             if (JSONUtils::extractFloatArray(json, field.name, vals, 3)) {
                                 *reinterpret_cast<glm::vec3*>(fieldPtr) = glm::vec3(vals[0], vals[1], vals[2]);
@@ -1017,7 +1039,8 @@ bool SceneSerializer::serialize(const std::string& path, const std::vector<Entit
     for (Entity entity : entities) {
         Name* name = registry.get<Name>(entity);
         Transform* transform = registry.get<Transform>(entity);
-        bool isUI = registry.has<Engine::RectTransform>(entity);
+        bool isUI = registry.has<Engine::RectTransform>(entity) || registry.has<Engine::CanvasComponent>(entity);
+
         if (!name || (!transform && !isUI)) {
             continue;
         }

@@ -1470,7 +1470,10 @@ void EditorUI::drawReflectedComponentsEditor() {
                 } else {
                     DragFloat(imguiId.c_str(), reinterpret_cast<float*>(fieldPtr), 0.05f);
                 }
+            } else if (field.type == Engine::FieldType::Int) {
+                DragInt(imguiId.c_str(), reinterpret_cast<int*>(fieldPtr), 1);
             } else if (field.type == Engine::FieldType::Bool) {
+
                 Checkbox(imguiId.c_str(), reinterpret_cast<bool*>(fieldPtr));
             } else if (field.type == Engine::FieldType::RigidBodyType) {
                 const char* types[] = { "Dynamic", "Static" };

@@ -30,10 +30,7 @@
     #define PLUGIN_API extern "C"
 #endif
 
-PLUGIN_API void initPlugin(PluginContext* context) {
-    ImGui::SetCurrentContext(context->imguiContext);
-
-    // Register AnimationControllerComponent
+PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "AnimationController";
@@ -46,8 +43,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<AnimationControllerComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register AnimatorComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "Animator";
@@ -62,8 +57,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<AnimatorComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register AudioListenerComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "AudioListener";
@@ -76,8 +69,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<AudioListenerComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register AudioSourceComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "AudioSource";
@@ -97,8 +88,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<AudioSourceComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register Camera
     {
         Engine::ComponentReflection refl;
         refl.name = "Camera";
@@ -114,8 +103,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Camera>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register CinemachineVirtualCamera
     {
         Engine::ComponentReflection refl;
         refl.name = "CinemachineVirtualCamera";
@@ -134,7 +121,7 @@ PLUGIN_API void initPlugin(PluginContext* context) {
             { "followDamping", Engine::FieldType::Float, offsetof(CinemachineVirtualCamera, followDamping) },
             { "lookAtDamping", Engine::FieldType::Float, offsetof(CinemachineVirtualCamera, lookAtDamping) },
             { "fov", Engine::FieldType::Float, offsetof(CinemachineVirtualCamera, fov) },
-            { "priority", Engine::FieldType::Float, offsetof(CinemachineVirtualCamera, priority) },
+            { "priority", Engine::FieldType::Int, offsetof(CinemachineVirtualCamera, priority) },
             { "active", Engine::FieldType::Bool, offsetof(CinemachineVirtualCamera, active) }
         };
         refl.add = [](Registry& reg, Entity e) { reg.emplace<CinemachineVirtualCamera>(e, CinemachineVirtualCamera{}); };
@@ -143,8 +130,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<CinemachineVirtualCamera>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register ColliderComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "Collider";
@@ -160,14 +145,12 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<ColliderComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register Grid
     {
         Engine::ComponentReflection refl;
         refl.name = "Grid";
         refl.fields = {
-            { "colorID", Engine::FieldType::Float, offsetof(Grid, colorID) },
-            { "meshID", Engine::FieldType::Float, offsetof(Grid, meshID) },
+            { "colorID", Engine::FieldType::Int, offsetof(Grid, colorID) },
+            { "meshID", Engine::FieldType::Int, offsetof(Grid, meshID) },
             { "spacing", Engine::FieldType::Float, offsetof(Grid, spacing) },
             { "size", Engine::FieldType::Float, offsetof(Grid, size) },
             { "color", Engine::FieldType::Vec4, offsetof(Grid, color) }
@@ -178,8 +161,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Grid>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register IKSolverComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "IKSolver";
@@ -187,7 +168,7 @@ PLUGIN_API void initPlugin(PluginContext* context) {
             { "startJointName", Engine::FieldType::String, offsetof(IKSolverComponent, startJointName) },
             { "middleJointName", Engine::FieldType::String, offsetof(IKSolverComponent, middleJointName) },
             { "endJointName", Engine::FieldType::String, offsetof(IKSolverComponent, endJointName) },
-            { "maxIterations", Engine::FieldType::Float, offsetof(IKSolverComponent, maxIterations) },
+            { "maxIterations", Engine::FieldType::Int, offsetof(IKSolverComponent, maxIterations) },
             { "tolerance", Engine::FieldType::Float, offsetof(IKSolverComponent, tolerance) },
             { "targetPosition", Engine::FieldType::Vec3, offsetof(IKSolverComponent, targetPosition) },
             { "polePosition", Engine::FieldType::Vec3, offsetof(IKSolverComponent, polePosition) },
@@ -200,8 +181,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<IKSolverComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register InputComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "Input";
@@ -215,8 +194,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<InputComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register LightComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "Light";
@@ -231,8 +208,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Engine::LightComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register Material
     {
         Engine::ComponentReflection refl;
         refl.name = "Material";
@@ -251,8 +226,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Material>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register PlayerControllerComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "PlayerController";
@@ -268,14 +241,12 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<PlayerControllerComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register Renderable
     {
         Engine::ComponentReflection refl;
         refl.name = "Renderable";
         refl.fields = {
-            { "meshID", Engine::FieldType::Float, offsetof(Renderable, meshID) },
-            { "materialID", Engine::FieldType::Float, offsetof(Renderable, materialID) }
+            { "meshID", Engine::FieldType::Int, offsetof(Renderable, meshID) },
+            { "materialID", Engine::FieldType::Int, offsetof(Renderable, materialID) }
         };
         refl.add = [](Registry& reg, Entity e) { reg.emplace<Renderable>(e, Renderable{}); };
         refl.has = [](Registry& reg, Entity e) { return reg.has<Renderable>(e); };
@@ -283,8 +254,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Renderable>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register RigidBodyComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "RigidBody";
@@ -313,8 +282,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<RigidBodyComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register SkeletonComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "Skeleton";
@@ -326,14 +293,12 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<SkeletonComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register TilemapComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "Tilemap";
         refl.fields = {
-            { "width", Engine::FieldType::Float, offsetof(Engine::TilemapComponent, width) },
-            { "height", Engine::FieldType::Float, offsetof(Engine::TilemapComponent, height) },
+            { "width", Engine::FieldType::Int, offsetof(Engine::TilemapComponent, width) },
+            { "height", Engine::FieldType::Int, offsetof(Engine::TilemapComponent, height) },
             { "tileSize", Engine::FieldType::Float, offsetof(Engine::TilemapComponent, tileSize) },
             { "tilesetPath", Engine::FieldType::String, offsetof(Engine::TilemapComponent, tilesetPath) }
         };
@@ -343,8 +308,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Engine::TilemapComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register Transform
     {
         Engine::ComponentReflection refl;
         refl.name = "Transform";
@@ -358,8 +321,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Transform>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register CanvasComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "Canvas";
@@ -372,8 +333,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Engine::CanvasComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register RectTransform
     {
         Engine::ComponentReflection refl;
         refl.name = "RectTransform";
@@ -390,8 +349,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Engine::RectTransform>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register UIPanelComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "UIPanel";
@@ -405,8 +362,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Engine::UIPanelComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register UIImageComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "UIImage";
@@ -420,8 +375,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Engine::UIImageComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register UITextComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "UIText";
@@ -437,8 +390,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Engine::UITextComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register UIButtonComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "UIButton";
@@ -456,8 +407,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Engine::UIButtonComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register UIGridLayoutGroupComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "UIGridLayoutGroup";
@@ -472,8 +421,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Engine::UIGridLayoutGroupComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register UILayoutGroupComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "UILayoutGroup";
@@ -488,8 +435,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Engine::UILayoutGroupComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register UIScrollRectComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "UIScrollRect";
@@ -505,8 +450,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Engine::UIScrollRectComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register UISliderComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "UISlider";
@@ -524,8 +467,6 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Engine::UISliderComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
-
-    // Register UIToggleComponent
     {
         Engine::ComponentReflection refl;
         refl.name = "UIToggle";
@@ -542,6 +483,11 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Engine::UIToggleComponent>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
+}
+
+PLUGIN_API void initPlugin(PluginContext* context) {
+    if (context && context->imguiContext) ImGui::SetCurrentContext(context->imguiContext);
+    registerEngineReflection();
 
 }
 

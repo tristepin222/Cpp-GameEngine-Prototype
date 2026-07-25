@@ -147,7 +147,6 @@ namespace Engine {
 } // namespace Engine
 
 REGISTER_COMPONENT(Engine::CanvasComponent, "UI");
-
 REGISTER_COMPONENT(Engine::RectTransform, "UI");
 REGISTER_COMPONENT(Engine::UIPanelComponent, "UI");
 REGISTER_COMPONENT(Engine::UIImageComponent, "UI");
@@ -158,3 +157,5 @@ REGISTER_COMPONENT(Engine::UILayoutGroupComponent, "UI");
 REGISTER_COMPONENT(Engine::UIScrollRectComponent, "UI");
 REGISTER_COMPONENT(Engine::UISliderComponent, "UI");
 REGISTER_COMPONENT(Engine::UIToggleComponent, "UI");
+
+

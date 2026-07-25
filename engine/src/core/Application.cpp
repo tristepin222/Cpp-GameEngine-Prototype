@@ -282,7 +282,6 @@ namespace Engine {
                         editorUI->render(cmd);
                     });
                 } else {
-
                     // Standalone mode: draw viewport and Game UI fullscreen
                     editorUI->beginFrame();
                     if (uiSystem) {

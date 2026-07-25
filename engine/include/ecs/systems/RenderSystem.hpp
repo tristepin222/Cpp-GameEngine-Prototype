@@ -290,7 +290,8 @@ private:
             Mesh* mesh = key.first;
             Material* mat = key.second;
 
-            if (!mesh || !mat || batch.empty() || mesh->vertexBuffer == VK_NULL_HANDLE || mesh->indexBuffer == VK_NULL_HANDLE) continue;
+            if (!mesh || !mat || batch.empty() || mesh->vertexBuffer == VK_NULL_HANDLE || mesh->indexBuffer == VK_NULL_HANDLE || mat->pipeline == VK_NULL_HANDLE) continue;
+
 
             // --- Bind pipeline
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mat->pipeline);
@@ -388,7 +389,8 @@ private:
         for (Entity e : entities) {
             auto* grid = registry.get<Grid>(e);
             auto* mat = registry.get<Material>(e);
-            if (!grid || !mat) continue;
+            if (!grid || !mat || mat->pipeline == VK_NULL_HANDLE) continue;
+
 
             // Bind grid pipeline
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mat->pipeline);

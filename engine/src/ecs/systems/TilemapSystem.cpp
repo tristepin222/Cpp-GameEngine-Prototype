@@ -32,11 +32,16 @@ namespace Engine {
 
     void TilemapSystem::rebuildTilemap(Entity entity, TilemapComponent& tilemap) {
         // 1. Load the TilesetAsset from disk (cached after first load)
-        if (tilemap.tilesetPath.empty()) return;
+        if (tilemap.tilesetPath.empty()) {
+            tilemap.isDirty = false;
+            return;
+        }
 
         TilesetAsset* tileset = loadOrGetTileset(tilemap.tilesetPath, renderer);
-        if (!tileset || !tileset->atlas.valid) return;
-        if (tileset->tiles.empty()) return;
+        if (!tileset || !tileset->atlas.valid || tileset->tiles.empty()) {
+            tilemap.isDirty = false;
+            return;
+        }
 
         // 2. Build single-mesh geometry — all tiles use the atlas, so one draw call
         std::vector<Vertex> vertices;
@@ -45,7 +50,7 @@ namespace Engine {
         for (int y = 0; y < tilemap.height; ++y) {
             for (int x = 0; x < tilemap.width; ++x) {
                 int cellIdx = y * tilemap.width + x;
-                if (cellIdx >= static_cast<int>(tilemap.tiles.size())) continue;
+                if (cellIdx < 0 || cellIdx >= static_cast<int>(tilemap.tiles.size())) continue;
                 int tileIdx = tilemap.tiles[cellIdx];
                 if (tileIdx < 0 || tileIdx >= static_cast<int>(tileset->tiles.size())) continue;
 
@@ -72,54 +77,60 @@ namespace Engine {
             }
         }
 
-        // 3. Upload geometry to the GPU
-        auto* mesh = registry.get<Mesh>(entity);
-        if (!mesh) {
-            registry.emplace<Mesh>(entity, Mesh{});
-            mesh = registry.get<Mesh>(entity);
+        if (!vertices.empty() && !indices.empty()) {
+            // 3. Upload geometry to the GPU
+            auto* mesh = registry.get<Mesh>(entity);
+            if (!mesh) {
+                registry.emplace<Mesh>(entity, Mesh{});
+                mesh = registry.get<Mesh>(entity);
+            }
+
+            mesh->vertices = std::move(vertices);
+            mesh->indices  = std::move(indices);
+
+            bool alreadyUploaded = (mesh->vertexBuffer != VK_NULL_HANDLE)
+                                 && (mesh->id < static_cast<uint32_t>(renderer.meshSoA.ids.size()));
+            if (alreadyUploaded) {
+                // Overwrite existing SoA entry and re-upload
+                renderer.meshSoA.vertices[mesh->id] = mesh->vertices;
+                renderer.meshSoA.indices[mesh->id]  = mesh->indices;
+                renderer.uploadMesh(mesh->id);
+                mesh->vertexBuffer = renderer.meshSoA.vertexBuffers[mesh->id].get();
+                mesh->indexBuffer  = renderer.meshSoA.indexBuffers[mesh->id].get();
+            } else {
+                const size_t meshID = renderer.meshSoA.push(mesh->vertices, mesh->indices);
+                renderer.uploadMesh(meshID);
+                mesh->id           = static_cast<uint32_t>(meshID);
+                mesh->vertexBuffer = renderer.meshSoA.vertexBuffers[meshID].get();
+                mesh->indexBuffer  = renderer.meshSoA.indexBuffers[meshID].get();
+            }
         }
 
-        mesh->vertices = std::move(vertices);
-        mesh->indices  = std::move(indices);
 
-        bool alreadyUploaded = (mesh->vertexBuffer != VK_NULL_HANDLE)
-                             && (mesh->id < static_cast<uint32_t>(renderer.meshSoA.ids.size()));
-        if (alreadyUploaded) {
-            // Overwrite existing SoA entry and re-upload
-            renderer.meshSoA.vertices[mesh->id] = mesh->vertices;
-            renderer.meshSoA.indices[mesh->id]  = mesh->indices;
-            renderer.uploadMesh(mesh->id);
-            mesh->vertexBuffer = renderer.meshSoA.vertexBuffers[mesh->id].get();
-            mesh->indexBuffer  = renderer.meshSoA.indexBuffers[mesh->id].get();
-        } else {
-            const size_t meshID = renderer.meshSoA.push(mesh->vertices, mesh->indices);
-            renderer.uploadMesh(meshID);
-            mesh->id           = static_cast<uint32_t>(meshID);
-            mesh->vertexBuffer = renderer.meshSoA.vertexBuffers[meshID].get();
-            mesh->indexBuffer  = renderer.meshSoA.indexBuffers[meshID].get();
-        }
 
-        // 4. Configure material — bind the atlas descriptor set
-        auto* mat = registry.get<Material>(entity);
-        if (!mat) {
-            registry.emplace<Material>(entity, Material{});
-            mat = registry.get<Material>(entity);
-        }
-        mat->color         = glm::vec4(1.f);
-        mat->texturePath   = "tileset_atlas:" + tilemap.tilesetPath;
-        mat->descriptorSet = tileset->atlas.descriptorSet;
-        mat->filterMode    = TextureFilterMode::Nearest;
 
-        if (mat->pipeline == VK_NULL_HANDLE) {
-            PipelineHandle pipeline = renderer.createPipelineForShaders(
-                renderer.resolveShaderPath("build/shaders/unlit.vert.spv"),
-                renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
-            );
-            mat->pipeline       = pipeline.pipeline;
-            mat->pipelineLayout = pipeline.layout;
-        }
+            // 4. Configure material — bind the atlas descriptor set
+            auto* mat = registry.get<Material>(entity);
+            if (!mat) {
+                registry.emplace<Material>(entity, Material{});
+                mat = registry.get<Material>(entity);
+            }
+            mat->color         = glm::vec4(1.f);
+            mat->texturePath   = "tileset_atlas:" + tilemap.tilesetPath;
+            mat->descriptorSet = tileset->atlas.descriptorSet;
+            mat->filterMode    = TextureFilterMode::Nearest;
+
+            if (mat->pipeline == VK_NULL_HANDLE) {
+                PipelineHandle pipeline = renderer.createPipelineForShaders(
+                    renderer.resolveShaderPath("build/shaders/unlit.vert.spv"),
+                    renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
+                );
+                mat->pipeline       = pipeline.pipeline;
+                mat->pipelineLayout = pipeline.layout;
+            }
 
         if (!registry.get<Transform>(entity)) {
+
             registry.emplace<Transform>(entity, Transform{});
         }
 
@@ -139,10 +150,11 @@ namespace Engine {
         for (int y = 0; y < tilemap.height; ++y) {
             for (int x = 0; x < tilemap.width; ++x) {
                 int cellIdx = y * tilemap.width + x;
-                if (cellIdx >= static_cast<int>(tilemap.tiles.size())) continue;
+                if (cellIdx < 0 || cellIdx >= static_cast<int>(tilemap.tiles.size())) continue;
                 int tileIdx = tilemap.tiles[cellIdx];
                 if (tileIdx < 0 || tileIdx >= static_cast<int>(tileset->tiles.size())) continue;
                 if (!tileset->tiles[tileIdx].isSolid) continue;
+
 
                 Entity colEnt = registry.create();
                 registry.emplace<Name>(colEnt, Name{ "TileCollider_" + std::to_string(x) + "_" + std::to_string(y) });

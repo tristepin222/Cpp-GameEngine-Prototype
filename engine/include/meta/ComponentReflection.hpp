@@ -15,6 +15,7 @@ namespace Engine {
      */
     enum class FieldType {
         Float,
+        Int,
         Bool,
         Vec3,
         RigidBodyType,
@@ -23,6 +24,7 @@ namespace Engine {
         Vec2,
         Vec4
     };
+
 
     /**
      * @struct ComponentField

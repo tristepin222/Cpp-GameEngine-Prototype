@@ -36,7 +36,8 @@ std::string trim(const std::string& str) {
 
 std::string getFieldTypeEnum(const std::string& type) {
     if (type == "float" || type == "double") return "Engine::FieldType::Float";
-    if (type == "int" || type == "int32_t" || type == "uint32_t" || type == "size_t") return "Engine::FieldType::Float";
+    if (type == "int" || type == "int32_t" || type == "uint32_t" || type == "size_t") return "Engine::FieldType::Int";
+
     if (type == "bool") return "Engine::FieldType::Bool";
     if (type == "glm::vec2" || type == "vec2") return "Engine::FieldType::Vec2";
     if (type == "glm::vec3" || type == "vec3") return "Engine::FieldType::Vec3";
@@ -251,17 +252,13 @@ int main(int argc, char* argv[]) {
     out << "    #define PLUGIN_API extern \"C\"\n";
     out << "#endif\n\n";
 
-        // Generate static component reflection registration
-    out << "PLUGIN_API void initPlugin(PluginContext* context) {\n";
-    out << "    ImGui::SetCurrentContext(context->imguiContext);\n\n";
-    // Register reflected components
-
+        // Generate component reflection registration function
+    out << "PLUGIN_API void registerEngineReflection() {\n";
     for (const auto& comp : components) {
         std::string compName = comp.name;
         if (compName.size() > 9 && compName.rfind("Component") == compName.size() - 9) {
             compName = compName.substr(0, compName.size() - 9);
         }
-        out << "    // Register " << comp.name << "\n";
         out << "    {\n";
         out << "        Engine::ComponentReflection refl;\n";
         out << "        refl.name = \"" << compName << "\";\n";
@@ -280,10 +277,15 @@ int main(int argc, char* argv[]) {
         out << "        refl.has = [](Registry& reg, Entity e) { return reg.has<" << comp.qualifiedName << ">(e); };\n";
         out << "        refl.remove = [](Registry& reg, Entity e) { reg.remove<" << comp.qualifiedName << ">(e); };\n";
         out << "        refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<" << comp.qualifiedName << ">(e)); };\n";
-
         out << "        Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);\n";
-        out << "    }\n\n";
+        out << "    }\n";
     }
+    out << "}\n\n";
+
+    out << "PLUGIN_API void initPlugin(PluginContext* context) {\n";
+    out << "    if (context && context->imguiContext) ImGui::SetCurrentContext(context->imguiContext);\n";
+    out << "    registerEngineReflection();\n\n";
+
 
     // Register reflected systems
     for (const auto& sys : systems) {

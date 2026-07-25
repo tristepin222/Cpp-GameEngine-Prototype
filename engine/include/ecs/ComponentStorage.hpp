@@ -46,10 +46,16 @@ public:
      * @param comp The component instance.
      */
     void add(Entity e, T comp) {
+        auto it = entityToIndex.find(e);
+        if (it != entityToIndex.end()) {
+            data[it->second] = std::move(comp);
+            return;
+        }
         entities.push_back(e);
         data.push_back(std::move(comp));
         entityToIndex[e] = data.size() - 1;
     }
+
 
     /**
      * @brief Checks if an entity possesses this component.

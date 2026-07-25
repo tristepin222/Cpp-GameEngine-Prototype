@@ -48,8 +48,16 @@ public:
      * @param deserialize Deserialization callback.
      */
     void registerComponent(const std::string& componentName, SerializerCallback serialize, DeserializerCallback deserialize) {
+        for (auto& existing : registrations) {
+            if (existing.componentName == componentName) {
+                existing.serialize = serialize;
+                existing.deserialize = deserialize;
+                return;
+            }
+        }
         registrations.push_back({ componentName, serialize, deserialize });
     }
+
 
     /**
      * @brief Retrieves all registered components.

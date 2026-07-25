@@ -2,6 +2,9 @@
 #include "System.hpp"
 #include <memory>
 #include <vector>
+#include <iostream>
+#include <typeinfo>
+
 
 /**
  * @class SystemManager
@@ -26,6 +29,8 @@ public:
             system->update(dt);
         }
     }
+
+
 
     /**
      * @brief Removes and releases all registered systems.

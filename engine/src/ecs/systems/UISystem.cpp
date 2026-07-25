@@ -345,12 +345,13 @@ namespace Engine {
         // Parent container dimensions
         glm::vec4 parentRect(0.0f, 0.0f, viewportSize.x, viewportSize.y);
         if (auto* hierarchy = registry.get<HierarchyComponent>(entity)) {
-            if (hierarchy->parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hierarchy->parent)) {
+            if (hierarchy->parent.getId() != Entity::INVALID_ENTITY && hierarchy->parent != entity && registry.isValid(hierarchy->parent)) {
                 if (registry.has<RectTransform>(hierarchy->parent)) {
                     parentRect = getRect(hierarchy->parent, viewportSize);
                 }
             }
         }
+
 
         float px = parentRect.x;
         float py = parentRect.y;
