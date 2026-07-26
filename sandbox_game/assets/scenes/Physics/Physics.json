@@ -50,8 +50,8 @@
           "orbitPitch": 0,
           "cameraYaw": 0,
           "cameraPitch": 0,
-          "followTarget": 9996,
-          "lookAtTarget": 9996,
+          "followTarget": 9995,
+          "lookAtTarget": 9995,
           "followTargetName": "Player",
           "lookAtTargetName": "Player",
           "lockToBone": "Head",
@@ -63,7 +63,13 @@
         },
         "Camera": {
 "entityType": "Camera",
-          "fov": 45
+          "fov": 45,
+          "isOrthographic": false,
+          "orthoSize": 5,
+          "nearPlane": 0.1,
+          "farPlane": 100,
+          "moveSpeed": 5,
+          "mouseSensitivity": 0.1
         },
 "Transform": {
             "position": [-3.21228, 2.04259, -0.663726],
@@ -549,7 +555,13 @@
       "components": {
         "Camera": {
 "entityType": "Camera",
-          "fov": 50.9
+          "fov": 50.9,
+          "isOrthographic": true,
+          "orthoSize": 5,
+          "nearPlane": 0.1,
+          "farPlane": 100,
+          "moveSpeed": 5,
+          "mouseSensitivity": 0.1
         },
 "Transform": {
             "position": [1.05, 2.8, 42.5],
