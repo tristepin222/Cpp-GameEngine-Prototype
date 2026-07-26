@@ -578,6 +578,7 @@ void EditorUI::drawHierarchyPanel() {
         if (ImGui::BeginMenu("Rendering & Lights")) {
             if (ImGui::MenuItem("Camera"))   { createRootObject("Camera", false); }
             if (ImGui::MenuItem("Grid"))     { createRootObject("Grid", false); }
+            if (ImGui::MenuItem("Sprite Renderer")) { createRootObject("Sprite Renderer", false); }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("UI")) {
@@ -706,6 +707,7 @@ void EditorUI::drawInspectorPanel() {
     drawReflectedComponentsEditor();
     drawColliderEditor();
     drawTilemapInspector();
+    drawSpriteRendererInspector();
     drawUIComponentsEditor();
     drawGridEditor();
     drawCameraEditor();
@@ -3512,7 +3514,9 @@ void EditorUI::drawAnimatorControllerWindow() {
                         }),
                     controller->transitions.end());
             }
+            s_lastStateCount = (size_t)-1; // Force graph rebuild next frame
         };
+
 
         // Drag and drop animation files from Asset Browser onto grid area -> create state node at drop position
         s_ctrlGraph.onCanvasAssetDropped = [controller, processDroppedAnimationAsset, this](const std::string& assetPath, const ImVec2& dropCanvasPos) {

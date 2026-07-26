@@ -20,6 +20,7 @@
 #include "ecs/components/Renderable.hpp"
 #include "ecs/components/RigidBody.hpp"
 #include "ecs/components/Skeleton.hpp"
+#include "ecs/components/SpriteRenderer.hpp"
 #include "ecs/components/Tilemap.hpp"
 #include "ecs/components/Transform.hpp"
 #include "ecs/components/UIComponents.hpp"
@@ -293,6 +294,22 @@ PLUGIN_API void registerEngineReflection() {
         refl.has = [](Registry& reg, Entity e) { return reg.has<SkeletonComponent>(e); };
         refl.remove = [](Registry& reg, Entity e) { reg.remove<SkeletonComponent>(e); };
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<SkeletonComponent>(e)); };
+        Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
+    }
+    {
+        Engine::ComponentReflection refl;
+        refl.name = "SpriteRenderer";
+        refl.fields = {
+            { "texturePath", Engine::FieldType::String, offsetof(Engine::SpriteRenderer, texturePath) },
+            { "color", Engine::FieldType::Vec4, offsetof(Engine::SpriteRenderer, color) },
+            { "flipX", Engine::FieldType::Bool, offsetof(Engine::SpriteRenderer, flipX) },
+            { "flipY", Engine::FieldType::Bool, offsetof(Engine::SpriteRenderer, flipY) },
+            { "sortOrder", Engine::FieldType::Int, offsetof(Engine::SpriteRenderer, sortOrder) }
+        };
+        refl.add = [](Registry& reg, Entity e) { reg.emplace<Engine::SpriteRenderer>(e, Engine::SpriteRenderer{}); };
+        refl.has = [](Registry& reg, Entity e) { return reg.has<Engine::SpriteRenderer>(e); };
+        refl.remove = [](Registry& reg, Entity e) { reg.remove<Engine::SpriteRenderer>(e); };
+        refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Engine::SpriteRenderer>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
     {

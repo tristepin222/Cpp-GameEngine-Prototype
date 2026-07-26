@@ -22,6 +22,7 @@
 #include "meta/ComponentReflection.hpp"
 #include "ecs/components/Tilemap.hpp"
 #include "ecs/components/UIComponents.hpp"
+#include "ecs/components/SpriteRenderer.hpp"
 
 
 struct ParentNameComponent {
@@ -151,8 +152,8 @@ static bool registerBuiltinComponents() {
     reg.registerComponent(
         "Primitive",
         [](Registry& registry, Entity entity, std::ostream& out, int indent) {
-            if (registry.has<Engine::TilemapComponent>(entity) || registry.has<Engine::CanvasComponent>(entity) || registry.has<Engine::RectTransform>(entity)) {
-                return; // Skip primitive details for Tilemap and UI entities
+            if (registry.has<Engine::TilemapComponent>(entity) || registry.has<Engine::CanvasComponent>(entity) || registry.has<Engine::RectTransform>(entity) || registry.has<Engine::SpriteRenderer>(entity)) {
+                return; // Skip primitive details for Tilemap, UI, and Sprite entities
             }
 
             if (auto* mesh = registry.get<Mesh>(entity)) {
@@ -859,6 +860,52 @@ static bool registerBuiltinComponents() {
 
     // 5. Tileset — now a disk asset (.tileset file), NOT serialized into the scene.
     //    The Tilemap serializer references it by path string (tilesetPath).
+
+    // 5b. SpriteRenderer Component Serializer
+    reg.registerComponent(
+        "SpriteRenderer",
+        [](Registry& registry, Entity entity, std::ostream& out, int indent) {
+            if (auto* spr = registry.get<Engine::SpriteRenderer>(entity)) {
+                out << ",\n" << JSONUtils::indent(indent) << "\"entityType\": " << JSONUtils::quote("SpriteRenderer") << ",\n";
+                out << JSONUtils::indent(indent) << "\"sprTexturePath\": " << JSONUtils::quote(spr->texturePath) << ",\n";
+                out << JSONUtils::indent(indent) << "\"sprColor\": [" << spr->color.r << "," << spr->color.g << "," << spr->color.b << "," << spr->color.a << "],\n";
+                out << JSONUtils::indent(indent) << "\"sprFlipX\": " << (spr->flipX ? "true" : "false") << ",\n";
+                out << JSONUtils::indent(indent) << "\"sprFlipY\": " << (spr->flipY ? "true" : "false") << ",\n";
+                out << JSONUtils::indent(indent) << "\"sprSortOrder\": " << spr->sortOrder;
+            }
+        },
+        [](Registry& registry, VulkanRenderer&, Entity entity, const std::string& json) {
+            if (json.find("\"sprTexturePath\"") == std::string::npos &&
+                json.find("\"entityType\": \"SpriteRenderer\"") == std::string::npos &&
+                json.find("\"entityType\":\"SpriteRenderer\"") == std::string::npos) return;
+
+            if (!registry.has<Engine::SpriteRenderer>(entity)) {
+                registry.emplace<Engine::SpriteRenderer>(entity, Engine::SpriteRenderer{});
+            }
+            if (auto* spr = registry.get<Engine::SpriteRenderer>(entity)) {
+                spr->texturePath = JSONUtils::extractStringValue(json, "sprTexturePath");
+
+                // Colour
+                float col[4] = { 1.f, 1.f, 1.f, 1.f };
+                if (JSONUtils::extractFloatArray(json, "sprColor", col, 4)) {
+                    spr->color = { col[0], col[1], col[2], col[3] };
+                }
+
+                // Flip
+                spr->flipX = (json.find("\"sprFlipX\": true") != std::string::npos ||
+                              json.find("\"sprFlipX\":true")  != std::string::npos);
+                spr->flipY = (json.find("\"sprFlipY\": true") != std::string::npos ||
+                              json.find("\"sprFlipY\":true")  != std::string::npos);
+
+                // Sort order
+                float val = 0.f;
+                if (JSONUtils::extractFloatValue(json, "sprSortOrder", val))
+                    spr->sortOrder = static_cast<int>(val);
+
+                spr->_dirty = true;
+            }
+        }
+    );
 
     // 6. Tilemap Component Serializer
     reg.registerComponent(

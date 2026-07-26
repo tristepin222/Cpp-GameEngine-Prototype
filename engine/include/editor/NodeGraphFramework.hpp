@@ -112,8 +112,12 @@ namespace Engine {
         uint32_t getSelectedNodeId() const { return m_selectedNodeId; }
         void     setSelectedNodeId(uint32_t id) { m_selectedNodeId = id; }
 
+        uint32_t getSelectedLinkId() const { return m_selectedLinkId; }
+        void     setSelectedLinkId(uint32_t id) { m_selectedLinkId = id; }
+
         /** Convenience helper to change a node's header color after creation. */
         void setNodeHeaderColor(uint32_t nodeId, ImU32 color);
+
 
         // -----------------------------------------------------------------------
         // Serialization
@@ -201,7 +205,9 @@ namespace Engine {
         // Viewport canvas state
         ImVec2 m_pan{ 0.0f, 0.0f };
         uint32_t m_selectedNodeId = 0;
+        uint32_t m_selectedLinkId = 0;
         uint32_t m_draggingPinId = 0;
+
 
         // Internal helpers
         void drawDetailPanel(float panelWidth);

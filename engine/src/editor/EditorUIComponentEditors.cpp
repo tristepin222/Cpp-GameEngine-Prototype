@@ -21,6 +21,7 @@
 #include "ecs/components/PhysgunScript.hpp"
 #include "ecs/components/Tilemap.hpp"
 #include "ecs/components/UIComponents.hpp"
+#include "ecs/components/SpriteRenderer.hpp"
 #include "renderer/VulkanRenderer.hpp"
 #include "renderer/ResourceManager.hpp"
 #include "scenes/Scene.hpp"
@@ -2019,3 +2020,76 @@ void EditorUI::drawUIComponentsEditor() {
     }
 
 }
+
+void EditorUI::drawSpriteRendererInspector() {
+    if (!hasSelection) return;
+    auto* sprite = registry.get<Engine::SpriteRenderer>(selectedEntity);
+    if (!sprite) return;
+
+    ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.55f, 0.30f, 0.10f, 1.f));
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.70f, 0.40f, 0.15f, 1.f));
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.40f, 0.22f, 0.08f, 1.f));
+    bool visible = true;
+    bool open    = CollapsingHeader("Sprite Renderer", &visible, ImGuiTreeNodeFlags_DefaultOpen);
+    ImGui::PopStyleColor(3);
+
+    if (!visible) {
+        registry.remove<Engine::SpriteRenderer>(selectedEntity);
+        // Also clean up the managed Mesh and Material so the entity stops rendering
+        if (registry.get<Mesh>(selectedEntity)) registry.remove<Mesh>(selectedEntity);
+        if (registry.get<Material>(selectedEntity)) registry.remove<Material>(selectedEntity);
+        statusMessage = "Removed Sprite Renderer component.";
+        return;
+    }
+
+    if (!open) return;
+
+    // ---- Texture Path ----
+    char texBuf[512]{};
+    strncpy_s(texBuf, sprite->texturePath.c_str(), sizeof(texBuf) - 1);
+    if (InputText("Texture##spr_tex", texBuf, sizeof(texBuf))) {
+        sprite->texturePath = texBuf;
+        sprite->_dirty = true;
+    }
+    if (BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+            std::string dropped = (const char*)payload->Data;
+            auto ext = std::filesystem::path(dropped).extension().string();
+            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga") {
+                sprite->texturePath = dropped;
+                sprite->_dirty = true;
+                statusMessage = "Assigned sprite texture: " + dropped;
+            } else {
+                statusMessage = "Error: not a valid texture file.";
+            }
+        }
+        EndDragDropTarget();
+    }
+    TextDisabled("Drop a PNG / JPG / TGA here");
+
+    Spacing();
+
+    // ---- Colour ----
+    if (ColorEdit4("Color##spr_col", &sprite->color.x)) {
+        // Colour synced each frame by SpriteSystem
+    }
+
+    Spacing();
+
+    // ---- Flip ----
+    bool flipXChanged = Checkbox("Flip X##spr_fx", &sprite->flipX);
+    SameLine();
+    bool flipYChanged = Checkbox("Flip Y##spr_fy", &sprite->flipY);
+    if (flipXChanged || flipYChanged) {
+        // Push constants are updated by SpriteSystem on next frame — no _dirty needed
+    }
+
+    Spacing();
+
+    // ---- Sort Order ----
+    if (DragInt("Sort Order##spr_so", &sprite->sortOrder, 1.f, -9999, 9999)) {
+        // SpriteSystem syncs Transform.z on next frame
+    }
+    TextDisabled("Lower = behind  |  Higher = in front");
+}
+

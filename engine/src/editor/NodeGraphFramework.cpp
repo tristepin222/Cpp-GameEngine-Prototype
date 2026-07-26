@@ -5,6 +5,34 @@
 #include <iostream>
 
 namespace {
+    static float pointToSegmentDistance(ImVec2 p, ImVec2 a, ImVec2 b) {
+        ImVec2 ab = ImVec2(b.x - a.x, b.y - a.y);
+        ImVec2 ap = ImVec2(p.x - a.x, p.y - a.y);
+        float lenSq = ab.x * ab.x + ab.y * ab.y;
+        if (lenSq < 1e-5f) return std::sqrt(ap.x * ap.x + ap.y * ap.y);
+        float t = std::max(0.0f, std::min(1.0f, (ap.x * ab.x + ap.y * ab.y) / lenSq));
+        ImVec2 proj = ImVec2(a.x + t * ab.x, a.y + t * ab.y);
+        ImVec2 diff = ImVec2(p.x - proj.x, p.y - proj.y);
+        return std::sqrt(diff.x * diff.x + diff.y * diff.y);
+    }
+
+    static float pointToBezierDistance(ImVec2 p, ImVec2 p1, ImVec2 c1, ImVec2 c2, ImVec2 p2, int numSamples = 12) {
+        float minDist = 1e9f;
+        ImVec2 prev = p1;
+        for (int i = 1; i <= numSamples; ++i) {
+            float t = (float)i / (float)numSamples;
+            float invT = 1.0f - t;
+            ImVec2 curr = ImVec2(
+                invT*invT*invT * p1.x + 3.0f*invT*invT*t * c1.x + 3.0f*invT*t*t * c2.x + t*t*t * p2.x,
+                invT*invT*invT * p1.y + 3.0f*invT*invT*t * c1.y + 3.0f*invT*t*t * c2.y + t*t*t * p2.y
+            );
+            minDist = std::min(minDist, pointToSegmentDistance(p, prev, curr));
+            prev = curr;
+        }
+        return minDist;
+    }
+
+
     struct JsonVal {
         enum Type { Null, Bool, Number, String, Array, Object } type = Null;
         bool boolVal = false;
@@ -180,18 +208,21 @@ namespace Engine {
         return pin.id;
     }
 
-    void NodeGraph::addLink(uint32_t fromPinId, uint32_t toPinId) {
-        NodePin* from = findPin(fromPinId);
-        NodePin* to   = findPin(toPinId);
+    void NodeGraph::addLink(uint32_t pinAId, uint32_t pinBId) {
+        NodePin* pA = findPin(pinAId);
+        NodePin* pB = findPin(pinBId);
+        if (!pA || !pB) return;
+        if (pA->nodeId == pB->nodeId) return;
+
+        NodePin* from = pA->isOutput ? pA : (pB->isOutput ? pB : nullptr);
+        NodePin* to   = !pA->isOutput ? pA : (!pB->isOutput ? pB : nullptr);
         if (!from || !to) return;
-        if (!from->isOutput || to->isOutput) return;
         if (from->type.name != to->type.name) return;
-        if (from->nodeId == to->nodeId) return;
+
+        uint32_t fromPinId = from->id;
+        uint32_t toPinId   = to->id;
 
         if (NodeLink* existing = findLinkConnectingToInput(toPinId)) {
-            if (onLinkDeleted) {
-                onLinkDeleted(existing->fromPinId, existing->toPinId);
-            }
             removeLink(existing->id);
         }
 
@@ -210,9 +241,16 @@ namespace Engine {
         auto it = std::find_if(m_links.begin(), m_links.end(),
             [linkId](const NodeLink& l) { return l.id == linkId; });
         if (it != m_links.end()) {
+            if (onLinkDeleted) {
+                onLinkDeleted(it->fromPinId, it->toPinId);
+            }
+            if (m_selectedLinkId == linkId) {
+                m_selectedLinkId = 0;
+            }
             m_links.erase(it);
         }
     }
+
 
     void NodeGraph::deleteNode(uint32_t nodeId) {
         // Remove all connected links (firing callbacks)
@@ -277,9 +315,20 @@ namespace Engine {
                                      std::function<void(uint32_t)> populateCallback,
                                      std::function<void(Node&)> customWidgetCallback,
                                      std::function<void(Node&)> detailPanelCallback) {
+        for (auto& entry : m_registeredTypes) {
+            if (entry.typeName == typeName) {
+                entry.category = category;
+                entry.title = title;
+                entry.populateCallback = populateCallback;
+                entry.customWidgetCallback = customWidgetCallback;
+                entry.detailPanelCallback = detailPanelCallback;
+                return;
+            }
+        }
         m_registeredTypes.push_back({ category, typeName, title,
                                       populateCallback, customWidgetCallback, detailPanelCallback });
     }
+
 
     // =========================================================================
     // Serialization
@@ -549,17 +598,64 @@ namespace Engine {
             }
         }
 
-        // Draw existing links
+        ImVec2 mousePos = ImGui::GetMousePos();
+        uint32_t linkToDelete = 0;
+
+        // Keyboard shortcuts for deleting selected node or link
+        if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) || ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows)) {
+            if (ImGui::IsKeyPressed(ImGuiKey_Delete) || ImGui::IsKeyPressed(ImGuiKey_Backspace)) {
+                if (m_selectedNodeId != 0) {
+                    deleteNode(m_selectedNodeId);
+                    m_selectedNodeId = 0;
+                } else if (m_selectedLinkId != 0) {
+                    removeLink(m_selectedLinkId);
+                    m_selectedLinkId = 0;
+                }
+            }
+        }
+
+        // Draw existing links with interactive picking
         for (const auto& link : m_links) {
             NodePin* from = findPin(link.fromPinId);
             NodePin* to   = findPin(link.toPinId);
             if (from && to) {
                 ImVec2 p1 = getPinScreenPos(*from, canvasPos, m_pan, m_nodes);
                 ImVec2 p2 = getPinScreenPos(*to,   canvasPos, m_pan, m_nodes);
-                drawList->AddBezierCubic(p1, ImVec2(p1.x + 60.0f, p1.y),
-                                          ImVec2(p2.x - 60.0f, p2.y), p2,
-                                          from->type.color, 3.0f);
+                ImVec2 c1 = ImVec2(p1.x + 60.0f, p1.y);
+                ImVec2 c2 = ImVec2(p2.x - 60.0f, p2.y);
+
+                bool isSelected = (m_selectedLinkId == link.id);
+                float dist = pointToBezierDistance(mousePos, p1, c1, c2, p2);
+                bool isHovered = (dist <= 7.0f);
+
+                if (isHovered && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows)) {
+                    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                        m_selectedLinkId = link.id;
+                        m_selectedNodeId = 0;
+                    }
+                    if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                        m_selectedLinkId = link.id;
+                        ImGui::OpenPopup("ng_link_ctx_menu");
+                    }
+                }
+
+                ImU32 linkColor = isSelected ? IM_COL32(255, 180, 50, 255) : (isHovered ? IM_COL32(255, 220, 120, 255) : from->type.color);
+                float thickness = (isSelected || isHovered) ? 4.5f : 3.0f;
+                drawList->AddBezierCubic(p1, c1, c2, p2, linkColor, thickness);
             }
+        }
+
+        // Link right-click context menu
+        if (ImGui::BeginPopup("ng_link_ctx_menu")) {
+            if (ImGui::MenuItem("Delete Link")) {
+                if (m_selectedLinkId != 0) {
+                    linkToDelete = m_selectedLinkId;
+                }
+            }
+            ImGui::EndPopup();
+        }
+        if (linkToDelete != 0) {
+            removeLink(linkToDelete);
         }
 
         // Drag preview
@@ -573,13 +669,12 @@ namespace Engine {
                                           ImVec2(p2.x - curveOffset, p2.y), p2,
                                           dragPin->type.color, 3.0f);
             }
-            if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
-                m_draggingPinId = 0;
         }
 
         // Draw nodes
         uint32_t nextDragPinId = 0;
         uint32_t nodeToDelete  = 0;
+
 
         for (auto& node : m_nodes) {
             ImGui::PushID(node.id);
@@ -591,21 +686,12 @@ namespace Engine {
             float extraHeight = node.customWidgetCallback ? 80.0f : 0.0f;
             node.size.y = 35.0f + pinsHeight + extraHeight + 10.0f;
 
-            // Delete button BEFORE the hitbox so it captures clicks first
-            ImGui::SetCursorScreenPos(ImVec2(nodeScreenPos.x + node.size.x - 22.0f, nodeScreenPos.y + 4.0f));
-            ImGui::PushStyleColor(ImGuiCol_Button,        IM_COL32(180,  50,  50, 200));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(220,  80,  80, 255));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  IM_COL32(130,  30,  30, 255));
-            if (ImGui::Button("x##del", ImVec2(16.0f, 16.0f)))
-                nodeToDelete = node.id;
-            ImGui::PopStyleColor(3);
-
+            // Card header hitbox for moving and selecting node
             ImGui::SetCursorScreenPos(nodeScreenPos);
-            ImGui::InvisibleButton("##node_hitbox", node.size);
+            ImGui::InvisibleButton("##node_header_hitbox", ImVec2(node.size.x, 28.0f));
 
-            bool isNodeActive  = ImGui::IsItemActive();
-
-            if (isNodeActive && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+            bool isHeaderActive = ImGui::IsItemActive();
+            if (isHeaderActive && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
                 node.position.x += ImGui::GetIO().MouseDelta.x;
                 node.position.y += ImGui::GetIO().MouseDelta.y;
             }
@@ -613,12 +699,13 @@ namespace Engine {
             if (ImGui::IsItemClicked()) {
                 uint32_t prevSelected = m_selectedNodeId;
                 m_selectedNodeId = node.id;
+                m_selectedLinkId = 0;
                 if (onNodeSelected && prevSelected != node.id) {
                     onNodeSelected(node.id);
                 }
             }
 
-            // Card body
+            // Card body background
             if (m_selectedNodeId == node.id) {
                 drawList->AddRectFilled(
                     ImVec2(nodeScreenPos.x - 2, nodeScreenPos.y - 2),
@@ -633,6 +720,18 @@ namespace Engine {
             drawList->AddRectFilled(nodeScreenPos,
                 ImVec2(nodeScreenPos.x + node.size.x, nodeScreenPos.y + node.size.y),
                 IM_COL32(50, 50, 50, 255), 4.0f);
+
+            // Card body hitbox (allows selecting node by clicking empty body area)
+            ImGui::SetCursorScreenPos(ImVec2(nodeScreenPos.x, nodeScreenPos.y + 28.0f));
+            ImGui::InvisibleButton("##node_body_hitbox", ImVec2(node.size.x, node.size.y - 28.0f));
+            if (ImGui::IsItemClicked()) {
+                uint32_t prevSelected = m_selectedNodeId;
+                m_selectedNodeId = node.id;
+                m_selectedLinkId = 0;
+                if (onNodeSelected && prevSelected != node.id) {
+                    onNodeSelected(node.id);
+                }
+            }
 
             // Header — use per-node color if set, else fall back to type heuristic
             ImU32 headerBg;
@@ -650,41 +749,59 @@ namespace Engine {
             drawList->AddText(ImVec2(nodeScreenPos.x + 8.0f, nodeScreenPos.y + 6.0f),
                 IM_COL32(255, 255, 255, 255), node.title.c_str());
 
-            // Pins
+            // Delete button drawn ON TOP of header so it receives clicks cleanly
+            if (node.title != "Entry" && node.title != "Any State") {
+                ImGui::SetCursorScreenPos(ImVec2(nodeScreenPos.x + node.size.x - 22.0f, nodeScreenPos.y + 4.0f));
+                ImGui::PushStyleColor(ImGuiCol_Button,        IM_COL32(180,  50,  50, 200));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(220,  80,  80, 255));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  IM_COL32(130,  30,  30, 255));
+                ImGui::PushID(99999 + node.id);
+                if (ImGui::Button("x", ImVec2(16.0f, 16.0f)))
+                    nodeToDelete = node.id;
+                ImGui::PopID();
+                ImGui::PopStyleColor(3);
+            }
+
+            // Pins (drawn after body hitbox so pin buttons receive mouse events first)
             float yPos = nodeScreenPos.y + 32.0f;
 
             for (size_t i = 0; i < node.inputs.size(); ++i) {
                 auto& pin = node.inputs[i];
                 ImVec2 pinCenter = ImVec2(nodeScreenPos.x, yPos + i * 24.0f + 12.0f);
-                ImGui::SetCursorScreenPos(ImVec2(pinCenter.x - 8.0f, pinCenter.y - 8.0f));
+                ImGui::SetCursorScreenPos(ImVec2(pinCenter.x - 10.0f, pinCenter.y - 10.0f));
                 ImGui::PushID(pin.id);
-                ImGui::InvisibleButton("##pin_in", ImVec2(16.0f, 16.0f));
-                bool hov = ImGui::IsItemHovered();
-                if (hov && ImGui::IsMouseReleased(ImGuiMouseButton_Left) && m_draggingPinId != 0)
+                ImGui::InvisibleButton("##pin_in", ImVec2(20.0f, 20.0f));
+                bool hov = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+                if (ImGui::IsItemActive() && m_draggingPinId == 0)
+                    nextDragPinId = pin.id;
+                if (hov && ImGui::IsMouseReleased(ImGuiMouseButton_Left) && m_draggingPinId != 0 && m_draggingPinId != pin.id)
                     addLink(m_draggingPinId, pin.id);
                 ImGui::PopID();
-                drawList->AddCircleFilled(pinCenter, hov ? 6.0f : 4.5f, pin.type.color);
-                drawList->AddCircle(pinCenter, hov ? 6.0f : 4.5f, IM_COL32(0, 0, 0, 200));
-                drawList->AddText(ImVec2(pinCenter.x + 10.0f, pinCenter.y - 6.0f),
+                drawList->AddCircleFilled(pinCenter, hov ? 6.5f : 5.0f, pin.type.color);
+                drawList->AddCircle(pinCenter, hov ? 6.5f : 5.0f, IM_COL32(0, 0, 0, 200));
+                drawList->AddText(ImVec2(pinCenter.x + 12.0f, pinCenter.y - 6.0f),
                     IM_COL32(200, 200, 200, 255), pin.name.c_str());
             }
 
             for (size_t i = 0; i < node.outputs.size(); ++i) {
                 auto& pin = node.outputs[i];
                 ImVec2 pinCenter = ImVec2(nodeScreenPos.x + node.size.x, yPos + i * 24.0f + 12.0f);
-                ImGui::SetCursorScreenPos(ImVec2(pinCenter.x - 8.0f, pinCenter.y - 8.0f));
+                ImGui::SetCursorScreenPos(ImVec2(pinCenter.x - 10.0f, pinCenter.y - 10.0f));
                 ImGui::PushID(pin.id);
-                ImGui::InvisibleButton("##pin_out", ImVec2(16.0f, 16.0f));
-                bool hov = ImGui::IsItemHovered();
+                ImGui::InvisibleButton("##pin_out", ImVec2(20.0f, 20.0f));
+                bool hov = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
                 if (ImGui::IsItemActive() && m_draggingPinId == 0)
                     nextDragPinId = pin.id;
+                if (hov && ImGui::IsMouseReleased(ImGuiMouseButton_Left) && m_draggingPinId != 0 && m_draggingPinId != pin.id)
+                    addLink(m_draggingPinId, pin.id);
                 ImGui::PopID();
-                drawList->AddCircleFilled(pinCenter, hov ? 6.0f : 4.5f, pin.type.color);
-                drawList->AddCircle(pinCenter, hov ? 6.0f : 4.5f, IM_COL32(0, 0, 0, 200));
+                drawList->AddCircleFilled(pinCenter, hov ? 6.5f : 5.0f, pin.type.color);
+                drawList->AddCircle(pinCenter, hov ? 6.5f : 5.0f, IM_COL32(0, 0, 0, 200));
                 float labelW = ImGui::CalcTextSize(pin.name.c_str()).x;
-                drawList->AddText(ImVec2(pinCenter.x - 10.0f - labelW, pinCenter.y - 6.0f),
+                drawList->AddText(ImVec2(pinCenter.x - 12.0f - labelW, pinCenter.y - 6.0f),
                     IM_COL32(200, 200, 200, 255), pin.name.c_str());
             }
+
 
             // Inline widget
             if (node.customWidgetCallback) {
@@ -703,9 +820,15 @@ namespace Engine {
         if (nextDragPinId != 0) m_draggingPinId = nextDragPinId;
         if (nodeToDelete  != 0) deleteNode(nodeToDelete);
 
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+            m_draggingPinId = 0;
+        }
+
+
         // Right-click context menu
         if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && !ImGui::IsAnyItemHovered())
             ImGui::OpenPopup("ng_ctx_menu");
+
 
         if (ImGui::BeginPopup("ng_ctx_menu")) {
             ImVec2 mousePos  = ImGui::GetMousePosOnOpeningCurrentPopup();

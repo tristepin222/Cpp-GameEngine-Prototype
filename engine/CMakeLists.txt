@@ -77,6 +77,7 @@ set(ENGINE_SOURCES
     src/ecs/systems/AudioSystem.cpp
     src/ecs/systems/TilemapSystem.cpp
     src/ecs/systems/UISystem.cpp
+    src/ecs/systems/SpriteSystem.cpp
 )
 
 add_library(engine SHARED ${ENGINE_SOURCES})
@@ -137,6 +138,8 @@ compile_builtin_shader("${CMAKE_CURRENT_SOURCE_DIR}/builtin_shaders/skinned.vert
 compile_builtin_shader("${CMAKE_CURRENT_SOURCE_DIR}/builtin_shaders/lit.vert")
 compile_builtin_shader("${CMAKE_CURRENT_SOURCE_DIR}/builtin_shaders/lit.frag")
 compile_builtin_shader("${CMAKE_CURRENT_SOURCE_DIR}/builtin_shaders/skinned_lit.vert")
+compile_builtin_shader("${CMAKE_CURRENT_SOURCE_DIR}/builtin_shaders/sprite.vert")
+compile_builtin_shader("${CMAKE_CURRENT_SOURCE_DIR}/builtin_shaders/sprite.frag")
 
 # Target for builtin shaders compilation
 add_custom_target(compile_builtin_shaders ALL DEPENDS ${BUILTIN_SHADERS_SPV})

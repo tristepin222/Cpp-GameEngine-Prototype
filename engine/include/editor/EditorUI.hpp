@@ -127,6 +127,11 @@ private:
      */
     void drawTilemapInspector();
     /**
+     * @brief Renders the SpriteRenderer component inspector panel.
+     */
+    void drawSpriteRendererInspector();
+    /**
+
      * @brief Renders custom editor inspectors for all game UI components.
      */
     void drawUIComponentsEditor();
