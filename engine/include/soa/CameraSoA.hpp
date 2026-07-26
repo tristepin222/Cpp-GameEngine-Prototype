@@ -8,6 +8,8 @@
  * @brief Structure of Arrays representing camera components for parallel view projection calculations.
  */
 struct CameraSoA {
+    std::vector<bool> isOrthographics;
+    std::vector<float> orthoSizes;
     /** @brief Fields of view in degrees. */
     std::vector<float> fovs;
     /** @brief Viewport aspect ratios. */
@@ -24,6 +26,8 @@ struct CameraSoA {
      * @brief Clears all arrays.
      */
     void clear() {
+        isOrthographics.clear();
+        orthoSizes.clear();
         fovs.clear();
         aspects.clear();
         nearPlanes.clear();
@@ -37,9 +41,13 @@ struct CameraSoA {
      * @param aspect Aspect ratio.
      * @param nearPlane Near plane.
      * @param farPlane Far plane.
+     * @param isOrthographic Whether camera is orthographic.
+     * @param orthoSize Orthographic vertical size.
      * @return Index of the new camera data.
      */
-    size_t pushCamera(float fov, float aspect, float nearPlane, float farPlane) {
+    size_t pushCamera(float fov, float aspect, float nearPlane, float farPlane, bool isOrthographic = false, float orthoSize = 5.0f) {
+        isOrthographics.push_back(isOrthographic);
+        orthoSizes.push_back(orthoSize);
         fovs.push_back(fov);
         aspects.push_back(aspect);
         nearPlanes.push_back(nearPlane);
@@ -81,10 +89,18 @@ struct CameraSoA {
             glm::vec3 up(0.f, 1.f, 0.f);
 
             glm::mat4 view = glm::lookAt(pos, pos + forward, up);
-            glm::mat4 proj = glm::perspective(glm::radians(fovs[i]), aspects[i], nearPlanes[i], farPlanes[i]);
+            glm::mat4 proj;
+            if (isOrthographics[i]) {
+                float halfWidth = orthoSizes[i] * aspects[i];
+                float halfHeight = orthoSizes[i];
+                proj = glm::ortho(-halfWidth, halfWidth, -halfHeight, halfHeight, nearPlanes[i], farPlanes[i]);
+            } else {
+                proj = glm::perspective(glm::radians(fovs[i]), aspects[i], nearPlanes[i], farPlanes[i]);
+            }
             proj[1][1] *= -1; // Vulkan Y flip
 
             viewProjMatrices[i] = proj * view;
         }
     }
 };
+

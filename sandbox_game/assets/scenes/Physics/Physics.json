@@ -441,6 +441,26 @@
             "handleColor": [0.95, 0.95, 0.98, 1]
           }
       }
+    },
+    {
+      "name": "Panel 2",
+      "components": {
+        "Hierarchy": {
+"entityType": "Hierarchy",
+          "parentName": "Grid Layout"
+        },
+"RectTransform": {
+            "anchorMin": [0, 0],
+            "anchorMax": [0, 0],
+            "anchoredPosition": [210, 10],
+            "sizeDelta": [90, 90],
+            "pivot": [0, 0]
+          },
+"UIPanel": {
+            "color": [0.15, 0.15, 0.15, 0.8],
+            "borderRadius": 4
+          }
+      }
     }
   ]
 }

@@ -92,6 +92,8 @@ PLUGIN_API void registerEngineReflection() {
         Engine::ComponentReflection refl;
         refl.name = "Camera";
         refl.fields = {
+            { "isOrthographic", Engine::FieldType::Bool, offsetof(Camera, isOrthographic) },
+            { "orthoSize", Engine::FieldType::Float, offsetof(Camera, orthoSize) },
             { "fov", Engine::FieldType::Float, offsetof(Camera, fov) },
             { "aspect", Engine::FieldType::Float, offsetof(Camera, aspect) },
             { "nearPlane", Engine::FieldType::Float, offsetof(Camera, nearPlane) },

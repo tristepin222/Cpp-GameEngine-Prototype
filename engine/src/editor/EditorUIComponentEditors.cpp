@@ -511,11 +511,24 @@ void EditorUI::drawCameraEditor() {
     }
 
     bool changed = false;
-    changed |= DragFloat("FOV", &camera->fov, 0.1f, 1.0f, 120.0f);
+    const char* projectionTypes[] = { "Perspective", "Orthographic" };
+    int currentProj = camera->isOrthographic ? 1 : 0;
+    if (ImGui::Combo("Projection", &currentProj, projectionTypes, IM_ARRAYSIZE(projectionTypes))) {
+        camera->isOrthographic = (currentProj == 1);
+        changed = true;
+    }
+
+    if (camera->isOrthographic) {
+        changed |= DragFloat("Orthographic Size", &camera->orthoSize, 0.1f, 0.1f, 200.0f);
+    } else {
+        changed |= DragFloat("FOV", &camera->fov, 0.1f, 1.0f, 120.0f);
+    }
+
     changed |= DragFloat("Near Plane", &camera->nearPlane, 0.01f, 0.01f, 10.0f);
     changed |= DragFloat("Far Plane", &camera->farPlane, 1.0f, 1.0f, 5000.0f);
     changed |= DragFloat("Move Speed", &camera->moveSpeed, 0.1f, 0.1f, 100.0f);
     changed |= DragFloat("Mouse Sensitivity", &camera->mouseSensitivity, 0.01f, 0.01f, 5.0f);
+
 }
 
 void EditorUI::drawSkeletonEditor() {

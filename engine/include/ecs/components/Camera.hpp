@@ -13,6 +13,10 @@
 // [ReflectClass]
 struct ENGINE_API Camera {
     // [ReflectField]
+    bool isOrthographic = false;
+    // [ReflectField]
+    float orthoSize = 5.0f;
+    // [ReflectField]
     float fov = 45.f;
     // [ReflectField]
     float aspect = 1.0f;   // window width / height
@@ -50,10 +54,18 @@ struct ENGINE_API Camera {
      * @return The 4x4 projection matrix.
      */
     glm::mat4 projection() const {
-        glm::mat4 proj = glm::perspective(glm::radians(fov), aspect, nearPlane, farPlane);
+        glm::mat4 proj;
+        if (isOrthographic) {
+            float halfWidth = orthoSize * aspect;
+            float halfHeight = orthoSize;
+            proj = glm::ortho(-halfWidth, halfWidth, -halfHeight, halfHeight, nearPlane, farPlane);
+        } else {
+            proj = glm::perspective(glm::radians(fov), aspect, nearPlane, farPlane);
+        }
         proj[1][1] *= -1; // Vulkan's inverted Y
         return proj;
     }
+
 
     /**
      * @brief Calculates the view-projection matrix.
