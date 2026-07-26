@@ -5,10 +5,18 @@
 #include "meta/ComponentReflection.hpp"
 
 
+/**
+ * @enum ColliderShape
+ * @brief Geometric primitive shapes supported for physics collision detection.
+ */
 enum class ColliderShape {
+    /** @brief Spherical collision volume defined by radius. */
     Sphere,
+    /** @brief Axis-Aligned Bounding Box volume. */
     AABB,
+    /** @brief Oriented Bounding Box volume. */
     OBB,
+    /** @brief Capsule volume defined by radius and height. */
     Capsule
 };
 
@@ -18,17 +26,22 @@ enum class ColliderShape {
  */
 // [ReflectClass]
 struct ENGINE_API ColliderComponent {
+    /** @brief Active primitive collision shape. */
     ColliderShape shape = ColliderShape::AABB;
+    /** @brief Radius used for Sphere and Capsule colliders. */
     // [ReflectField]
-    float radius = 1.0f;                       // Used for Sphere and Capsule colliders
+    float radius = 1.0f;
+    /** @brief Total height (including hemispherical caps) for Capsule colliders. */
     // [ReflectField]
-    float height = 2.0f;                       // Total height (including caps) for Capsule colliders
+    float height = 2.0f;
+    /** @brief Half-extents vector for AABB and OBB colliders. */
     // [ReflectField]
-    glm::vec3 extents = glm::vec3(0.5f);       // Half-extents for AABB/OBB colliders
+    glm::vec3 extents = glm::vec3(0.5f);
+    /** @brief Local position offset relative to entity transform origin. */
     // [ReflectField]
-    glm::vec3 offset = glm::vec3(0.0f);        // Local position offset relative to transform
-
+    glm::vec3 offset = glm::vec3(0.0f);
 };
+
 
 REGISTER_COMPONENT(ColliderComponent, "Physics");
 

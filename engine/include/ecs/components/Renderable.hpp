@@ -7,11 +7,14 @@
  */
 // [ReflectClass]
 struct Renderable {
+    /** @brief GPU mesh handle ID for rendering geometry. */
     // [ReflectField]
     uint32_t meshID;
+    /** @brief Material asset ID for surface shading and texturing. */
     // [ReflectField]
     uint32_t materialID;
 };
+
 
 
 #include "meta/ComponentReflection.hpp"

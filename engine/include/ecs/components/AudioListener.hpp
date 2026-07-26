@@ -7,9 +7,11 @@
  */
 // [ReflectClass]
 struct ENGINE_API AudioListenerComponent {
+    /** @brief Active status flag for this audio listener. */
     // [ReflectField]
     bool active = true;
 };
+
 
 
 #include "meta/ComponentReflection.hpp"

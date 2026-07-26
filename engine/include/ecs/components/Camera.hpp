@@ -12,21 +12,30 @@
  */
 // [ReflectClass]
 struct ENGINE_API Camera {
+    /** @brief True if camera projection mode is Orthographic, false if Perspective. */
     // [ReflectField]
     bool isOrthographic = false;
+    /** @brief Vertical half-height size in world units when in Orthographic projection mode. */
     // [ReflectField]
     float orthoSize = 5.0f;
+    /** @brief Vertical Field of View in degrees when in Perspective projection mode. */
     // [ReflectField]
     float fov = 45.f;
+    /** @brief Viewport aspect ratio (width / height). */
     // [ReflectField]
-    float aspect = 1.0f;   // window width / height
+    float aspect = 1.0f;
+    /** @brief Distance to near clipping plane. */
     // [ReflectField]
     float nearPlane = 0.1f;
+    /** @brief Distance to far clipping plane. */
     // [ReflectField]
     float farPlane = 100.f;
 
+    /** @brief Movement speed multiplier (units/sec) for camera fly controls. */
     float moveSpeed = 5.f;
+    /** @brief Mouse look sensitivity multiplier. */
     float mouseSensitivity = 0.1f;
+
 
 
     /**
