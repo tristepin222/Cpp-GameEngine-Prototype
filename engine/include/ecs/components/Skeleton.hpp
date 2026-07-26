@@ -46,6 +46,6 @@ struct SkeletonComponent {
 };
 
 #include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(SkeletonComponent, "Animation");
+REGISTER_COMPONENT(SkeletonComponent, "Animation/Skeleton");
 
 

@@ -250,12 +250,53 @@ void ResourceManager::createTextureImage(const std::string& path, VulkanRenderer
     stagingBuffer.destroy();
 }
 
-Texture* ResourceManager::loadTexture(const std::string& path, VulkanRenderer& renderer, TextureFilterMode filterMode) {
-    if (path.empty()) return &defaultWhiteTexture;
+Texture* ResourceManager::loadTexture(const std::string& rawPath, VulkanRenderer& renderer, TextureFilterMode filterMode) {
+    if (rawPath.empty()) return &defaultWhiteTexture;
+
+    std::string path = rawPath;
+    if (!std::filesystem::exists(path)) {
+        std::vector<std::string> prefixes = {
+            "assets/",
+            "assets/textures/",
+            "sandbox_game/",
+            "sandbox_game/assets/",
+            "sandbox_game/assets/textures/"
+        };
+        for (const auto& p : prefixes) {
+            std::string cand = p + rawPath;
+            if (std::filesystem::exists(cand)) {
+                path = cand;
+                break;
+            }
+        }
+    }
+
+    if (!std::filesystem::exists(path)) {
+        std::string filename = std::filesystem::path(rawPath).filename().string();
+        if (!filename.empty()) {
+            std::vector<std::string> searchDirs = { "assets", "sandbox_game/assets" };
+            for (const auto& dir : searchDirs) {
+                if (std::filesystem::exists(dir)) {
+                    for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
+                        if (entry.is_regular_file() && entry.path().filename().string() == filename) {
+                            path = entry.path().string();
+                            break;
+                        }
+                    }
+                }
+                if (std::filesystem::exists(path)) break;
+            }
+        }
+    }
 
     auto it = textureCache.find(path);
     if (it != textureCache.end()) {
         return it->second.get();
+    }
+
+    auto rawIt = textureCache.find(rawPath);
+    if (rawIt != textureCache.end()) {
+        return rawIt->second.get();
     }
 
     // Auto-detect filterMode from .meta file if present
@@ -1439,7 +1480,7 @@ bool ResourceManager::saveBinarySkeletonAndAnimations(const std::string& path, c
 
     char magic[4] = {'A', 'N', 'I', 'M'};
     out.write(magic, 4);
-    uint32_t version = 2;
+    uint32_t version = 3;
     out.write(reinterpret_cast<const char*>(&version), sizeof(version));
 
     uint32_t jointCount = static_cast<uint32_t>(skeleton.joints.size());
@@ -1522,6 +1563,11 @@ bool ResourceManager::saveBinarySkeletonAndAnimations(const std::string& path, c
             for (const auto& key : channel.keys) {
                 out.write(reinterpret_cast<const char*>(&key.time), sizeof(key.time));
                 out.write(reinterpret_cast<const char*>(&key.value[0]), sizeof(glm::vec4));
+                uint32_t strLen = static_cast<uint32_t>(key.stringValue.size());
+                out.write(reinterpret_cast<const char*>(&strLen), sizeof(strLen));
+                if (strLen > 0) {
+                    out.write(key.stringValue.data(), strLen);
+                }
             }
         }
     }
@@ -1547,7 +1593,7 @@ bool ResourceManager::loadBinarySkeletonAndAnimations(const std::string& path, S
 
     uint32_t version = 0;
     in.read(reinterpret_cast<char*>(&version), sizeof(version));
-    if (version != 1 && version != 2) {
+    if (version != 1 && version != 2 && version != 3) {
         std::cerr << "[ResourceManager] Unsupported version in binary animation file: " << version << std::endl;
         return false;
     }
@@ -1680,6 +1726,14 @@ bool ResourceManager::loadBinarySkeletonAndAnimations(const std::string& path, S
                     auto& key = channel.keys[k];
                     in.read(reinterpret_cast<char*>(&key.time), sizeof(key.time));
                     in.read(reinterpret_cast<char*>(&key.value[0]), sizeof(glm::vec4));
+                    if (version >= 3) {
+                        uint32_t strLen = 0;
+                        in.read(reinterpret_cast<char*>(&strLen), sizeof(strLen));
+                        if (strLen > 0) {
+                            key.stringValue.resize(strLen);
+                            in.read(&key.stringValue[0], strLen);
+                        }
+                    }
                 }
             }
         }

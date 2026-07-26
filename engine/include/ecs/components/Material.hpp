@@ -58,5 +58,5 @@ struct Material {
 };
 
 #include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(Material, "Rendering & Lights");
+REGISTER_COMPONENT(Material, "Rendering & Lights/Material");
 

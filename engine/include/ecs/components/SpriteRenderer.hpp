@@ -69,4 +69,4 @@ namespace Engine {
 } // namespace Engine
 
 #include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(Engine::SpriteRenderer, "Rendering & Lights");
+REGISTER_COMPONENT(Engine::SpriteRenderer, "Rendering & Lights/Sprite Renderer");

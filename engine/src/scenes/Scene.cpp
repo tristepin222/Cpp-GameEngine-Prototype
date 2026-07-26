@@ -5,6 +5,7 @@
 #include "ecs/components/Name.hpp"
 #include "ecs/components/Hierarchy.hpp"
 #include "ecs/components/UIComponents.hpp"
+#include "ecs/components/SpriteRenderer.hpp"
 #include "renderer/VulkanRenderer.hpp"
 #include <algorithm>
 #include <filesystem>
@@ -144,6 +145,11 @@ Entity Scene::createEntityOfType(const std::string& entityType) {
         entity = registry.create();
         registry.emplace<Name>(entity, Name{ makeUniqueEntityName("Empty GameObject") });
         registry.emplace<Transform>(entity, Transform{ glm::vec3(0.0f) });
+    } else if (entityType == "Sprite Renderer") {
+        entity = registry.create();
+        registry.emplace<Name>(entity, Name{ makeUniqueEntityName("Sprite Renderer") });
+        registry.emplace<Transform>(entity, Transform{ glm::vec3(0.0f) });
+        registry.emplace<Engine::SpriteRenderer>(entity, Engine::SpriteRenderer{});
     } else if (entityType == "Canvas") {
         entity = registry.create();
         registry.emplace<Name>(entity, Name{ makeUniqueEntityName("Canvas") });

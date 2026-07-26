@@ -146,16 +146,16 @@ namespace Engine {
 
 } // namespace Engine
 
-REGISTER_COMPONENT(Engine::CanvasComponent, "UI");
-REGISTER_COMPONENT(Engine::RectTransform, "UI");
-REGISTER_COMPONENT(Engine::UIPanelComponent, "UI");
-REGISTER_COMPONENT(Engine::UIImageComponent, "UI");
-REGISTER_COMPONENT(Engine::UITextComponent, "UI");
-REGISTER_COMPONENT(Engine::UIButtonComponent, "UI");
-REGISTER_COMPONENT(Engine::UIGridLayoutGroupComponent, "UI");
-REGISTER_COMPONENT(Engine::UILayoutGroupComponent, "UI");
-REGISTER_COMPONENT(Engine::UIScrollRectComponent, "UI");
-REGISTER_COMPONENT(Engine::UISliderComponent, "UI");
-REGISTER_COMPONENT(Engine::UIToggleComponent, "UI");
+REGISTER_COMPONENT(Engine::CanvasComponent,              "UI/Canvas");
+REGISTER_COMPONENT(Engine::RectTransform,                "UI/Rect Transform");
+REGISTER_COMPONENT(Engine::UIPanelComponent,             "UI/UI Panel");
+REGISTER_COMPONENT(Engine::UIImageComponent,             "UI/UI Image");
+REGISTER_COMPONENT(Engine::UITextComponent,              "UI/UI Text");
+REGISTER_COMPONENT(Engine::UIButtonComponent,            "UI/UI Button");
+REGISTER_COMPONENT(Engine::UIGridLayoutGroupComponent,   "UI/UI Grid Layout Group");
+REGISTER_COMPONENT(Engine::UILayoutGroupComponent,       "UI/UI Layout Group");
+REGISTER_COMPONENT(Engine::UIScrollRectComponent,        "UI/UI Scroll Rect");
+REGISTER_COMPONENT(Engine::UISliderComponent,            "UI/UI Slider");
+REGISTER_COMPONENT(Engine::UIToggleComponent,            "UI/UI Toggle");
 
 

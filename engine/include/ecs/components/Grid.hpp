@@ -35,5 +35,5 @@ struct Grid {
 };
 
 #include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(Grid, "Rendering & Lights");
+REGISTER_COMPONENT(Grid, "Rendering & Lights/Grid");
 

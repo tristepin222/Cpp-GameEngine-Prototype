@@ -48,6 +48,6 @@ struct IKSolverComponent {
 
 
 #include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(IKSolverComponent, "Animation");
+REGISTER_COMPONENT(IKSolverComponent, "Animation/IK Solver");
 
 

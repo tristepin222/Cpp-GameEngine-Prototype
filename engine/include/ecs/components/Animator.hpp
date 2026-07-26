@@ -8,6 +8,7 @@
 struct PropertyKeyframe {
     float time = 0.0f;
     glm::vec4 value = glm::vec4(0.0f);
+    std::string stringValue;
 };
 
 /**
@@ -92,10 +93,12 @@ struct AnimatorComponent {
     // [ReflectField]
     bool loop = true;
     // [ReflectField]
+    bool isPreviewing = false;
+    // [ReflectField]
     std::string loadedAnimPath;
 };
 
 
-REGISTER_COMPONENT(AnimatorComponent, "Animation");
+REGISTER_COMPONENT(AnimatorComponent, "Animation/Animator");
 
 

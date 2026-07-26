@@ -581,9 +581,28 @@
         "scale": [1, 1, 1]
       },
       "components": {
+        "AnimationController": {
+"entityType": "AnimationController",
+          "currentState": "TestState",
+          "hasLocomotionSetup": false,
+          "parameters": {},
+          "states": [{
+            "name": "TestState", "clipName": "AnimationTest", "isBlendTree": false, "isLooping": true, "speed": 1, "blendTree": {
+              "is2D": false, "parameterName": "", "parameterYName": "", "nodes": []
+            }
+          }],
+          "transitions": []
+        },
+        "Animator": {
+"hasAnimator": true,
+          "animActiveIndex": 0,
+          "animPlaybackSpeed": 0,
+          "animLoop": true,
+          "loadedAnimPath": "assets/animations/test_Sprite.anim"
+        },
         "SpriteRenderer": {
 "entityType": "SpriteRenderer",
-          "sprTexturePath": "assets/Textures/Ch36_1001_Diffuse.png",
+          "sprTexturePath": "",
           "sprColor": [1,1,1,1],
           "sprFlipX": false,
           "sprFlipY": false,
@@ -591,7 +610,7 @@
         },
 "Material": {
             "color": [1, 1, 1, 1],
-            "texturePath": "assets/Textures/Ch36_1001_Diffuse.png",
+            "texturePath": "",
             "shaderName": "Sprite",
             "normalMapPath": "",
             "metallicMapPath": "",
@@ -601,6 +620,9 @@
 "Transform": {
             "position": [0, 1.94254, 0],
             "scale": [1, 1, 1]
+          },
+"Skeleton": {
+
           }
       }
     }

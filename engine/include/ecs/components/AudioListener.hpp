@@ -15,6 +15,6 @@ struct ENGINE_API AudioListenerComponent {
 
 
 #include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(AudioListenerComponent, "Audio");
+REGISTER_COMPONENT(AudioListenerComponent, "Audio/Audio Listener");
 
 

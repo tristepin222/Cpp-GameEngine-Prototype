@@ -6,7 +6,9 @@
 #include "ecs/components/AnimationController.hpp"
 #include "ecs/components/IKSolver.hpp"
 #include "ecs/components/Hierarchy.hpp"
+#include "ecs/components/SpriteRenderer.hpp"
 #include "renderer/VulkanRenderer.hpp"
+#include "renderer/ResourceManager.hpp"
 #include "core/JobSystem.hpp"
 #include "core/VulkanBuffer.hpp"
 #include "editor/EditorModeState.hpp"
@@ -43,9 +45,6 @@ public:
          * @param dt Delta time in seconds.
          */
         void update(float dt) override {
-            if (!editorMode.isPlaying) {
-                dt = 0.0f;
-            }
             // 0. Synchronize child animators & controllers with parent animators
             for (auto [entity, hierarchy, animator] : registry.view<HierarchyComponent, AnimatorComponent>()) {
                 if (hierarchy.parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hierarchy.parent)) {
@@ -54,6 +53,7 @@ public:
                         animator.currentTime = parentAnimator->currentTime;
                         animator.playbackSpeed = parentAnimator->playbackSpeed;
                         animator.loop = parentAnimator->loop;
+                        animator.isPreviewing = parentAnimator->isPreviewing;
                     }
                 }
             }
@@ -84,7 +84,8 @@ public:
                 auto* controller = registry.get<AnimationControllerComponent>(entity);
                 auto* animator = registry.get<AnimatorComponent>(entity);
                 if (controller && animator) {
-                    updateController(*controller, *animator, dt);
+                    float entityDt = (editorMode.isPlaying || animator->isPreviewing || animator->playbackSpeed > 0.0f) ? dt : 0.0f;
+                    updateController(*controller, *animator, entityDt);
                 }
             });
 
@@ -99,25 +100,18 @@ public:
                 auto* skeleton = registry.get<SkeletonComponent>(entity);
                 auto* animator = registry.get<AnimatorComponent>(entity);
                 if (skeleton && animator) {
-                    updateEntityAnimation(entity, *skeleton, *animator, dt);
+                    float entityDt = (editorMode.isPlaying || animator->isPreviewing || animator->playbackSpeed > 0.0f) ? dt : 0.0f;
+                    updateEntityAnimation(entity, *skeleton, *animator, entityDt);
                 }
             });
 
-            // 3. Third Pass: Process generic property-only animations for entities without skeletons
-            genericAnimatedEntities.clear();
+            // 3. Third Pass: Process generic property-only animations for entities without skeletons (Main Thread)
             for (auto [entity, animator] : registry.view<AnimatorComponent>()) {
                 if (!registry.has<SkeletonComponent>(entity)) {
-                    genericAnimatedEntities.push_back(entity);
+                    float entityDt = (editorMode.isPlaying || animator.isPreviewing || animator.playbackSpeed > 0.0f) ? dt : 0.0f;
+                    updateGenericAnimation(entity, animator, entityDt);
                 }
             }
-
-            Engine::JobSystem::getInstance().parallelFor(static_cast<int>(genericAnimatedEntities.size()), [&](int idx) {
-                Entity entity = genericAnimatedEntities[idx];
-                auto* animator = registry.get<AnimatorComponent>(entity);
-                if (animator) {
-                    updateGenericAnimation(entity, *animator, dt);
-                }
-            });
         }
 
     private:
@@ -125,7 +119,7 @@ public:
          * @brief Updates high-level state machine progression and checks transitions.
          */
         void updateController(AnimationControllerComponent& controller, AnimatorComponent& animator, float dt) {
-            if (controller.currentState.empty() && !controller.states.empty()) {
+            if ((controller.currentState.empty() || controller.currentState == "Entry" || controller.currentState == "__Entry__") && !controller.states.empty()) {
                 controller.currentState = controller.states[0].name;
                 controller.currentStateTime = 0.0f;
             }
@@ -143,6 +137,42 @@ public:
 
             if (currState) {
                 controller.currentStateTime += dt * currState->speed;
+
+                // Sync active clip & time in AnimatorComponent from current state
+                if (!currState->isBlendTree) {
+                    int clipIdx = -1;
+                    if (!currState->clipName.empty()) {
+                        for (size_t i = 0; i < animator.animations.size(); ++i) {
+                            if (animator.animations[i].name == currState->clipName) {
+                                clipIdx = static_cast<int>(i);
+                                break;
+                            }
+                        }
+                    }
+                    if (clipIdx == -1 && !animator.animations.empty()) {
+                        clipIdx = 0;
+                    }
+                    if (clipIdx != -1) {
+                        animator.activeAnimationIndex = clipIdx;
+                        auto& clip = animator.animations[clipIdx];
+                        
+                        float effectiveDur = clip.duration;
+                        for (const auto& chan : clip.propertyChannels) {
+                            if (!chan.keys.empty()) {
+                                effectiveDur = std::max(effectiveDur, chan.keys.back().time);
+                            }
+                        }
+                        if (effectiveDur <= 0.0f) effectiveDur = 1.0f;
+                        clip.duration = effectiveDur;
+
+                        if (currState->isLooping) {
+                            animator.currentTime = std::fmod(controller.currentStateTime, effectiveDur);
+                        } else {
+                            animator.currentTime = std::min(controller.currentStateTime, effectiveDur);
+                        }
+                        animator.loop = currState->isLooping;
+                    }
+                }
             }
 
             // Advance crossfade timing if active
@@ -188,7 +218,25 @@ public:
                             }
                         }
 
-                        if (allConditionsMet && !trans.conditions.empty()) {
+                        bool shouldTransition = false;
+                        if (!trans.conditions.empty()) {
+                            shouldTransition = allConditionsMet;
+                        } else {
+                            float clipDur = 0.5f;
+                            if (currState) {
+                                for (const auto& c : animator.animations) {
+                                    if (c.name == currState->clipName) {
+                                        clipDur = c.duration;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (clipDur <= 0.0f || controller.currentStateTime >= clipDur) {
+                                shouldTransition = true;
+                            }
+                        }
+
+                        if (shouldTransition) {
                             // Trigger transition!
                             controller.fromState = controller.currentState;
                             controller.fromStateTime = controller.currentStateTime;
@@ -700,7 +748,8 @@ public:
                             lastPrintedIndex = animator.activeAnimationIndex;
                         }
                     }
-                    animator.currentTime += dt * animator.playbackSpeed;
+                    float speed = editorMode.isPlaying ? (animator.playbackSpeed > 0.0f ? animator.playbackSpeed : 1.0f) : animator.playbackSpeed;
+                    animator.currentTime += dt * speed;
                     if (animator.loop) {
                         if (clip->duration > 0.0f) {
                             animator.currentTime = std::fmod(animator.currentTime, clip->duration);
@@ -860,80 +909,223 @@ public:
             return glm::mix(k1.value, k2.value, factor);
         }
 
+        std::string sampleStringProperty(const std::vector<PropertyKeyframe>& keys, float time) {
+            if (keys.empty()) return "";
+            if (time <= keys.front().time) return keys.front().stringValue;
+            if (time >= keys.back().time) return keys.back().stringValue;
+            for (size_t i = 0; i < keys.size() - 1; ++i) {
+                if (time >= keys[i].time && time < keys[i + 1].time) {
+                    return keys[i].stringValue;
+                }
+            }
+            return keys.back().stringValue;
+        }
+
         void sampleAndApplyProperties(Entity entity, AnimatorComponent& animator) {
             AnimationClip* clip = nullptr;
-            if (!animator.animations.empty() && 
-                animator.activeAnimationIndex >= 0 && 
-                animator.activeAnimationIndex < static_cast<int>(animator.animations.size())) {
-                clip = &animator.animations[animator.activeAnimationIndex];
+            if (!animator.animations.empty()) {
+                if (animator.activeAnimationIndex >= 0 && animator.activeAnimationIndex < static_cast<int>(animator.animations.size())) {
+                    clip = &animator.animations[animator.activeAnimationIndex];
+                } else {
+                    animator.activeAnimationIndex = 0;
+                    clip = &animator.animations[0];
+                }
             }
 
             if (!clip || clip->propertyChannels.empty()) return;
 
+            // Helper to strip spaces/special chars/Component suffix for flexible matching
+            auto normalizeName = [](const std::string& s) {
+                std::string res;
+                for (char c : s) {
+                    if (c != ' ' && c != '_' && c != '&' && c != '/') {
+                        res += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                    }
+                }
+                if (res.size() > 9 && res.substr(res.size() - 9) == "component") {
+                    res = res.substr(0, res.size() - 9);
+                }
+                return res;
+            };
+
+            // Collect target entity and all child entities in hierarchy
+            std::vector<Entity> targetEntities;
+            targetEntities.push_back(entity);
+
+            for (size_t readIdx = 0; readIdx < targetEntities.size(); ++readIdx) {
+                Entity curr = targetEntities[readIdx];
+                for (auto [childEntity, hierarchy] : registry.view<HierarchyComponent>()) {
+                    if (hierarchy.parent.getId() == curr.getId()) {
+                        targetEntities.push_back(childEntity);
+                    }
+                }
+            }
+
             auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
 
             for (const auto& channel : clip->propertyChannels) {
+                if (channel.keys.empty()) continue;
+
+                std::string normChanComp = normalizeName(channel.componentName);
+                std::string normChanField = normalizeName(channel.fieldName);
+
+                // Direct Type-Safe Access for SpriteRenderer
+                bool handledDirectly = false;
+                for (Entity targetEntity : targetEntities) {
+                    if (auto* spr = registry.get<Engine::SpriteRenderer>(targetEntity)) {
+                        bool isTex = (normChanField.find("texture") != std::string::npos || normChanField.find("image") != std::string::npos || normChanField.find("path") != std::string::npos);
+                        bool isCol = (normChanField.find("color") != std::string::npos);
+                        bool isFlipX = (normChanField.find("flipx") != std::string::npos);
+                        bool isFlipY = (normChanField.find("flipy") != std::string::npos);
+                        bool isSort = (normChanField.find("sort") != std::string::npos || normChanField.find("order") != std::string::npos);
+
+                        if (isTex) {
+                            std::string strVal = sampleStringProperty(channel.keys, animator.currentTime);
+                            spr->texturePath = strVal;
+                            spr->_dirty = true;
+                            if (auto* mat = registry.get<Material>(targetEntity)) {
+                                mat->texturePath = strVal;
+                                renderer.resourceManager->updateMaterialDescriptorSet(*mat, renderer);
+                                spr->_loadedTexturePath = strVal;
+                            }
+                            handledDirectly = true;
+                        } else if (isCol) {
+                            glm::vec4 val = interpolateProperty(channel.keys, animator.currentTime, spr->color);
+                            spr->color = val;
+                            if (auto* mat = registry.get<Material>(targetEntity)) {
+                                mat->color = spr->color;
+                            }
+                            handledDirectly = true;
+                        } else if (isFlipX) {
+                            glm::vec4 val = interpolateProperty(channel.keys, animator.currentTime, glm::vec4(spr->flipX ? 1.0f : 0.0f));
+                            spr->flipX = (val.x > 0.5f);
+                            if (auto* mat = registry.get<Material>(targetEntity)) {
+                                mat->roughness = spr->flipX ? -1.0f : 1.0f;
+                            }
+                            handledDirectly = true;
+                        } else if (isFlipY) {
+                            glm::vec4 val = interpolateProperty(channel.keys, animator.currentTime, glm::vec4(spr->flipY ? 1.0f : 0.0f));
+                            spr->flipY = (val.x > 0.5f);
+                            if (auto* mat = registry.get<Material>(targetEntity)) {
+                                mat->metallic = spr->flipY ? -1.0f : 1.0f;
+                            }
+                            handledDirectly = true;
+                        } else if (isSort) {
+                            glm::vec4 val = interpolateProperty(channel.keys, animator.currentTime, glm::vec4(static_cast<float>(spr->sortOrder)));
+                            spr->sortOrder = static_cast<int>(val.x);
+                            if (auto* t = registry.get<Transform>(targetEntity)) {
+                                t->position.z = spr->sortOrder * 0.0001f;
+                            }
+                            handledDirectly = true;
+                        }
+                    }
+                }
+                if (handledDirectly) continue;
+
                 const Engine::ComponentReflection* targetRefl = nullptr;
                 for (const auto& refl : reflReg.getReflections()) {
-                    if (refl.name == channel.componentName) {
+                    if (refl.name == channel.componentName ||
+                        normalizeName(refl.name) == normChanComp ||
+                        normalizeName(refl.displayName) == normChanComp) {
                         targetRefl = &refl;
                         break;
                     }
                 }
 
-                if (!targetRefl || !targetRefl->has(registry, entity)) {
-                    continue;
-                }
+                if (!targetRefl) continue;
 
-                void* compPtr = targetRefl->get(registry, entity);
-                if (!compPtr) continue;
+                for (Entity targetEntity : targetEntities) {
+                    if (!targetRefl->has(registry, targetEntity)) continue;
 
-                const Engine::ComponentField* targetField = nullptr;
-                for (const auto& f : targetRefl->fields) {
-                    if (f.name == channel.fieldName) {
-                        targetField = &f;
-                        break;
+                    void* compPtr = targetRefl->get(registry, targetEntity);
+                    if (!compPtr) continue;
+
+                    auto stripPrefix = [](const std::string& s) {
+                        if (s.rfind("spr", 0) == 0 && s.size() > 3) return s.substr(3);
+                        if (s.rfind("m_", 0) == 0 && s.size() > 2) return s.substr(2);
+                        if (s.rfind("s_", 0) == 0 && s.size() > 2) return s.substr(2);
+                        return s;
+                    };
+                    std::string sfn = stripPrefix(normChanField);
+
+                    const Engine::ComponentField* targetField = nullptr;
+                    for (const auto& f : targetRefl->fields) {
+                        std::string fn = normalizeName(f.name);
+                        std::string sfn2 = stripPrefix(fn);
+                        if (f.name == channel.fieldName || fn == normChanField || sfn == sfn2 ||
+                            (sfn.find("texture") != std::string::npos && sfn2.find("texture") != std::string::npos) ||
+                            (sfn.find("image") != std::string::npos && sfn2.find("texture") != std::string::npos) ||
+                            (sfn.find("texture") != std::string::npos && sfn2.find("image") != std::string::npos)) {
+                            targetField = &f;
+                            break;
+                        }
                     }
-                }
 
-                if (!targetField) continue;
+                    if (!targetField) continue;
 
-                char* fieldPtr = static_cast<char*>(compPtr) + targetField->offset;
+                    char* fieldPtr = static_cast<char*>(compPtr) + targetField->offset;
 
-                glm::vec4 val = interpolateProperty(channel.keys, animator.currentTime, glm::vec4(0.0f));
+                    glm::vec4 val = interpolateProperty(channel.keys, animator.currentTime, glm::vec4(0.0f));
 
-                if (channel.type == Engine::FieldType::Float) {
-                    *reinterpret_cast<float*>(fieldPtr) = val.x;
-                } else if (channel.type == Engine::FieldType::Bool) {
-                    *reinterpret_cast<bool*>(fieldPtr) = (val.x > 0.5f);
-                } else if (channel.type == Engine::FieldType::Vec2) {
-                    *reinterpret_cast<glm::vec2*>(fieldPtr) = glm::vec2(val.x, val.y);
-                } else if (channel.type == Engine::FieldType::Vec3) {
-                    *reinterpret_cast<glm::vec3*>(fieldPtr) = glm::vec3(val.x, val.y, val.z);
-                } else if (channel.type == Engine::FieldType::Vec4) {
-                    *reinterpret_cast<glm::vec4*>(fieldPtr) = val;
+                    if (channel.type == Engine::FieldType::Float) {
+                        *reinterpret_cast<float*>(fieldPtr) = val.x;
+                    } else if (channel.type == Engine::FieldType::Int) {
+                        *reinterpret_cast<int*>(fieldPtr) = static_cast<int>(val.x);
+                    } else if (channel.type == Engine::FieldType::Bool) {
+                        *reinterpret_cast<bool*>(fieldPtr) = (val.x > 0.5f);
+                    } else if (channel.type == Engine::FieldType::Vec2) {
+                        *reinterpret_cast<glm::vec2*>(fieldPtr) = glm::vec2(val.x, val.y);
+                    } else if (channel.type == Engine::FieldType::Vec3) {
+                        *reinterpret_cast<glm::vec3*>(fieldPtr) = glm::vec3(val.x, val.y, val.z);
+                    } else if (channel.type == Engine::FieldType::Vec4) {
+                        *reinterpret_cast<glm::vec4*>(fieldPtr) = val;
+                    } else if (channel.type == Engine::FieldType::String) {
+                        std::string strVal = sampleStringProperty(channel.keys, animator.currentTime);
+                        *reinterpret_cast<std::string*>(fieldPtr) = strVal;
+                    }
+
+                    if (auto* spr = registry.get<Engine::SpriteRenderer>(targetEntity)) {
+                        spr->_dirty = true;
+                        if (auto* mat = registry.get<Material>(targetEntity)) {
+                            mat->texturePath = spr->texturePath;
+                            renderer.resourceManager->updateMaterialDescriptorSet(*mat, renderer);
+                            spr->_loadedTexturePath = spr->texturePath;
+                        }
+                    }
                 }
             }
         }
 
         void updateGenericAnimation(Entity entity, AnimatorComponent& animator, float dt) {
             AnimationClip* clip = nullptr;
-            if (!animator.animations.empty() && 
-                animator.activeAnimationIndex >= 0 && 
-                animator.activeAnimationIndex < static_cast<int>(animator.animations.size())) {
-                clip = &animator.animations[animator.activeAnimationIndex];
+            if (!animator.animations.empty()) {
+                if (animator.activeAnimationIndex >= 0 && animator.activeAnimationIndex < static_cast<int>(animator.animations.size())) {
+                    clip = &animator.animations[animator.activeAnimationIndex];
+                } else {
+                    animator.activeAnimationIndex = 0;
+                    clip = &animator.animations[0];
+                }
             }
 
             if (clip) {
-                animator.currentTime += dt * animator.playbackSpeed;
-                if (animator.loop) {
-                    if (clip->duration > 0.0f) {
-                        animator.currentTime = std::fmod(animator.currentTime, clip->duration);
-                    } else {
-                        animator.currentTime = 0.0f;
+                float effectiveDur = clip->duration;
+                for (const auto& chan : clip->propertyChannels) {
+                    if (!chan.keys.empty()) {
+                        effectiveDur = std::max(effectiveDur, chan.keys.back().time);
                     }
-                } else {
-                    animator.currentTime = std::min(animator.currentTime, clip->duration);
+                }
+                if (effectiveDur <= 0.0f) effectiveDur = 1.0f;
+                clip->duration = effectiveDur;
+
+                // If there is no AnimationControllerComponent, drive animator time directly
+                if (!registry.has<AnimationControllerComponent>(entity)) {
+                    float speed = editorMode.isPlaying ? (animator.playbackSpeed > 0.0f ? animator.playbackSpeed : 1.0f) : animator.playbackSpeed;
+                    animator.currentTime += dt * speed;
+                    if (animator.loop) {
+                        animator.currentTime = std::fmod(animator.currentTime, effectiveDur);
+                    } else {
+                        animator.currentTime = std::min(animator.currentTime, effectiveDur);
+                    }
                 }
             }
 

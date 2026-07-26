@@ -15,5 +15,5 @@ struct InputComponent {
 
 
 #include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(InputComponent, "Gameplay");
+REGISTER_COMPONENT(InputComponent, "Gameplay/Input");
 

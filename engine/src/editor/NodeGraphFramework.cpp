@@ -851,6 +851,7 @@ namespace Engine {
                                 if (Node* n = findNode(nodeId)) {
                                     n->customWidgetCallback = reg.customWidgetCallback;
                                 }
+                                if (onNodeCreated) onNodeCreated(nodeId, reg.typeName, spawnPos);
                             }
                         }
                     }

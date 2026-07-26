@@ -41,7 +41,7 @@ namespace Engine {
 
 } // namespace Engine
 
-REGISTER_COMPONENT(Engine::LightComponent, "Rendering & Lights");
+REGISTER_COMPONENT(Engine::LightComponent, "Rendering & Lights/Light");
 
 
 

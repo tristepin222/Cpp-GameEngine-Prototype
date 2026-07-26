@@ -259,9 +259,25 @@ int main(int argc, char* argv[]) {
         if (compName.size() > 9 && compName.rfind("Component") == compName.size() - 9) {
             compName = compName.substr(0, compName.size() - 9);
         }
+        std::string category = "General";
+        std::string displayName = compName;
+
+        if (compName == "SpriteRenderer") {
+            category = "Rendering & Lights";
+            displayName = "Sprite Renderer";
+        } else if (compName == "Mesh" || compName == "Material" || compName == "LightComponent") {
+            category = "Rendering & Lights";
+            if (compName == "LightComponent") displayName = "Light";
+        } else if (compName == "Animator" || compName == "AnimationController") {
+            category = "Animation";
+            if (compName == "AnimationController") displayName = "Animation Controller";
+        }
+
         out << "    {\n";
         out << "        Engine::ComponentReflection refl;\n";
         out << "        refl.name = \"" << compName << "\";\n";
+        out << "        refl.category = \"" << category << "\";\n";
+        out << "        refl.displayName = \"" << displayName << "\";\n";
         out << "        refl.fields = {\n";
         for (size_t i = 0; i < comp.fields.size(); ++i) {
             const auto& field = comp.fields[i];

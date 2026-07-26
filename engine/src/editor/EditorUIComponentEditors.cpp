@@ -702,6 +702,7 @@ void EditorUI::drawAnimatorEditor() {
     
     SliderFloat("Playback Speed", &animator->playbackSpeed, 0.0f, 5.0f, "%.2fx");
     Checkbox("Looping", &animator->loop);
+    Checkbox("Preview Animation in Editor", &animator->isPreviewing);
     
     if (currentClipIdx >= 0 && currentClipIdx < static_cast<int>(animator->animations.size())) {
         const auto& activeClip = animator->animations[currentClipIdx];
@@ -1399,6 +1400,7 @@ void EditorUI::drawReflectedComponentsEditor() {
             refl.name == "UIScrollRect" || refl.name == "UIScrollRectComponent" ||
             refl.name == "UISlider" || refl.name == "UISliderComponent" ||
             refl.name == "UIToggle" || refl.name == "UIToggleComponent" ||
+            refl.name == "SpriteRenderer" || refl.name == "SpriteRendererComponent" ||
             refl.name == "CinemachineVirtualCamera" || refl.name == "Cinemachine") continue;
 
 
@@ -2043,6 +2045,74 @@ void EditorUI::drawSpriteRendererInspector() {
     }
 
     if (!open) return;
+
+    // Sync fields from active AnimatorComponent property keyframes if available
+    if (auto* animator = registry.get<AnimatorComponent>(selectedEntity)) {
+        if (animator->activeAnimationIndex >= 0 && animator->activeAnimationIndex < static_cast<int>(animator->animations.size())) {
+            auto& clip = animator->animations[animator->activeAnimationIndex];
+            for (const auto& chan : clip.propertyChannels) {
+                if (chan.keys.empty()) continue;
+                std::string fc = chan.fieldName;
+                for (char& c : fc) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+                float t = animator->currentTime;
+                if (fc.find("texture") != std::string::npos || fc.find("path") != std::string::npos || fc.find("image") != std::string::npos) {
+                    std::string sampledStr = chan.keys.front().stringValue;
+                    if (t >= chan.keys.back().time) sampledStr = chan.keys.back().stringValue;
+                    else {
+                        for (size_t i = 0; i < chan.keys.size() - 1; ++i) {
+                            if (t >= chan.keys[i].time && t < chan.keys[i+1].time) {
+                                sampledStr = chan.keys[i].stringValue;
+                                break;
+                            }
+                        }
+                    }
+                    if (!sampledStr.empty()) {
+                        sprite->texturePath = sampledStr;
+                    }
+                } else if (fc.find("flipx") != std::string::npos) {
+                    float sampledVal = chan.keys.front().value.x;
+                    if (t >= chan.keys.back().time) sampledVal = chan.keys.back().value.x;
+                    else {
+                        for (size_t i = 0; i < chan.keys.size() - 1; ++i) {
+                            if (t >= chan.keys[i].time && t < chan.keys[i+1].time) {
+                                float factor = (t - chan.keys[i].time) / (chan.keys[i+1].time - chan.keys[i].time);
+                                sampledVal = glm::mix(chan.keys[i].value.x, chan.keys[i+1].value.x, factor);
+                                break;
+                            }
+                        }
+                    }
+                    sprite->flipX = (sampledVal > 0.5f);
+                } else if (fc.find("flipy") != std::string::npos) {
+                    float sampledVal = chan.keys.front().value.x;
+                    if (t >= chan.keys.back().time) sampledVal = chan.keys.back().value.x;
+                    else {
+                        for (size_t i = 0; i < chan.keys.size() - 1; ++i) {
+                            if (t >= chan.keys[i].time && t < chan.keys[i+1].time) {
+                                float factor = (t - chan.keys[i].time) / (chan.keys[i+1].time - chan.keys[i].time);
+                                sampledVal = glm::mix(chan.keys[i].value.x, chan.keys[i+1].value.x, factor);
+                                break;
+                            }
+                        }
+                    }
+                    sprite->flipY = (sampledVal > 0.5f);
+                } else if (fc.find("color") != std::string::npos) {
+                    glm::vec4 sampledVal = chan.keys.front().value;
+                    if (t >= chan.keys.back().time) sampledVal = chan.keys.back().value;
+                    else {
+                        for (size_t i = 0; i < chan.keys.size() - 1; ++i) {
+                            if (t >= chan.keys[i].time && t < chan.keys[i+1].time) {
+                                float factor = (t - chan.keys[i].time) / (chan.keys[i+1].time - chan.keys[i].time);
+                                sampledVal = glm::mix(chan.keys[i].value, chan.keys[i+1].value, factor);
+                                break;
+                            }
+                        }
+                    }
+                    sprite->color = sampledVal;
+                }
+            }
+        }
+    }
 
     // ---- Texture Path ----
     char texBuf[512]{};

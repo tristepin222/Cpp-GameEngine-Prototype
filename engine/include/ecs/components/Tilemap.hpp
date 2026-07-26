@@ -38,5 +38,5 @@ namespace Engine {
 } // namespace Engine
 
 #include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(Engine::TilemapComponent, "Rendering & Lights");
+REGISTER_COMPONENT(Engine::TilemapComponent, "Rendering & Lights/Tilemap");
 

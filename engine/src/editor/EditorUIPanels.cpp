@@ -1,6 +1,7 @@
 #include "editor/EditorUI.hpp"
 #include "editor/EditorUIInternal.hpp"
 #include "editor/NodeGraphFramework.hpp"
+#include "editor/EntityArchetypeRegistry.hpp"
 #include "meta/ComponentReflection.hpp"
 #include "scenes/JSONUtils.hpp"
 #include "editor/AssetBrowserRegistry.hpp"
@@ -26,6 +27,7 @@
 #include "ecs/components/Tilemap.hpp"
 #include "ecs/components/UIComponents.hpp"
 #include "ecs/components/PhysgunScript.hpp"
+#include "ecs/components/SpriteRenderer.hpp"
 #include "ufbx.h"
 #include "cgltf.h"
 
@@ -35,6 +37,8 @@
 #include <fstream>
 #include <filesystem>
 #include <algorithm>
+#include <functional>
+#include <map>
 #include <sstream>
 
 using namespace ImGui;
@@ -251,6 +255,58 @@ void EditorUI::drawSceneControls() {
     TextWrapped("%s", statusMessage.c_str());
 }
 
+// ---------------------------------------------------------------------------
+// Shared helper: renders entity-creation menu items from EntityArchetypeRegistry.
+// `onCreate` is called with (typeString, isPrimitive) when the user picks an item.
+// ---------------------------------------------------------------------------
+static void drawEntityCreationMenus(const std::function<void(const std::string&, bool)>& onCreate) {
+    using namespace Engine;
+    const auto& archetypes = EntityArchetypeRegistry::getInstance().getArchetypes();
+
+    // Group entries by category (preserve insertion order via vector of pairs)
+    std::vector<std::pair<std::string, std::vector<const EntityArchetype*>>> groups;
+    std::vector<const EntityArchetype*> topLevel; // items with no '/' in path
+
+    for (const auto& arch : archetypes) {
+        size_t slash = arch.menuPath.rfind('/');
+        if (slash == std::string::npos) {
+            topLevel.push_back(&arch);
+        } else {
+            std::string cat = arch.menuPath.substr(0, slash);
+            // Find or create group
+            bool found = false;
+            for (auto& [groupCat, entries] : groups) {
+                if (groupCat == cat) { entries.push_back(&arch); found = true; break; }
+            }
+            if (!found) groups.push_back({ cat, { &arch } });
+        }
+    }
+
+    // Render category submenus
+    for (auto& [cat, entries] : groups) {
+        if (ImGui::BeginMenu(cat.c_str())) {
+            for (const auto* arch : entries) {
+                if (arch->separatorBefore) ImGui::Separator();
+                std::string label = arch->menuPath.substr(arch->menuPath.rfind('/') + 1);
+                if (ImGui::MenuItem(label.c_str())) {
+                    onCreate(arch->typeString, arch->isPrimitive);
+                }
+            }
+            ImGui::EndMenu();
+        }
+    }
+
+    // Top-level items (e.g. "Empty GameObject") get a separator above them
+    if (!topLevel.empty()) {
+        ImGui::Separator();
+        for (const auto* arch : topLevel) {
+            if (ImGui::MenuItem(arch->menuPath.c_str())) {
+                onCreate(arch->typeString, arch->isPrimitive);
+            }
+        }
+    }
+}
+
 void EditorUI::drawHierarchyPanel() {
     Begin("Hierarchy", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
 
@@ -265,34 +321,18 @@ void EditorUI::drawHierarchyPanel() {
     }
 
     if (ImGui::BeginPopup("CreateEntityPopup")) {
-        if (ImGui::BeginMenu("3D Objects")) {
-            if (ImGui::MenuItem("Cube"))     { if (currentScene) { auto e = currentScene->createPrimitiveEntity("Cube");     selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            if (ImGui::MenuItem("Triangle")) { if (currentScene) { auto e = currentScene->createPrimitiveEntity("Triangle"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            if (ImGui::MenuItem("Quad"))     { if (currentScene) { auto e = currentScene->createPrimitiveEntity("Quad");     selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Rendering & Lights")) {
-            if (ImGui::MenuItem("Camera"))   { if (currentScene) { auto e = currentScene->createEntityOfType("Camera"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            if (ImGui::MenuItem("Grid"))     { if (currentScene) { auto e = currentScene->createEntityOfType("Grid");   selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("UI")) {
-            if (ImGui::MenuItem("Canvas"))      { if (currentScene) { auto e = currentScene->createEntityOfType("Canvas"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            if (ImGui::MenuItem("Panel"))       { if (currentScene) { auto e = currentScene->createEntityOfType("UI Panel"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            if (ImGui::MenuItem("Image"))       { if (currentScene) { auto e = currentScene->createEntityOfType("UI Image"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            if (ImGui::MenuItem("Text"))        { if (currentScene) { auto e = currentScene->createEntityOfType("UI Text"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            if (ImGui::MenuItem("Button"))      { if (currentScene) { auto e = currentScene->createEntityOfType("UI Button"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            if (ImGui::MenuItem("Slider"))      { if (currentScene) { auto e = currentScene->createEntityOfType("UI Slider"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            if (ImGui::MenuItem("Toggle"))      { if (currentScene) { auto e = currentScene->createEntityOfType("UI Toggle"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Grid Layout")) { if (currentScene) { auto e = currentScene->createEntityOfType("UI Grid Layout"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            if (ImGui::MenuItem("Scroll View")) { if (currentScene) { auto e = currentScene->createEntityOfType("UI Scroll View"); selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
-            ImGui::EndMenu();
-        }
-        ImGui::Separator();
-        if (ImGui::MenuItem("Empty GameObject")) { if (currentScene) { auto e = currentScene->createEntityOfType("Empty");  selectedEntity = e; hasSelection = true; if (auto* n = registry.get<Name>(e)) renameBuffer = n->value; } }
+        drawEntityCreationMenus([&](const std::string& typeStr, bool isPrimitive) {
+            if (!currentScene) return;
+            Entity e = isPrimitive ? currentScene->createPrimitiveEntity(typeStr)
+                                   : currentScene->createEntityOfType(typeStr);
+            if (e.getId() != Entity::INVALID_ENTITY) {
+                selectedEntity = e; hasSelection = true;
+                if (auto* n = registry.get<Name>(e)) renameBuffer = n->value;
+            }
+        });
         ImGui::EndPopup();
     }
+
 
 
 
@@ -438,34 +478,12 @@ void EditorUI::drawHierarchyPanel() {
             };
 
             if (ImGui::BeginMenu("Create Child")) {
-                if (ImGui::BeginMenu("3D Objects")) {
-                    if (ImGui::MenuItem("Cube"))     { createAndParentChild("Cube", true); }
-                    if (ImGui::MenuItem("Triangle")) { createAndParentChild("Triangle", true); }
-                    if (ImGui::MenuItem("Quad"))     { createAndParentChild("Quad", true); }
-                    ImGui::EndMenu();
-                }
-                if (ImGui::BeginMenu("Rendering & Lights")) {
-                    if (ImGui::MenuItem("Camera"))   { createAndParentChild("Camera", false); }
-                    if (ImGui::MenuItem("Grid"))     { createAndParentChild("Grid", false); }
-                    ImGui::EndMenu();
-                }
-                if (ImGui::BeginMenu("UI")) {
-                    if (ImGui::MenuItem("Canvas"))      { createAndParentChild("Canvas", false); }
-                    if (ImGui::MenuItem("Panel"))       { createAndParentChild("UI Panel", false); }
-                    if (ImGui::MenuItem("Image"))       { createAndParentChild("UI Image", false); }
-                    if (ImGui::MenuItem("Text"))        { createAndParentChild("UI Text", false); }
-                    if (ImGui::MenuItem("Button"))      { createAndParentChild("UI Button", false); }
-                    if (ImGui::MenuItem("Slider"))      { createAndParentChild("UI Slider", false); }
-                    if (ImGui::MenuItem("Toggle"))      { createAndParentChild("UI Toggle", false); }
-                    ImGui::Separator();
-                    if (ImGui::MenuItem("Grid Layout")) { createAndParentChild("UI Grid Layout", false); }
-                    if (ImGui::MenuItem("Scroll View")) { createAndParentChild("UI Scroll View", false); }
-                    ImGui::EndMenu();
-                }
-                ImGui::Separator();
-                if (ImGui::MenuItem("Empty GameObject")) { createAndParentChild("Empty", false); }
+                drawEntityCreationMenus([&](const std::string& typeStr, bool isPrimitive) {
+                    createAndParentChild(typeStr, isPrimitive);
+                });
                 ImGui::EndMenu();
             }
+
 
 
             if (auto* hc = registry.get<HierarchyComponent>(entity)) {
@@ -555,47 +573,15 @@ void EditorUI::drawHierarchyPanel() {
     if (ImGui::BeginPopupContextWindow("HierarchyBgCtx", ImGuiPopupFlags_NoOpenOverItems | ImGuiPopupFlags_MouseButtonRight)) {
         auto createRootObject = [&](const std::string& typeStr, bool isPrimitive) {
             if (!currentScene) return;
-            Entity created;
-            if (isPrimitive) {
-                created = currentScene->createPrimitiveEntity(typeStr);
-            } else {
-                created = currentScene->createEntityOfType(typeStr);
-            }
+            Entity created = isPrimitive ? currentScene->createPrimitiveEntity(typeStr)
+                                         : currentScene->createEntityOfType(typeStr);
             if (created.getId() != Entity::INVALID_ENTITY) {
-                selectedEntity = created;
-                hasSelection = true;
+                selectedEntity = created; hasSelection = true;
                 if (auto* n = registry.get<Name>(created)) renameBuffer = n->value;
                 statusMessage = "Created " + typeStr + ".";
             }
         };
-
-        if (ImGui::BeginMenu("3D Objects")) {
-            if (ImGui::MenuItem("Cube"))     { createRootObject("Cube", true); }
-            if (ImGui::MenuItem("Triangle")) { createRootObject("Triangle", true); }
-            if (ImGui::MenuItem("Quad"))     { createRootObject("Quad", true); }
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Rendering & Lights")) {
-            if (ImGui::MenuItem("Camera"))   { createRootObject("Camera", false); }
-            if (ImGui::MenuItem("Grid"))     { createRootObject("Grid", false); }
-            if (ImGui::MenuItem("Sprite Renderer")) { createRootObject("Sprite Renderer", false); }
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("UI")) {
-            if (ImGui::MenuItem("Canvas"))      { createRootObject("Canvas", false); }
-            if (ImGui::MenuItem("Panel"))       { createRootObject("UI Panel", false); }
-            if (ImGui::MenuItem("Image"))       { createRootObject("UI Image", false); }
-            if (ImGui::MenuItem("Text"))        { createRootObject("UI Text", false); }
-            if (ImGui::MenuItem("Button"))      { createRootObject("UI Button", false); }
-            if (ImGui::MenuItem("Slider"))      { createRootObject("UI Slider", false); }
-            if (ImGui::MenuItem("Toggle"))      { createRootObject("UI Toggle", false); }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Grid Layout")) { createRootObject("UI Grid Layout", false); }
-            if (ImGui::MenuItem("Scroll View")) { createRootObject("UI Scroll View", false); }
-            ImGui::EndMenu();
-        }
-        ImGui::Separator();
-        if (ImGui::MenuItem("Empty GameObject")) { createRootObject("Empty", false); }
+        drawEntityCreationMenus(createRootObject);
         ImGui::EndPopup();
     }
 
@@ -720,63 +706,104 @@ void EditorUI::drawInspectorPanel() {
     ImGui::Separator();
     if (ImGui::Button("+ Add Component", ImVec2(-1, 30))) {
         ImGui::OpenPopup("AddComponentPopup");
-    }    if (ImGui::BeginPopup("AddComponentPopup")) {
-        // Special initialization setup for Material and Skeleton if selected
-        if (!registry.has<Material>(selectedEntity) && ImGui::MenuItem("Material")) {
-            glm::vec4 color(1.0f);
-            registry.emplace<Material>(selectedEntity, Material{ color });
-            if (auto* material = registry.get<Material>(selectedEntity)) {
-                bool hasSkin = entityHasSkin(registry, selectedEntity);
-                std::string vertShader = hasSkin ? "skinned.vert.spv" : "unlit.vert.spv";
-                std::string fragShader = "unlit.frag.spv";
-                PipelineHandle pipeline = renderer.createPipelineForShaders(
-                    renderer.resolveShaderPath("build/shaders/" + vertShader),
-                    renderer.resolveShaderPath("build/shaders/" + fragShader)
-                );
-                material->pipeline = pipeline.pipeline;
-                material->pipelineLayout = pipeline.layout;
-                renderer.resourceManager->updateMaterialDescriptorSet(*material, renderer);
+    }
+    if (ImGui::BeginPopup("AddComponentPopup")) {
+        // Optional search filter
+        static char s_searchBuf[128] = {};
+        ImGui::SetNextItemWidth(-1);
+        ImGui::InputTextWithHint("##comp_search", "Search...", s_searchBuf, sizeof(s_searchBuf));
+        const std::string searchStr(s_searchBuf);
+        bool filtering = !searchStr.empty();
+
+        // Collect all reflected components grouped by category
+        struct MenuEntry {
+            const Engine::ComponentReflection* refl;
+            std::string label; // final display label
+            bool alreadyAttached;
+        };
+        std::map<std::string, std::vector<MenuEntry>> grouped; // category -> entries
+
+        for (const auto& refl : Engine::ComponentReflectionRegistry::getInstance().getReflections()) {
+            // Skip internal / always-present components
+            if (refl.name == "Transform" || refl.name == "Name" || refl.name == "Hierarchy") continue;
+
+            bool alreadyAttached = refl.has(registry, selectedEntity);
+
+            // Derive display label: use registered displayName if set, otherwise prettify the type name
+            std::string label = refl.displayName.empty() ? refl.name : refl.displayName;
+
+            // Filter
+            if (filtering) {
+                std::string haystack = label;
+                std::transform(haystack.begin(), haystack.end(), haystack.begin(), ::tolower);
+                std::string needle = searchStr;
+                std::transform(needle.begin(), needle.end(), needle.begin(), ::tolower);
+                if (haystack.find(needle) == std::string::npos) continue;
             }
-            statusMessage = "Added Material component.";
+
+            std::string cat = refl.category.empty() ? "General" : refl.category;
+            grouped[cat].push_back({ &refl, label, alreadyAttached });
         }
 
-        // Render all reflected components dynamically without needing any explicit per-class code!
-        for (const auto& refl : Engine::ComponentReflectionRegistry::getInstance().getReflections()) {
-            if (refl.name == "Material" || refl.name == "CinemachineVirtualCamera" || refl.name == "Cinemachine") continue; // Handled with custom plugin setup
-            if (!refl.has(registry, selectedEntity)) {
-                if (refl.name == "Transform" || refl.name == "Name" || refl.name == "Hierarchy") continue;
+        // Render grouped menu (flat when filtering, nested submenus otherwise)
+        for (auto& [category, entries] : grouped) {
+            bool inSubMenu = !filtering && ImGui::BeginMenu(category.c_str());
 
+            for (auto& entry : entries) {
+                bool renderItem = filtering || inSubMenu;
+                if (!renderItem) continue;
 
-                std::string menuName = refl.name;
-                if (menuName == "PlayerController") menuName = "Player Controller";
-                else if (menuName == "UIGridLayoutGroup") menuName = "UI Grid Layout Group";
-                else if (menuName == "UILayoutGroup") menuName = "UI Layout Group";
-                else if (menuName == "UIScrollRect") menuName = "UI Scroll Rect";
-                else if (menuName == "UISlider") menuName = "UI Slider";
-                else if (menuName == "UIToggle") menuName = "UI Toggle";
-                else if (menuName == "UIPanel") menuName = "UI Panel";
-                else if (menuName == "UIImage") menuName = "UI Image";
-                else if (menuName == "UIText") menuName = "UI Text";
-                else if (menuName == "UIButton") menuName = "UI Button";
+                std::string itemLabel = entry.label + (entry.alreadyAttached ? " (Attached)" : "");
+                if (ImGui::MenuItem(itemLabel.c_str(), nullptr, false, !entry.alreadyAttached)) {
+                    if (!entry.alreadyAttached) {
+                        entry.refl->add(registry, selectedEntity);
+                    }
 
-                if (ImGui::MenuItem(menuName.c_str())) {
-                    refl.add(registry, selectedEntity);
-                    // Automatically attach RectTransform if a UI component is added to an entity without one
-                    if ((menuName.rfind("UI", 0) == 0 || refl.name.rfind("UI", 0) == 0) &&
-                        refl.name != "Canvas" &&
+                    // Auto-attach RectTransform for any UI component
+                    if (entry.refl->category == "UI" &&
+                        entry.refl->name != "Canvas" &&
                         !registry.has<Engine::RectTransform>(selectedEntity)) {
                         registry.emplace<Engine::RectTransform>(selectedEntity, Engine::RectTransform{});
                     }
-                    statusMessage = "Added " + menuName + " component.";
+
+                    // Special post-add setup for Material
+                    if (entry.refl->name == "Material") {
+                        if (auto* mat = registry.get<Material>(selectedEntity)) {
+                            bool hasSkin = entityHasSkin(registry, selectedEntity);
+                            std::string vert = hasSkin ? "skinned.vert.spv" : "unlit.vert.spv";
+                            PipelineHandle pipe = renderer.createPipelineForShaders(
+                                renderer.resolveShaderPath("build/shaders/" + vert),
+                                renderer.resolveShaderPath("build/shaders/unlit.frag.spv")
+                            );
+                            mat->pipeline       = pipe.pipeline;
+                            mat->pipelineLayout = pipe.layout;
+                            renderer.resourceManager->updateMaterialDescriptorSet(*mat, renderer);
+                        }
+                    }
+
+                    statusMessage = "Added " + entry.label + " component.";
+                    s_searchBuf[0] = '\0'; // clear search after selection
                 }
             }
+
+            if (!filtering && inSubMenu) ImGui::EndMenu();
         }
 
-        // Render dynamic plugin component add options
+        // Dynamic plugin components (keep in their own section)
+        bool hasPlugins = false;
         for (auto& [compName, callback] : getDynamicAddCallbacks()) {
+            if (filtering) {
+                std::string lower = compName;
+                std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+                std::string needle = searchStr;
+                std::transform(needle.begin(), needle.end(), needle.begin(), ::tolower);
+                if (lower.find(needle) == std::string::npos) continue;
+            }
+            if (!hasPlugins && !filtering) { ImGui::Separator(); hasPlugins = true; }
             if (ImGui::MenuItem(compName.c_str())) {
                 callback(registry, selectedEntity);
                 statusMessage = "Added " + compName + " component.";
+                s_searchBuf[0] = '\0';
             }
         }
 
@@ -2318,12 +2345,16 @@ void EditorUI::drawAnimationEditorWindow() {
             animator->playbackSpeed = 0.0f;
         } else {
             animator->playbackSpeed = 1.0f;
+            animator->isPreviewing = true;
         }
     }
     ImGui::SameLine();
     if (ImGui::Button("Stop")) {
         animator->playbackSpeed = 0.0f;
         animator->currentTime = 0.0f;
+        if (auto* ctrl = registry.get<AnimationControllerComponent>(selectedEntity)) {
+            ctrl->currentStateTime = 0.0f;
+        }
     }
     
     ImGui::SameLine();
@@ -2331,7 +2362,11 @@ void EditorUI::drawAnimationEditorWindow() {
     ImGui::Text("Time:");
     ImGui::SameLine();
     ImGui::PushItemWidth(80);
-    ImGui::DragFloat("##current_time", &animator->currentTime, 0.01f, 0.0f, activeClip->duration, "%.2fs");
+    if (ImGui::DragFloat("##current_time", &animator->currentTime, 0.01f, 0.0f, activeClip->duration, "%.2fs")) {
+        if (auto* ctrl = registry.get<AnimationControllerComponent>(selectedEntity)) {
+            ctrl->currentStateTime = animator->currentTime;
+        }
+    }
     ImGui::PopItemWidth();
 
     ImGui::SameLine();
@@ -2357,7 +2392,9 @@ void EditorUI::drawAnimationEditorWindow() {
                 if (ImGui::BeginMenu(refl.name.c_str())) {
                     for (const auto& field : refl.fields) {
                         if (field.type == Engine::FieldType::Float ||
+                            field.type == Engine::FieldType::Int ||
                             field.type == Engine::FieldType::Bool ||
+                            field.type == Engine::FieldType::String ||
                             field.type == Engine::FieldType::Vec2 ||
                             field.type == Engine::FieldType::Vec3 ||
                             field.type == Engine::FieldType::Vec4) {
@@ -2376,6 +2413,57 @@ void EditorUI::drawAnimationEditorWindow() {
                                     newChan.componentName = refl.name;
                                     newChan.fieldName = field.name;
                                     newChan.type = field.type;
+
+                                    // Automatically capture current field value as initial keyframe at 0.0s
+                                    PropertyKeyframe initKey;
+                                    initKey.time = 0.0f;
+                                    bool capOk = false;
+
+                                    std::string normC = refl.name;
+                                    for (char& c : normC) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                                    std::string normF = field.name;
+                                    for (char& c : normF) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+                                    if (normC.find("sprite") != std::string::npos || normC == "spriterenderer") {
+                                        if (auto* spr = registry.get<Engine::SpriteRenderer>(selectedEntity)) {
+                                            if (normF.find("texture") != std::string::npos || normF.find("image") != std::string::npos) {
+                                                initKey.stringValue = spr->texturePath;
+                                                capOk = true;
+                                            } else if (normF.find("color") != std::string::npos) {
+                                                initKey.value = spr->color;
+                                                capOk = true;
+                                            } else if (normF.find("flipx") != std::string::npos) {
+                                                initKey.value.x = spr->flipX ? 1.0f : 0.0f;
+                                                capOk = true;
+                                            } else if (normF.find("flipy") != std::string::npos) {
+                                                initKey.value.x = spr->flipY ? 1.0f : 0.0f;
+                                                capOk = true;
+                                            } else if (normF.find("sortorder") != std::string::npos) {
+                                                initKey.value.x = static_cast<float>(spr->sortOrder);
+                                                capOk = true;
+                                            }
+                                        }
+                                    }
+
+                                    if (!capOk && refl.has(registry, selectedEntity)) {
+                                        void* compPtr = refl.get(registry, selectedEntity);
+                                        if (compPtr) {
+                                            char* fieldPtr = static_cast<char*>(compPtr) + field.offset;
+                                            if (field.type == Engine::FieldType::Float) initKey.value.x = *reinterpret_cast<float*>(fieldPtr);
+                                            else if (field.type == Engine::FieldType::Int) initKey.value.x = static_cast<float>(*reinterpret_cast<int*>(fieldPtr));
+                                            else if (field.type == Engine::FieldType::Bool) initKey.value.x = *reinterpret_cast<bool*>(fieldPtr) ? 1.0f : 0.0f;
+                                            else if (field.type == Engine::FieldType::Vec2) initKey.value = glm::vec4(*reinterpret_cast<glm::vec2*>(fieldPtr), 0.0f, 0.0f);
+                                            else if (field.type == Engine::FieldType::Vec3) initKey.value = glm::vec4(*reinterpret_cast<glm::vec3*>(fieldPtr), 0.0f);
+                                            else if (field.type == Engine::FieldType::Vec4) initKey.value = *reinterpret_cast<glm::vec4*>(fieldPtr);
+                                            else if (field.type == Engine::FieldType::String) initKey.stringValue = *reinterpret_cast<std::string*>(fieldPtr);
+                                            capOk = true;
+                                        }
+                                    }
+
+                                    if (capOk) {
+                                        newChan.keys.push_back(initKey);
+                                    }
+
                                     activeClip->propertyChannels.push_back(newChan);
                                 }
                             } else {
@@ -2432,29 +2520,87 @@ void EditorUI::drawAnimationEditorWindow() {
             ImGui::PushID(t + 1000);
             if (ImGui::Button("Key", ImVec2(0, rowHeight))) {
                 auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
+
+                auto normalizeName = [](const std::string& s) {
+                    std::string res;
+                    for (char c : s) {
+                        if (c != ' ' && c != '_' && c != '&' && c != '/') {
+                            res += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                        }
+                    }
+                    if (res.size() > 9 && res.substr(res.size() - 9) == "component") {
+                        res = res.substr(0, res.size() - 9);
+                    }
+                    return res;
+                };
+
+                auto stripPrefix = [](const std::string& s) {
+                    if (s.rfind("spr", 0) == 0 && s.size() > 3) return s.substr(3);
+                    if (s.rfind("m_", 0) == 0 && s.size() > 2) return s.substr(2);
+                    if (s.rfind("s_", 0) == 0 && s.size() > 2) return s.substr(2);
+                    return s;
+                };
+
+                std::string normChanComp = normalizeName(chan.componentName);
+                std::string normChanField = normalizeName(chan.fieldName);
+                std::string sfn = stripPrefix(normChanField);
+
                 const Engine::ComponentReflection* targetRefl = nullptr;
                 for (const auto& refl : reflReg.getReflections()) {
-                    if (refl.name == chan.componentName) {
+                    if (refl.name == chan.componentName ||
+                        normalizeName(refl.name) == normChanComp ||
+                        normalizeName(refl.displayName) == normChanComp) {
                         targetRefl = &refl;
                         break;
                     }
                 }
-                if (targetRefl && targetRefl->has(registry, selectedEntity)) {
+
+                glm::vec4 capturedVal(0.0f);
+                std::string capturedStr = "";
+                bool capturedSuccess = false;
+
+                if (normChanComp.find("sprite") != std::string::npos || normChanComp == "spriterenderer") {
+                    if (auto* spr = registry.get<Engine::SpriteRenderer>(selectedEntity)) {
+                        if (sfn.find("texture") != std::string::npos || sfn.find("image") != std::string::npos) {
+                            capturedStr = spr->texturePath;
+                            capturedSuccess = true;
+                        } else if (sfn.find("color") != std::string::npos) {
+                            capturedVal = spr->color;
+                            capturedSuccess = true;
+                        } else if (sfn.find("flipx") != std::string::npos) {
+                            capturedVal.x = spr->flipX ? 1.0f : 0.0f;
+                            capturedSuccess = true;
+                        } else if (sfn.find("flipy") != std::string::npos) {
+                            capturedVal.x = spr->flipY ? 1.0f : 0.0f;
+                            capturedSuccess = true;
+                        } else if (sfn.find("sortorder") != std::string::npos) {
+                            capturedVal.x = static_cast<float>(spr->sortOrder);
+                            capturedSuccess = true;
+                        }
+                    }
+                }
+
+                if (!capturedSuccess && targetRefl && targetRefl->has(registry, selectedEntity)) {
                     void* compPtr = targetRefl->get(registry, selectedEntity);
                     if (compPtr) {
                         const Engine::ComponentField* targetField = nullptr;
                         for (const auto& f : targetRefl->fields) {
-                            if (f.name == chan.fieldName) {
+                            std::string fn = normalizeName(f.name);
+                            std::string sfn2 = stripPrefix(fn);
+                            if (f.name == chan.fieldName || fn == normChanField || sfn == sfn2 ||
+                                (sfn.find("texture") != std::string::npos && sfn2.find("texture") != std::string::npos) ||
+                                (sfn.find("image") != std::string::npos && sfn2.find("texture") != std::string::npos) ||
+                                (sfn.find("texture") != std::string::npos && sfn2.find("image") != std::string::npos)) {
                                 targetField = &f;
                                 break;
                             }
                         }
                         if (targetField) {
                             char* fieldPtr = static_cast<char*>(compPtr) + targetField->offset;
-                            glm::vec4 capturedVal(0.0f);
-                            
                             if (chan.type == Engine::FieldType::Float) {
                                 capturedVal.x = *reinterpret_cast<float*>(fieldPtr);
+                            } else if (chan.type == Engine::FieldType::Int) {
+                                capturedVal.x = static_cast<float>(*reinterpret_cast<int*>(fieldPtr));
                             } else if (chan.type == Engine::FieldType::Bool) {
                                 capturedVal.x = *reinterpret_cast<bool*>(fieldPtr) ? 1.0f : 0.0f;
                             } else if (chan.type == Engine::FieldType::Vec2) {
@@ -2465,30 +2611,37 @@ void EditorUI::drawAnimationEditorWindow() {
                                 capturedVal = glm::vec4(v->x, v->y, v->z, 0.0f);
                             } else if (chan.type == Engine::FieldType::Vec4) {
                                 capturedVal = *reinterpret_cast<glm::vec4*>(fieldPtr);
+                            } else if (chan.type == Engine::FieldType::String) {
+                                capturedStr = *reinterpret_cast<std::string*>(fieldPtr);
                             }
-
-                            PropertyKeyframe newKey;
-                            newKey.time = animator->currentTime;
-                            newKey.value = capturedVal;
-
-                            bool found = false;
-                            for (auto& key : chan.keys) {
-                                if (std::abs(key.time - animator->currentTime) < 0.01f) {
-                                    key.value = capturedVal;
-                                    found = true;
-                                    break;
-                                }
-                            }
-
-                            if (!found) {
-                                chan.keys.push_back(newKey);
-                                std::sort(chan.keys.begin(), chan.keys.end(), [](const PropertyKeyframe& a, const PropertyKeyframe& b) {
-                                    return a.time < b.time;
-                                });
-                            }
-                            statusMessage = "Added keyframe for " + chan.componentName + "." + chan.fieldName + " at " + std::to_string(animator->currentTime) + "s";
+                            capturedSuccess = true;
                         }
                     }
+                }
+
+                if (capturedSuccess) {
+                    PropertyKeyframe newKey;
+                    newKey.time = animator->currentTime;
+                    newKey.value = capturedVal;
+                    newKey.stringValue = capturedStr;
+
+                    bool found = false;
+                    for (auto& key : chan.keys) {
+                        if (std::abs(key.time - animator->currentTime) < 0.01f) {
+                            key.value = capturedVal;
+                            key.stringValue = capturedStr;
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if (!found) {
+                        chan.keys.push_back(newKey);
+                        std::sort(chan.keys.begin(), chan.keys.end(), [](const PropertyKeyframe& a, const PropertyKeyframe& b) {
+                            return a.time < b.time;
+                        });
+                    }
+                    statusMessage = "Added keyframe for " + chan.componentName + "." + chan.fieldName + " at " + std::to_string(animator->currentTime) + "s";
                 }
             }
             ImGui::PopID();
@@ -2555,6 +2708,9 @@ void EditorUI::drawAnimationEditorWindow() {
         ImVec2 mousePos = ImGui::GetMousePos();
         float localMouseX = mousePos.x - rulerStart.x;
         animator->currentTime = glm::clamp(localMouseX / pixelsPerSecond, 0.0f, timelineDuration);
+        if (auto* ctrl = registry.get<AnimationControllerComponent>(selectedEntity)) {
+            ctrl->currentStateTime = animator->currentTime;
+        }
     }
 
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5.0f);
@@ -2584,6 +2740,9 @@ void EditorUI::drawAnimationEditorWindow() {
                 if (std::abs(mPos.x - keyX) < 8.0f) {
                     s_selectedKeyIndex = k;
                     animator->currentTime = chan.keys[k].time;
+                    if (auto* ctrl = registry.get<AnimationControllerComponent>(selectedEntity)) {
+                        ctrl->currentStateTime = animator->currentTime;
+                    }
                     break;
                 }
             }
@@ -2629,59 +2788,125 @@ void EditorUI::drawAnimationEditorWindow() {
     ImGui::Separator();
     if (s_selectedTrackIndex >= 0 && s_selectedTrackIndex < static_cast<int>(activeClip->propertyChannels.size())) {
         auto& chan = activeClip->propertyChannels[s_selectedTrackIndex];
-        if (s_selectedKeyIndex >= 0 && s_selectedKeyIndex < static_cast<int>(chan.keys.size())) {
-            auto& key = chan.keys[s_selectedKeyIndex];
+        
+        ImGui::Text("Track Keyframes: %s.%s", chan.componentName.c_str(), chan.fieldName.c_str());
+        ImGui::SameLine();
+        if (ImGui::Button("Add Keyframe at Current Time")) {
+            PropertyKeyframe newKey;
+            newKey.time = animator->currentTime;
             
-            ImGui::Text("Selected Keyframe details for: %s.%s", chan.componentName.c_str(), chan.fieldName.c_str());
-            
-            ImGui::PushItemWidth(150);
-            if (ImGui::DragFloat("Key Time", &key.time, 0.01f, 0.0f, activeClip->duration, "%.2fs")) {
+            // Auto capture current
+            if (chan.type == Engine::FieldType::String || chan.fieldName.find("texture") != std::string::npos || chan.fieldName.find("path") != std::string::npos) {
+                if (auto* spr = registry.get<Engine::SpriteRenderer>(selectedEntity)) {
+                    newKey.stringValue = spr->texturePath;
+                }
+            } else if (auto* spr = registry.get<Engine::SpriteRenderer>(selectedEntity)) {
+                if (chan.fieldName.find("color") != std::string::npos) newKey.value = spr->color;
+                else if (chan.fieldName.find("flipx") != std::string::npos) newKey.value.x = spr->flipX ? 1.0f : 0.0f;
+                else if (chan.fieldName.find("flipy") != std::string::npos) newKey.value.x = spr->flipY ? 1.0f : 0.0f;
+            }
+
+            bool found = false;
+            for (auto& k : chan.keys) {
+                if (std::abs(k.time - animator->currentTime) < 0.01f) {
+                    k.stringValue = newKey.stringValue;
+                    k.value = newKey.value;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                chan.keys.push_back(newKey);
                 std::sort(chan.keys.begin(), chan.keys.end(), [](const PropertyKeyframe& a, const PropertyKeyframe& b) {
                     return a.time < b.time;
                 });
-                for (int k = 0; k < static_cast<int>(chan.keys.size()); ++k) {
-                    if (chan.keys[k].time == key.time) {
-                        s_selectedKeyIndex = k;
-                        break;
-                    }
-                }
             }
-            ImGui::PopItemWidth();
-            
-            ImGui::SameLine();
-            ImGui::PushItemWidth(250);
-            
-            if (chan.type == Engine::FieldType::Float) {
-                ImGui::DragFloat("Value", &key.value.x, 0.05f);
-            } else if (chan.type == Engine::FieldType::Bool) {
-                bool bVal = (key.value.x > 0.5f);
-                if (ImGui::Checkbox("Value", &bVal)) {
-                    key.value.x = bVal ? 1.0f : 0.0f;
-                }
-            } else if (chan.type == Engine::FieldType::Vec2) {
-                ImGui::DragFloat2("Value", &key.value.x, 0.05f);
-            } else if (chan.type == Engine::FieldType::Vec3) {
-                ImGui::DragFloat3("Value", &key.value.x, 0.05f);
-            } else if (chan.type == Engine::FieldType::Vec4) {
-                if (chan.fieldName.find("color") != std::string::npos || chan.fieldName.find("Color") != std::string::npos) {
-                    ImGui::ColorEdit4("Value", &key.value.x);
-                } else {
-                    ImGui::DragFloat4("Value", &key.value.x, 0.05f);
-                }
-            }
-            
-            ImGui::PopItemWidth();
+        }
 
-            ImGui::SameLine();
-            if (ImGui::Button("Delete Key")) {
-                chan.keys.erase(chan.keys.begin() + s_selectedKeyIndex);
+        bool isTexChan = (chan.type == Engine::FieldType::String ||
+                          chan.fieldName.find("texture") != std::string::npos ||
+                          chan.fieldName.find("path") != std::string::npos ||
+                          chan.fieldName.find("image") != std::string::npos);
+
+        if (ImGui::BeginTable("##track_keys_table", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+            ImGui::TableSetupColumn("Key Index", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableSetupColumn("Time (s)", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+            ImGui::TableSetupColumn("Value / Path", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+            ImGui::TableHeadersRow();
+
+            int keyToDelete = -1;
+            for (int k = 0; k < static_cast<int>(chan.keys.size()); ++k) {
+                auto& key = chan.keys[k];
+                ImGui::TableNextRow();
+                ImGui::PushID(k + 5000);
+
+                // Col 0: Index
+                ImGui::TableSetColumnIndex(0);
+                bool isSel = (s_selectedKeyIndex == k);
+                if (ImGui::Selectable(("Key " + std::to_string(k)).c_str(), isSel, ImGuiSelectableFlags_SpanAllColumns)) {
+                    s_selectedKeyIndex = k;
+                    animator->currentTime = key.time;
+                }
+
+                // Col 1: Time
+                ImGui::TableSetColumnIndex(1);
+                ImGui::SetNextItemWidth(90.0f);
+                if (ImGui::DragFloat("##ktime", &key.time, 0.01f, 0.0f, activeClip->duration, "%.2fs")) {
+                    std::sort(chan.keys.begin(), chan.keys.end(), [](const PropertyKeyframe& a, const PropertyKeyframe& b) {
+                        return a.time < b.time;
+                    });
+                }
+
+                // Col 2: Value / Path
+                ImGui::TableSetColumnIndex(2);
+                if (isTexChan) {
+                    char strBuf[512] = "";
+                    strncpy_s(strBuf, key.stringValue.c_str(), sizeof(strBuf) - 1);
+                    ImGui::SetNextItemWidth(-1.0f);
+                    if (ImGui::InputText("##kpath", strBuf, sizeof(strBuf))) {
+                        key.stringValue = strBuf;
+                    }
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+                            key.stringValue = (const char*)payload->Data;
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
+                } else if (chan.type == Engine::FieldType::Bool || chan.fieldName.find("flip") != std::string::npos) {
+                    bool bVal = (key.value.x > 0.5f);
+                    if (ImGui::Checkbox("##kbool", &bVal)) {
+                        key.value.x = bVal ? 1.0f : 0.0f;
+                    }
+                } else if (chan.type == Engine::FieldType::Float) {
+                    ImGui::SetNextItemWidth(150.0f);
+                    ImGui::DragFloat("##kfloat", &key.value.x, 0.05f);
+                } else if (chan.type == Engine::FieldType::Vec4 || chan.fieldName.find("color") != std::string::npos) {
+                    ImGui::SetNextItemWidth(250.0f);
+                    ImGui::ColorEdit4("##kcolor", &key.value.x);
+                } else {
+                    ImGui::SetNextItemWidth(250.0f);
+                    ImGui::DragFloat4("##kvec4", &key.value.x, 0.05f);
+                }
+
+                // Col 3: Actions
+                ImGui::TableSetColumnIndex(3);
+                if (ImGui::Button("Del")) {
+                    keyToDelete = k;
+                }
+
+                ImGui::PopID();
+            }
+
+            if (keyToDelete != -1) {
+                chan.keys.erase(chan.keys.begin() + keyToDelete);
                 s_selectedKeyIndex = -1;
             }
-        } else {
-            ImGui::TextDisabled("Select a keyframe diamond in the timeline to inspect/edit its properties.");
+
+            ImGui::EndTable();
         }
     } else {
-        ImGui::TextDisabled("Select a property track and keyframe diamond in the timeline to inspect/edit its properties.");
+        ImGui::TextDisabled("Select a property track in the list above to view and edit all its keyframes.");
     }
 
     ImGui::End();
@@ -2871,6 +3096,8 @@ void EditorUI::drawAnimatorControllerWindow() {
     static Engine::NodeGraph s_ctrlGraph;
     static uint32_t          s_lastBuiltEntityId = 0;
     static size_t            s_lastStateCount = 0;
+    static size_t            s_lastTransitionCount = 0;
+    static std::string       s_lastCurrentState = "";
     static std::unordered_map<std::string, ImVec2> s_statePositions;
 
     // Collect clip names for combos
@@ -2904,6 +3131,15 @@ void EditorUI::drawAnimatorControllerWindow() {
     // Rebuild graph when entity or state list changes
     // -----------------------------------------------------------------------
     auto rebuildGraph = [&]() {
+        std::string selectedStateName;
+        if (uint32_t selId = s_ctrlGraph.getSelectedNodeId()) {
+            if (Engine::Node* selNode = s_ctrlGraph.findNode(selId)) {
+                if (selNode->userData) {
+                    selectedStateName = static_cast<AnimationState*>(selNode->userData)->name;
+                }
+            }
+        }
+
         s_ctrlGraph.clear();
 
 
@@ -3365,6 +3601,22 @@ void EditorUI::drawAnimatorControllerWindow() {
             stateNodeIds.push_back(nid);
         }
 
+        // Restore previous selection or select newly created state
+        uint32_t restoreSelId = 0;
+        for (uint32_t nid : stateNodeIds) {
+            if (Engine::Node* n = s_ctrlGraph.findNode(nid)) {
+                if (n->userData && static_cast<AnimationState*>(n->userData)->name == selectedStateName) {
+                    restoreSelId = nid;
+                    break;
+                }
+            }
+        }
+        if (restoreSelId != 0) {
+            s_ctrlGraph.setSelectedNodeId(restoreSelId);
+        } else if (!stateNodeIds.empty()) {
+            s_ctrlGraph.setSelectedNodeId(stateNodeIds.back());
+        }
+
         // -----------------------------------------------------------------------
         // Spawn links for existing transitions
         // -----------------------------------------------------------------------
@@ -3425,7 +3677,7 @@ void EditorUI::drawAnimatorControllerWindow() {
         // -----------------------------------------------------------------------
         // Register link created/deleted callbacks
         // -----------------------------------------------------------------------
-        s_ctrlGraph.onLinkCreated = [controller, &stateInfos, anyId, entryId](uint32_t fromPin, uint32_t toPin) {
+        s_ctrlGraph.onLinkCreated = [controller, &stateInfos, anyId, entryId, this](uint32_t fromPin, uint32_t toPin) {
             // Identify from/to state names from pin -> node -> state
             auto resolveStateName = [&](uint32_t pinId, bool isOutput) -> std::string {
                 Engine::NodePin* p = s_ctrlGraph.findPin(pinId);
@@ -3440,7 +3692,14 @@ void EditorUI::drawAnimatorControllerWindow() {
 
             std::string from = resolveStateName(fromPin, true);
             std::string to   = resolveStateName(toPin,  false);
-            if (from.empty() || to.empty() || from == "__Entry__") return;
+            if (from.empty() || to.empty()) return;
+
+            if (from == "__Entry__") {
+                controller->currentState = to;
+                controller->currentStateTime = 0.0f;
+                statusMessage = "Set default active state to '" + to + "'.";
+                return;
+            }
 
             // Check not a duplicate
             for (const auto& t : controller->transitions)
@@ -3453,7 +3712,7 @@ void EditorUI::drawAnimatorControllerWindow() {
             controller->transitions.push_back(newTrans);
         };
 
-        s_ctrlGraph.onLinkDeleted = [controller, anyId, entryId](uint32_t fromPin, uint32_t toPin) {
+        s_ctrlGraph.onLinkDeleted = [controller, anyId, entryId, this](uint32_t fromPin, uint32_t toPin) {
             auto resolveStateName = [&](uint32_t pinId) -> std::string {
                 Engine::NodePin* p = s_ctrlGraph.findPin(pinId);
                 if (!p) return "";
@@ -3467,6 +3726,15 @@ void EditorUI::drawAnimatorControllerWindow() {
 
             std::string from = resolveStateName(fromPin);
             std::string to   = resolveStateName(toPin);
+
+            if (from == "__Entry__") {
+                if (controller->currentState == to) {
+                    controller->currentState.clear();
+                    statusMessage = "Cleared default active state.";
+                }
+                return;
+            }
+
             controller->transitions.erase(
                 std::remove_if(controller->transitions.begin(), controller->transitions.end(),
                     [&](const AnimationTransition& t) {
@@ -3559,14 +3827,31 @@ void EditorUI::drawAnimatorControllerWindow() {
             }
         };
 
-        s_lastBuiltEntityId = selectedEntity.getId();
+        // When a node is created via right-click context menu on canvas -> add AnimationState to controller
+        s_ctrlGraph.onNodeCreated = [controller, this](uint32_t nodeId, const std::string& typeName, const ImVec2& spawnPos) {
+            if (typeName == "CtrlState" || typeName == "CtrlBlendTree") {
+                bool isBT = (typeName == "CtrlBlendTree");
+                AnimationState newState;
+                newState.name = (isBT ? "Blend Tree " : "New State ") + std::to_string(controller->states.size() + 1);
+                newState.isBlendTree = isBT;
+                controller->states.push_back(newState);
+                s_statePositions[newState.name] = spawnPos;
+                s_lastStateCount = (size_t)-1; // Force graph rebuild so node userData is bound to state
+                statusMessage = "Created new " + std::string(isBT ? "Blend Tree" : "State") + " node.";
+            }
+        };
 
-        s_lastStateCount    = controller->states.size();
+        s_lastBuiltEntityId    = selectedEntity.getId();
+        s_lastStateCount       = controller->states.size();
+        s_lastTransitionCount  = controller->transitions.size();
+        s_lastCurrentState     = controller->currentState;
     };
 
-    // Rebuild when entity changed or state count changed
-    if (s_lastBuiltEntityId != selectedEntity.getId() ||
-        s_lastStateCount    != controller->states.size()) {
+    // Rebuild when entity, state list, transitions, or default state changes
+    if (s_lastBuiltEntityId    != selectedEntity.getId() ||
+        s_lastStateCount       != controller->states.size() ||
+        s_lastTransitionCount  != controller->transitions.size() ||
+        s_lastCurrentState     != controller->currentState) {
         rebuildGraph();
     }
 
@@ -3626,6 +3911,9 @@ void EditorUI::drawAnimatorControllerWindow() {
     }
 
     ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Checkbox("Preview Mode", &animator->isPreviewing);
+
     if (!controller->currentState.empty()) {
         ImGui::TextDisabled("Active State:");
         ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(100, 220, 100, 255));

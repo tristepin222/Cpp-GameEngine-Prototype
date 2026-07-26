@@ -48,7 +48,7 @@ struct ENGINE_API AudioSourceComponent {
 };
 
 
-REGISTER_COMPONENT(AudioSourceComponent, "Audio");
+REGISTER_COMPONENT(AudioSourceComponent, "Audio/Audio Source");
 
 
 

@@ -43,7 +43,7 @@ struct ENGINE_API ColliderComponent {
 };
 
 
-REGISTER_COMPONENT(ColliderComponent, "Physics");
+REGISTER_COMPONENT(ColliderComponent, "Physics/Collider");
 
 
 

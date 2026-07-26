@@ -65,7 +65,7 @@ struct ENGINE_API RigidBodyComponent {
 };
 
 
-REGISTER_COMPONENT(RigidBodyComponent, "Physics");
+REGISTER_COMPONENT(RigidBodyComponent, "Physics/Rigid Body");
 
 
 

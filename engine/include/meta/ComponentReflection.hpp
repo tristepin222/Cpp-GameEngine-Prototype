@@ -39,12 +39,21 @@ namespace Engine {
     /**
      * @struct ComponentReflection
      * @brief Reflection metadata and ECS callbacks for a component.
+     *
+     * The `menuPath` field drives the "Add Component" popup hierarchy.
+     * It is in the form "Category/Display Name" — for example:
+     *   "Rendering & Lights/Sprite Renderer"
+     * If `displayName` is empty the editor derives one from `name` at render time.
      */
     struct ComponentReflection {
+        /** @brief Internal component name (derived from type, e.g. "SpriteRenderer"). */
         std::string name;
+        /** @brief Top-level menu group shown in "Add Component" (e.g. "Rendering & Lights"). */
         std::string category = "General";
+        /** @brief Human-readable label inside the category submenu (e.g. "Sprite Renderer").
+         *         If empty the editor derives it from `name`. */
+        std::string displayName;
         std::vector<ComponentField> fields;
-
 
         // Lifecycle callbacks
         std::function<void(Registry&, Entity)> add;
@@ -102,11 +111,17 @@ namespace Engine {
 
 /**
  * @brief Unity-style 1-line macro for auto-registering custom components into the engine.
- * Automatically adds the component to "+ Add Component" menus, Inspector window, and JSON save/load.
- * Example:
- *   REGISTER_COMPONENT(HealthComponent, "Gameplay");
+ *
+ * The second argument is a **menu path** of the form "Category/Display Name".
+ * Both category and display name are used to build the hierarchical "Add Component" popup
+ * automatically — no manual editor code is required.
+ *
+ * Examples:
+ *   REGISTER_COMPONENT(HealthComponent, "Gameplay/Health");
+ *   REGISTER_COMPONENT(AudioSourceComponent, "Audio/Audio Source");
+ *   REGISTER_COMPONENT(SomeComp, "Rendering & Lights");  // plain category, display name auto-derived
  */
-#define REGISTER_COMPONENT_EXPAND(Type, CategoryName, Counter) \
+#define REGISTER_COMPONENT_EXPAND(Type, MenuPath, Counter) \
     namespace { \
         struct AutoRegisterComp_##Counter { \
             AutoRegisterComp_##Counter() { \
@@ -117,7 +132,16 @@ namespace Engine {
                 if (refl.name.size() > 9 && refl.name.rfind("Component") == refl.name.size() - 9) { \
                     refl.name = refl.name.substr(0, refl.name.size() - 9); \
                 } \
-                refl.category = CategoryName; \
+                /* Parse "Category/Display Name" path */ \
+                std::string _path = MenuPath; \
+                size_t _slash = _path.rfind('/'); \
+                if (_slash != std::string::npos) { \
+                    refl.category    = _path.substr(0, _slash); \
+                    refl.displayName = _path.substr(_slash + 1); \
+                } else { \
+                    refl.category    = _path; \
+                    refl.displayName = ""; /* derived from name at render time */ \
+                } \
                 refl.add = [](Registry& reg, Entity e) { reg.emplace<Type>(e, Type{}); }; \
                 refl.has = [](Registry& reg, Entity e) { return reg.has<Type>(e); }; \
                 refl.remove = [](Registry& reg, Entity e) { reg.remove<Type>(e); }; \
@@ -128,10 +152,10 @@ namespace Engine {
         static AutoRegisterComp_##Counter global_autoRegComp_##Counter; \
     }
 
-#define REGISTER_COMPONENT_CONCAT(Type, CategoryName, Counter) REGISTER_COMPONENT_EXPAND(Type, CategoryName, Counter)
-#define REGISTER_COMPONENT(Type, CategoryName) REGISTER_COMPONENT_CONCAT(Type, CategoryName, __COUNTER__)
+#define REGISTER_COMPONENT_CONCAT(Type, MenuPath, Counter) REGISTER_COMPONENT_EXPAND(Type, MenuPath, Counter)
+#define REGISTER_COMPONENT(Type, MenuPath) REGISTER_COMPONENT_CONCAT(Type, MenuPath, __COUNTER__)
 
-#define REFLECT_COMPONENT_EXPAND(Type, CategoryName, Counter, InitFunc) \
+#define REFLECT_COMPONENT_EXPAND(Type, MenuPath, Counter, InitFunc) \
     namespace { \
         struct AutoRegisterComp_##Counter { \
             AutoRegisterComp_##Counter() { \
@@ -142,7 +166,15 @@ namespace Engine {
                 if (refl.name.size() > 9 && refl.name.rfind("Component") == refl.name.size() - 9) { \
                     refl.name = refl.name.substr(0, refl.name.size() - 9); \
                 } \
-                refl.category = CategoryName; \
+                std::string _path = MenuPath; \
+                size_t _slash = _path.rfind('/'); \
+                if (_slash != std::string::npos) { \
+                    refl.category    = _path.substr(0, _slash); \
+                    refl.displayName = _path.substr(_slash + 1); \
+                } else { \
+                    refl.category    = _path; \
+                    refl.displayName = ""; \
+                } \
                 refl.add = [](Registry& reg, Entity e) { reg.emplace<Type>(e, Type{}); }; \
                 refl.has = [](Registry& reg, Entity e) { return reg.has<Type>(e); }; \
                 refl.remove = [](Registry& reg, Entity e) { reg.remove<Type>(e); }; \
@@ -155,8 +187,8 @@ namespace Engine {
         static AutoRegisterComp_##Counter global_autoRegComp_##Counter; \
     }
 
-#define REFLECT_COMPONENT_CONCAT(Type, CategoryName, Counter, InitFunc) REFLECT_COMPONENT_EXPAND(Type, CategoryName, Counter, InitFunc)
-#define REFLECT_COMPONENT(Type, CategoryName, InitFunc) REFLECT_COMPONENT_CONCAT(Type, CategoryName, __COUNTER__, InitFunc)
+#define REFLECT_COMPONENT_CONCAT(Type, MenuPath, Counter, InitFunc) REFLECT_COMPONENT_EXPAND(Type, MenuPath, Counter, InitFunc)
+#define REFLECT_COMPONENT(Type, MenuPath, InitFunc) REFLECT_COMPONENT_CONCAT(Type, MenuPath, __COUNTER__, InitFunc)
 
 
 

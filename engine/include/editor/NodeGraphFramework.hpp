@@ -179,6 +179,9 @@ namespace Engine {
         /** Fired after a node and all its links are destroyed. */
         std::function<void(uint32_t nodeId)> onNodeDeleted;
 
+        /** Fired after a node is created from the canvas context menu. */
+        std::function<void(uint32_t nodeId, const std::string& typeName, const ImVec2& spawnPos)> onNodeCreated;
+
         /** Fired after a link is successfully created. */
         std::function<void(uint32_t fromPinId, uint32_t toPinId)> onLinkCreated;
 

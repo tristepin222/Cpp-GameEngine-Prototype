@@ -35,6 +35,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "AnimationController";
+        refl.category = "Animation";
+        refl.displayName = "Animation Controller";
         refl.fields = {
             { "currentState", Engine::FieldType::String, offsetof(AnimationControllerComponent, currentState) }
         };
@@ -47,9 +49,12 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "Animator";
+        refl.category = "Animation";
+        refl.displayName = "Animator";
         refl.fields = {
             { "playbackSpeed", Engine::FieldType::Float, offsetof(AnimatorComponent, playbackSpeed) },
             { "loop", Engine::FieldType::Bool, offsetof(AnimatorComponent, loop) },
+            { "isPreviewing", Engine::FieldType::Bool, offsetof(AnimatorComponent, isPreviewing) },
             { "loadedAnimPath", Engine::FieldType::String, offsetof(AnimatorComponent, loadedAnimPath) }
         };
         refl.add = [](Registry& reg, Entity e) { reg.emplace<AnimatorComponent>(e, AnimatorComponent{}); };
@@ -61,6 +66,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "AudioListener";
+        refl.category = "General";
+        refl.displayName = "AudioListener";
         refl.fields = {
             { "active", Engine::FieldType::Bool, offsetof(AudioListenerComponent, active) }
         };
@@ -73,6 +80,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "AudioSource";
+        refl.category = "General";
+        refl.displayName = "AudioSource";
         refl.fields = {
             { "clipPath", Engine::FieldType::String, offsetof(AudioSourceComponent, clipPath) },
             { "volume", Engine::FieldType::Float, offsetof(AudioSourceComponent, volume) },
@@ -92,6 +101,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "Camera";
+        refl.category = "General";
+        refl.displayName = "Camera";
         refl.fields = {
             { "isOrthographic", Engine::FieldType::Bool, offsetof(Camera, isOrthographic) },
             { "orthoSize", Engine::FieldType::Float, offsetof(Camera, orthoSize) },
@@ -109,6 +120,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "CinemachineVirtualCamera";
+        refl.category = "General";
+        refl.displayName = "CinemachineVirtualCamera";
         refl.fields = {
             { "followTargetName", Engine::FieldType::String, offsetof(CinemachineVirtualCamera, followTargetName) },
             { "lookAtTargetName", Engine::FieldType::String, offsetof(CinemachineVirtualCamera, lookAtTargetName) },
@@ -136,6 +149,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "Collider";
+        refl.category = "General";
+        refl.displayName = "Collider";
         refl.fields = {
             { "radius", Engine::FieldType::Float, offsetof(ColliderComponent, radius) },
             { "height", Engine::FieldType::Float, offsetof(ColliderComponent, height) },
@@ -151,6 +166,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "Grid";
+        refl.category = "General";
+        refl.displayName = "Grid";
         refl.fields = {
             { "colorID", Engine::FieldType::Int, offsetof(Grid, colorID) },
             { "meshID", Engine::FieldType::Int, offsetof(Grid, meshID) },
@@ -167,6 +184,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "IKSolver";
+        refl.category = "General";
+        refl.displayName = "IKSolver";
         refl.fields = {
             { "startJointName", Engine::FieldType::String, offsetof(IKSolverComponent, startJointName) },
             { "middleJointName", Engine::FieldType::String, offsetof(IKSolverComponent, middleJointName) },
@@ -187,6 +206,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "Input";
+        refl.category = "General";
+        refl.displayName = "Input";
         refl.fields = {
             { "movement", Engine::FieldType::Vec3, offsetof(InputComponent, movement) },
             { "look", Engine::FieldType::Vec2, offsetof(InputComponent, look) }
@@ -200,6 +221,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "Light";
+        refl.category = "General";
+        refl.displayName = "Light";
         refl.fields = {
             { "color", Engine::FieldType::Vec3, offsetof(Engine::LightComponent, color) },
             { "intensity", Engine::FieldType::Float, offsetof(Engine::LightComponent, intensity) },
@@ -214,6 +237,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "Material";
+        refl.category = "Rendering & Lights";
+        refl.displayName = "Material";
         refl.fields = {
             { "color", Engine::FieldType::Vec4, offsetof(Material, color) },
             { "texturePath", Engine::FieldType::String, offsetof(Material, texturePath) },
@@ -232,6 +257,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "PlayerController";
+        refl.category = "General";
+        refl.displayName = "PlayerController";
         refl.fields = {
             { "speed", Engine::FieldType::Float, offsetof(PlayerControllerComponent, speed) },
             { "jumpForce", Engine::FieldType::Float, offsetof(PlayerControllerComponent, jumpForce) },
@@ -247,6 +274,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "Renderable";
+        refl.category = "General";
+        refl.displayName = "Renderable";
         refl.fields = {
             { "meshID", Engine::FieldType::Int, offsetof(Renderable, meshID) },
             { "materialID", Engine::FieldType::Int, offsetof(Renderable, materialID) }
@@ -260,6 +289,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "RigidBody";
+        refl.category = "General";
+        refl.displayName = "RigidBody";
         refl.fields = {
             { "mass", Engine::FieldType::Float, offsetof(RigidBodyComponent, mass) },
             { "velocity", Engine::FieldType::Vec3, offsetof(RigidBodyComponent, velocity) },
@@ -288,6 +319,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "Skeleton";
+        refl.category = "General";
+        refl.displayName = "Skeleton";
         refl.fields = {
         };
         refl.add = [](Registry& reg, Entity e) { reg.emplace<SkeletonComponent>(e, SkeletonComponent{}); };
@@ -299,6 +332,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "SpriteRenderer";
+        refl.category = "Rendering & Lights";
+        refl.displayName = "Sprite Renderer";
         refl.fields = {
             { "texturePath", Engine::FieldType::String, offsetof(Engine::SpriteRenderer, texturePath) },
             { "color", Engine::FieldType::Vec4, offsetof(Engine::SpriteRenderer, color) },
@@ -315,6 +350,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "Tilemap";
+        refl.category = "General";
+        refl.displayName = "Tilemap";
         refl.fields = {
             { "width", Engine::FieldType::Int, offsetof(Engine::TilemapComponent, width) },
             { "height", Engine::FieldType::Int, offsetof(Engine::TilemapComponent, height) },
@@ -330,6 +367,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "Transform";
+        refl.category = "General";
+        refl.displayName = "Transform";
         refl.fields = {
             { "position", Engine::FieldType::Vec3, offsetof(Transform, position) },
             { "scale", Engine::FieldType::Vec3, offsetof(Transform, scale) }
@@ -343,6 +382,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "Canvas";
+        refl.category = "General";
+        refl.displayName = "Canvas";
         refl.fields = {
             { "isScreenSpace", Engine::FieldType::Bool, offsetof(Engine::CanvasComponent, isScreenSpace) }
         };
@@ -355,6 +396,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "RectTransform";
+        refl.category = "General";
+        refl.displayName = "RectTransform";
         refl.fields = {
             { "anchorMin", Engine::FieldType::Vec2, offsetof(Engine::RectTransform, anchorMin) },
             { "anchorMax", Engine::FieldType::Vec2, offsetof(Engine::RectTransform, anchorMax) },
@@ -371,6 +414,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "UIPanel";
+        refl.category = "General";
+        refl.displayName = "UIPanel";
         refl.fields = {
             { "color", Engine::FieldType::Vec4, offsetof(Engine::UIPanelComponent, color) },
             { "borderRadius", Engine::FieldType::Float, offsetof(Engine::UIPanelComponent, borderRadius) }
@@ -384,6 +429,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "UIImage";
+        refl.category = "General";
+        refl.displayName = "UIImage";
         refl.fields = {
             { "texturePath", Engine::FieldType::String, offsetof(Engine::UIImageComponent, texturePath) },
             { "tintColor", Engine::FieldType::Vec4, offsetof(Engine::UIImageComponent, tintColor) }
@@ -397,6 +444,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "UIText";
+        refl.category = "General";
+        refl.displayName = "UIText";
         refl.fields = {
             { "text", Engine::FieldType::String, offsetof(Engine::UITextComponent, text) },
             { "color", Engine::FieldType::Vec4, offsetof(Engine::UITextComponent, color) },
@@ -412,6 +461,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "UIButton";
+        refl.category = "General";
+        refl.displayName = "UIButton";
         refl.fields = {
             { "label", Engine::FieldType::String, offsetof(Engine::UIButtonComponent, label) },
             { "normalColor", Engine::FieldType::Vec4, offsetof(Engine::UIButtonComponent, normalColor) },
@@ -429,6 +480,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "UIGridLayoutGroup";
+        refl.category = "General";
+        refl.displayName = "UIGridLayoutGroup";
         refl.fields = {
             { "cellSize", Engine::FieldType::Vec2, offsetof(Engine::UIGridLayoutGroupComponent, cellSize) },
             { "spacing", Engine::FieldType::Vec2, offsetof(Engine::UIGridLayoutGroupComponent, spacing) },
@@ -443,6 +496,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "UILayoutGroup";
+        refl.category = "General";
+        refl.displayName = "UILayoutGroup";
         refl.fields = {
             { "isVertical", Engine::FieldType::Bool, offsetof(Engine::UILayoutGroupComponent, isVertical) },
             { "spacing", Engine::FieldType::Float, offsetof(Engine::UILayoutGroupComponent, spacing) },
@@ -457,6 +512,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "UIScrollRect";
+        refl.category = "General";
+        refl.displayName = "UIScrollRect";
         refl.fields = {
             { "horizontal", Engine::FieldType::Bool, offsetof(Engine::UIScrollRectComponent, horizontal) },
             { "vertical", Engine::FieldType::Bool, offsetof(Engine::UIScrollRectComponent, vertical) },
@@ -472,6 +529,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "UISlider";
+        refl.category = "General";
+        refl.displayName = "UISlider";
         refl.fields = {
             { "value", Engine::FieldType::Float, offsetof(Engine::UISliderComponent, value) },
             { "minValue", Engine::FieldType::Float, offsetof(Engine::UISliderComponent, minValue) },
@@ -489,6 +548,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "UIToggle";
+        refl.category = "General";
+        refl.displayName = "UIToggle";
         refl.fields = {
             { "isOn", Engine::FieldType::Bool, offsetof(Engine::UIToggleComponent, isOn) },
             { "label", Engine::FieldType::String, offsetof(Engine::UIToggleComponent, label) },

@@ -88,7 +88,7 @@ struct ENGINE_API Camera {
     }
 };
 
-REGISTER_COMPONENT(Camera, "Rendering & Lights");
+REGISTER_COMPONENT(Camera, "Rendering & Lights/Camera");
 
 
 

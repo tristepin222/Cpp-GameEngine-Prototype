@@ -38,7 +38,7 @@ struct ENGINE_API PlayerControllerComponent {
 };
 
 
-REGISTER_COMPONENT(PlayerControllerComponent, "Gameplay");
+REGISTER_COMPONENT(PlayerControllerComponent, "Gameplay/Player Controller");
 
 
 

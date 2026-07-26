@@ -85,6 +85,6 @@ struct AnimationControllerComponent {
 };
 
 #include "meta/ComponentReflection.hpp"
-REGISTER_COMPONENT(AnimationControllerComponent, "Animation");
+REGISTER_COMPONENT(AnimationControllerComponent, "Animation/Animation Controller");
 
 
