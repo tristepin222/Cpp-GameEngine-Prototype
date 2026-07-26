@@ -50,7 +50,13 @@ static bool registerBuiltinComponents() {
         [](Registry& registry, Entity entity, std::ostream& out, int indent) {
             if (auto* camera = registry.get<Camera>(entity)) {
                 out << ",\n" << JSONUtils::indent(indent) << "\"entityType\": " << JSONUtils::quote("Camera") << ",\n";
-                out << JSONUtils::indent(indent) << "\"fov\": " << camera->fov;
+                out << JSONUtils::indent(indent) << "\"fov\": " << camera->fov << ",\n";
+                out << JSONUtils::indent(indent) << "\"isOrthographic\": " << (camera->isOrthographic ? "true" : "false") << ",\n";
+                out << JSONUtils::indent(indent) << "\"orthoSize\": " << camera->orthoSize << ",\n";
+                out << JSONUtils::indent(indent) << "\"nearPlane\": " << camera->nearPlane << ",\n";
+                out << JSONUtils::indent(indent) << "\"farPlane\": " << camera->farPlane << ",\n";
+                out << JSONUtils::indent(indent) << "\"moveSpeed\": " << camera->moveSpeed << ",\n";
+                out << JSONUtils::indent(indent) << "\"mouseSensitivity\": " << camera->mouseSensitivity;
             }
         },
         [](Registry& registry, VulkanRenderer& renderer, Entity entity, const std::string& json) {
@@ -58,16 +64,35 @@ static bool registerBuiltinComponents() {
             bool hasFov = JSONUtils::extractFloatValue(json, "fov", fov);
             std::string type = JSONUtils::extractStringValue(json, "entityType");
             
-            if (type == "Camera" || hasFov) {
-                registry.emplace<Camera>(entity, Camera{});
-                registry.emplace<InputComponent>(entity, InputComponent{});
+            if (type == "Camera" || hasFov || json.find("\"isOrthographic\"") != std::string::npos) {
+                if (!registry.has<Camera>(entity)) {
+                    registry.emplace<Camera>(entity, Camera{});
+                }
+                if (!registry.has<InputComponent>(entity)) {
+                    registry.emplace<InputComponent>(entity, InputComponent{});
+                }
                 
                 if (Camera* camera = registry.get<Camera>(entity)) {
                     camera->fov = fov;
+
+                    if (json.find("\"isOrthographic\": true") != std::string::npos || json.find("\"isOrthographic\":true") != std::string::npos) {
+                        camera->isOrthographic = true;
+                    } else if (json.find("\"isOrthographic\": false") != std::string::npos || json.find("\"isOrthographic\":false") != std::string::npos) {
+                        camera->isOrthographic = false;
+                    }
+
+                    JSONUtils::extractFloatValue(json, "orthoSize", camera->orthoSize);
+                    JSONUtils::extractFloatValue(json, "nearPlane", camera->nearPlane);
+                    JSONUtils::extractFloatValue(json, "farPlane", camera->farPlane);
+                    JSONUtils::extractFloatValue(json, "moveSpeed", camera->moveSpeed);
+                    JSONUtils::extractFloatValue(json, "mouseSensitivity", camera->mouseSensitivity);
+
                     int width = 0;
                     int height = 0;
                     glfwGetWindowSize(renderer.getWindow(), &width, &height);
-                    camera->aspect = static_cast<float>(width) / static_cast<float>(height);
+                    if (height > 0) {
+                        camera->aspect = static_cast<float>(width) / static_cast<float>(height);
+                    }
                     
                     if (Transform* transform = registry.get<Transform>(entity)) {
                         renderer.setActiveCamera(camera->projection(), transform->position, camera->view(*transform));
@@ -76,6 +101,7 @@ static bool registerBuiltinComponents() {
             }
         }
     );
+
 
     // 2. Grid Component
     reg.registerComponent(

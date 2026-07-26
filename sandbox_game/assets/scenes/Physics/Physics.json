@@ -50,8 +50,8 @@
           "orbitPitch": 0,
           "cameraYaw": 0,
           "cameraPitch": 0,
-          "followTarget": 9986,
-          "lookAtTarget": 9986,
+          "followTarget": 9996,
+          "lookAtTarget": 9996,
           "followTargetName": "Player",
           "lookAtTargetName": "Player",
           "lockToBone": "Head",
@@ -309,6 +309,25 @@
 "Transform": {
             "position": [-3.70081, 1.1349, -2.03862],
             "scale": [1, 1, 1]
+          },
+"RigidBody": {
+            "mass": 1,
+            "velocity": [0, 0, 0],
+            "acceleration": [0, 0, 0],
+            "force": [0, 0, 0],
+            "gravityScale": 1,
+            "restitution": 0.5,
+            "friction": 0.3,
+            "angularVelocity": [0, 0, 0],
+            "torque": [0, 0, 0],
+            "angularDrag": 0.5,
+            "linearDrag": 0,
+            "freezePositionX": 0.0,
+            "freezePositionY": 0.0,
+            "freezePositionZ": 0.0,
+            "freezeRotationX": 0.0,
+            "freezeRotationY": 0.0,
+            "freezeRotationZ": 0.0
           }
       }
     },
@@ -517,6 +536,28 @@
 "UIPanel": {
             "color": [0.15, 0.15, 0.15, 0.8],
             "borderRadius": 4
+          }
+      }
+    },
+    {
+      "name": "Camera 1",
+      "transform": {
+        "position": [1.05, 2.8, 42.5],
+        "rotation": [0, -90, 0],
+        "scale": [1, 1, 1]
+      },
+      "components": {
+        "Camera": {
+"entityType": "Camera",
+          "fov": 50.9
+        },
+"Transform": {
+            "position": [1.05, 2.8, 42.5],
+            "scale": [1, 1, 1]
+          },
+"Input": {
+            "movement": [0, 0, 0],
+            "look": [0, 0]
           }
       }
     }

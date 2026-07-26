@@ -104,8 +104,9 @@ The project is structured with a clean architectural separation between the **En
 Just like in Unity, you can package a standalone, redistributable build of your game directly within the editor's interface:
 1. Open your project in the editor:
    ```bash
-   .\sdk\bin\editor.exe sandbox_game
+   .\sdk\editor.exe sandbox_game
    ```
+
 2. Open the **Build Settings** panel in the editor.
 3. Set your target **Build Output Path** (e.g. `sandbox_game/build/Test/`).
 4. Click **Build Game**. The build system will package:

@@ -45,6 +45,7 @@ echo [Engine Build] Assembling SDK at ./%SDK_DIR%/ ...
 
 REM Create SDK directory structure
 if exist %SDK_DIR% rmdir /s /q %SDK_DIR%
+mkdir %SDK_DIR%
 mkdir %SDK_DIR%\bin
 mkdir %SDK_DIR%\lib
 mkdir %SDK_DIR%\include
@@ -55,13 +56,16 @@ mkdir %SDK_DIR%\cmake
 mkdir %SDK_DIR%\shaders
 
 REM Copy engine DLL and import lib
-copy /Y %BUILD_DIR%\engine\%CONFIG%\engine.dll %SDK_DIR%\bin\
+copy /Y %BUILD_DIR%\engine\%CONFIG%\engine.dll %SDK_DIR%\
 copy /Y %BUILD_DIR%\engine\%CONFIG%\engine.lib %SDK_DIR%\lib\
 
-REM Copy editor, game_runtime, and reflection_generator executables
-copy /Y %BUILD_DIR%\engine\%CONFIG%\editor.exe               %SDK_DIR%\bin\
+REM Copy editor executable to SDK root for easy access
+copy /Y %BUILD_DIR%\engine\%CONFIG%\editor.exe %SDK_DIR%\
+
+REM Copy internal tools to sdk/bin/
 copy /Y %BUILD_DIR%\engine\%CONFIG%\game_runtime.exe         %SDK_DIR%\bin\
 copy /Y %BUILD_DIR%\engine\%CONFIG%\reflection_generator.exe %SDK_DIR%\bin\
+
 
 REM Copy pre-built static libs (imgui, imguizmo, glfw)
 copy /Y %BUILD_DIR%\engine\%CONFIG%\imgui.lib    %SDK_DIR%\lib\
@@ -90,28 +94,29 @@ xcopy /E /Y /I %BUILD_DIR%\_deps\glm-src\glm %SDK_DIR%\include\glm\
 REM Copy compiled shaders
 xcopy /E /Y /I %BUILD_DIR%\shaders %SDK_DIR%\shaders\
 
-REM Copy plugin DLLs to sdk/bin/plugins/ (cinemachine etc.)
+REM Copy plugin DLLs to sdk/plugins/ (cinemachine etc.)
 if exist %BUILD_DIR%\plugins\cinemachine\%CONFIG%\cinemachine_plugin.dll (
-    mkdir %SDK_DIR%\bin\plugins
-    copy /Y %BUILD_DIR%\plugins\cinemachine\%CONFIG%\cinemachine_plugin.dll %SDK_DIR%\bin\plugins\
+    mkdir %SDK_DIR%\plugins
+    copy /Y %BUILD_DIR%\plugins\cinemachine\%CONFIG%\cinemachine_plugin.dll %SDK_DIR%\plugins\
 )
 
 REM Copy EngineConfig.cmake (for standalone game CMake projects)
 copy /Y engine\cmake\EngineConfig.cmake %SDK_DIR%\cmake\
 
 REM Copy the game packaging script next to editor.exe
-copy /Y build_game_package.bat %SDK_DIR%\bin\
+copy /Y build_game_package.bat %SDK_DIR%\
 
 echo.
 echo [SUCCESS] Engine SDK assembled at: ./%SDK_DIR%/
 echo.
-echo   sdk/bin/editor.exe         <- Run this to open the editor
-echo   sdk/bin/game_runtime.exe   <- Headless runtime (packaged as game.exe on Build)
+echo   sdk/editor.exe         <- Run this to open the editor
+echo   sdk/game_runtime.exe   <- Headless runtime (packaged as game.exe on Build)
 echo.
 echo   To open your project:
 echo     cd sandbox_game
-echo     ..\sdk\bin\editor.exe
+echo     ..\sdk\editor.exe
 echo.
+
 
 endlocal
 exit /b 0

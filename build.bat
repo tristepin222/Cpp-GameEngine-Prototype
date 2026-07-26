@@ -56,7 +56,7 @@ echo [SUCCESS] Engine built successfully.
 echo.
 echo   To open the sandbox project in the editor:
 echo     cd sandbox_game
-echo     ..\sdk\bin\editor.exe
+echo     ..\sdk\editor.exe
 echo.
 
 :: Run check — open editor with sandbox_game as the project
@@ -66,11 +66,12 @@ if "%2"=="--run" set RUN_EDITOR=1
 
 if !RUN_EDITOR! equ 1 (
     echo [INFO] Launching editor with sandbox_game project...
-    if exist sdk\bin\editor.exe (
-        start "" "sdk\bin\editor.exe" "sandbox_game"
+    if exist sdk\editor.exe (
+        start "" "sdk\editor.exe" "sandbox_game"
     ) else (
-        echo [ERROR] editor.exe not found in sdk\bin\. Build may have failed.
+        echo [ERROR] editor.exe not found in sdk\. Build may have failed.
     )
 )
 
 endlocal
+

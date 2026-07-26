@@ -156,32 +156,45 @@ endif()
 
 add_custom_command(
     TARGET engine POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:engine> "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/bin/"
-    COMMENT "Copying engine.dll to SDK bin directory..."
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:engine> "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/"
+    COMMENT "Copying engine.dll to SDK root directory..."
 )
 
 add_custom_command(
     TARGET editor POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:editor> "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/bin/"
-    COMMENT "Copying editor.exe to SDK bin directory..."
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:editor> "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/"
+    COMMENT "Copying editor.exe to SDK root directory..."
 )
 
 
-# --- Headless Game Runtime Executable (no editor UI) ---
+# --- Headless Game Runtime Executable (no editor UI template) ---
 add_executable(game_runtime runtime/main.cpp)
 target_link_libraries(game_runtime PRIVATE engine)
 set_target_properties(game_runtime PROPERTIES OUTPUT_NAME "game_runtime")
 target_include_directories(game_runtime PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+add_custom_command(
+    TARGET game_runtime POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/bin/"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:game_runtime> "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/bin/"
+    COMMENT "Copying game_runtime template to SDK bin directory..."
+)
 
 add_executable(reflection_generator src/tools/reflection_generator.cpp)
 set_target_properties(reflection_generator PROPERTIES OUTPUT_NAME "reflection_generator")
 
 add_custom_command(
     TARGET reflection_generator POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:reflection_generator> "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/bin/"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/bin/"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:reflection_generator> "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/bin/"
     COMMAND $<TARGET_FILE:reflection_generator> "${CMAKE_CURRENT_SOURCE_DIR}/include/ecs/components" "${CMAKE_CURRENT_SOURCE_DIR}/src/meta/engine_generated_reflection.cpp"
     COMMENT "Copying reflection_generator to SDK bin and generating engine reflection..."
 )
+
+
+
 
 
 

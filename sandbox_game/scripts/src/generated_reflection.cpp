@@ -12,10 +12,7 @@
     #define PLUGIN_API extern "C"
 #endif
 
-PLUGIN_API void initPlugin(PluginContext* context) {
-    ImGui::SetCurrentContext(context->imguiContext);
-
-    // Register PhysgunScript
+PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "PhysgunScript";
@@ -34,6 +31,11 @@ PLUGIN_API void initPlugin(PluginContext* context) {
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<PhysgunScript>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
+}
+
+PLUGIN_API void initPlugin(PluginContext* context) {
+    if (context && context->imguiContext) ImGui::SetCurrentContext(context->imguiContext);
+    registerEngineReflection();
 
     // Register PhysgunSystem
     {

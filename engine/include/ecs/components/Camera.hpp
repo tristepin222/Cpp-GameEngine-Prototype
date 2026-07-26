@@ -58,13 +58,15 @@ struct ENGINE_API Camera {
         if (isOrthographic) {
             float halfWidth = orthoSize * aspect;
             float halfHeight = orthoSize;
-            proj = glm::ortho(-halfWidth, halfWidth, -halfHeight, halfHeight, nearPlane, farPlane);
+            float actualNear = (nearPlane > 0.0f) ? -farPlane : nearPlane;
+            proj = glm::orthoRH_ZO(-halfWidth, halfWidth, -halfHeight, halfHeight, actualNear, farPlane);
         } else {
-            proj = glm::perspective(glm::radians(fov), aspect, nearPlane, farPlane);
+            proj = glm::perspectiveRH_ZO(glm::radians(fov), aspect, nearPlane, farPlane);
         }
         proj[1][1] *= -1; // Vulkan's inverted Y
         return proj;
     }
+
 
 
     /**

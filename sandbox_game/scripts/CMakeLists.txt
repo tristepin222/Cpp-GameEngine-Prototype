@@ -9,11 +9,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Engine REQUIRED PATHS "${CMAKE_CURRENT_SOURCE_DIR}/../../sdk/cmake" NO_DEFAULT_PATH)
 
 # Path to the cross-platform reflection generator host tool inside SDK
-if(WIN32)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../sdk/bin/reflection_generator.exe")
     set(REFLECTION_GENERATOR_EXE "${CMAKE_CURRENT_SOURCE_DIR}/../../sdk/bin/reflection_generator.exe")
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../sdk/reflection_generator.exe")
+    set(REFLECTION_GENERATOR_EXE "${CMAKE_CURRENT_SOURCE_DIR}/../../sdk/reflection_generator.exe")
 else()
-    set(REFLECTION_GENERATOR_EXE "${CMAKE_CURRENT_SOURCE_DIR}/../../sdk/bin/reflection_generator")
+    set(REFLECTION_GENERATOR_EXE "${CMAKE_CURRENT_SOURCE_DIR}/../../sdk/bin/reflection_generator.exe")
 endif()
+
+
 
 set(SCRIPT_PUBLIC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/public")
 set(SCRIPT_PRIVATE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/private")
