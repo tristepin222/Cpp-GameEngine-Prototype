@@ -1397,7 +1397,9 @@ void EditorUI::drawReflectedComponentsEditor() {
             refl.name == "UILayoutGroup" || refl.name == "UILayoutGroupComponent" ||
             refl.name == "UIScrollRect" || refl.name == "UIScrollRectComponent" ||
             refl.name == "UISlider" || refl.name == "UISliderComponent" ||
-            refl.name == "UIToggle" || refl.name == "UIToggleComponent") continue;
+            refl.name == "UIToggle" || refl.name == "UIToggleComponent" ||
+            refl.name == "CinemachineVirtualCamera" || refl.name == "Cinemachine") continue;
+
 
 
 

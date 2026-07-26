@@ -37,6 +37,30 @@
         "scale": [1, 1, 1]
       },
       "components": {
+        "CinemachineVirtualCamera": {
+"entityType": "CinemachineVirtualCamera",
+          "active": true,
+          "priority": 10,
+          "fov": 45,
+          "mode": 0,
+          "mouseOrbit": true,
+          "mouseLook": true,
+          "orbitSensitivity": 0.1,
+          "orbitYaw": 0,
+          "orbitPitch": 0,
+          "cameraYaw": 0,
+          "cameraPitch": 0,
+          "followTarget": 9986,
+          "lookAtTarget": 9986,
+          "followTargetName": "Player",
+          "lookAtTargetName": "Player",
+          "lockToBone": "Head",
+          "followDamping": 2,
+          "lookAtDamping": 1,
+          "followOffsetX": 0,
+          "followOffsetY": 4,
+          "followOffsetZ": 8
+        },
         "Camera": {
 "entityType": "Camera",
           "fov": 45
@@ -165,6 +189,40 @@
           },
 "Skeleton": {
 
+          },
+"RigidBody": {
+            "mass": 1,
+            "velocity": [0, 0, 0],
+            "acceleration": [0, 0, 0],
+            "force": [0, 0, 0],
+            "gravityScale": 1,
+            "restitution": 0.5,
+            "friction": 0.3,
+            "angularVelocity": [0, 0, 0],
+            "torque": [0, 0, 0],
+            "angularDrag": 0.5,
+            "linearDrag": 0,
+            "freezePositionX": 0.0,
+            "freezePositionY": 0.0,
+            "freezePositionZ": 0.0,
+            "freezeRotationX": 1.0,
+            "freezeRotationY": 0.0,
+            "freezeRotationZ": 1.0
+          },
+"PlayerController": {
+            "speed": 5,
+            "jumpForce": 6,
+            "interactRange": 3,
+            "orientToMovement": 1.0
+          },
+"PhysgunScript": {
+            "Kp": 450,
+            "Kd": 25,
+            "holdDistance": 5,
+            "isHolding": 0.0,
+            "currentHoldDistance": 0,
+            "debugShowRay": 0.0,
+            "originEntity": 2560
           }
       }
     },

@@ -740,9 +740,10 @@ void EditorUI::drawInspectorPanel() {
 
         // Render all reflected components dynamically without needing any explicit per-class code!
         for (const auto& refl : Engine::ComponentReflectionRegistry::getInstance().getReflections()) {
-            if (refl.name == "Material") continue; // Handled with custom shader setup above
+            if (refl.name == "Material" || refl.name == "CinemachineVirtualCamera" || refl.name == "Cinemachine") continue; // Handled with custom plugin setup
             if (!refl.has(registry, selectedEntity)) {
                 if (refl.name == "Transform" || refl.name == "Name" || refl.name == "Hierarchy") continue;
+
 
                 std::string menuName = refl.name;
                 if (menuName == "PlayerController") menuName = "Player Controller";
