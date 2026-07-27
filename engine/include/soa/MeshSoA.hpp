@@ -1,6 +1,6 @@
 #pragma once
 #include <vector>
-#include "../ecs/components/mesh.hpp"
+#include "../ecs/components/Mesh.hpp"
 #include "core/VulkanBuffer.hpp"
 
 /**
