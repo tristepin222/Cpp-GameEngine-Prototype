@@ -7,7 +7,7 @@
 #include <glm/glm.hpp>
 
 #include "core/VulkanDevice.hpp"
-#include "core/VulkanSwapchain.hpp"
+#include "core/VulkanSwapChain.hpp"
 #include "core/VulkanPipeline.hpp"
 #include "core/VulkanBuffer.hpp"
 #include "core/VulkanDescriptors.hpp"
