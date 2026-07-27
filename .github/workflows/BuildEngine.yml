@@ -18,7 +18,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -27,8 +27,9 @@ jobs:
             libvulkan-dev \
             glslc \
             libwayland-dev \
-            wayland-protocols \
             libwayland-bin \
+            wayland-protocols \
+            libxkbcommon-dev \
             libx11-dev \
             libxrandr-dev \
             libxinerama-dev \
