@@ -1,113 +1,51 @@
-name: Build Engine
+name: Build EngineWorkspace
 
 on:
   push:
     branches:
-      - dummy
+      - master
+
+  pull_request:
+    branches:
+      - master
 
 jobs:
   build:
-    runs-on: windows-latest
+    name: Build
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Setup Vulkan SDK
-        uses: humbletim/setup-vulkan-sdk@v1.2.1
-        with:
-          vulkan-query-version: 1.4.341.1
-          vulkan-components: Vulkan-Headers, Vulkan-Loader, SPIRV-Headers, SPIRV-Tools, Glslang
-          vulkan-use-cache: true
-
-      - name: Verify Vulkan SDK
-        shell: pwsh
+      - name: Install dependencies
         run: |
-          Write-Host "VULKAN_SDK = $env:VULKAN_SDK"
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            ninja-build \
+            libvulkan-dev \
+            vulkan-tools \
+            glslc
 
-          if (-not $env:VULKAN_SDK) {
-            Write-Error "VULKAN_SDK environment variable is not set."
-            exit 1
-          }
-
-          $header = Join-Path $env:VULKAN_SDK "Include\vulkan\vulkan.h"
-          $library = Join-Path $env:VULKAN_SDK "Lib\vulkan-1.lib"
-          $glslc = Join-Path $env:VULKAN_SDK "Bin\glslc.exe"
-
-          Write-Host "Header:  $header"
-          Write-Host "Library: $library"
-          Write-Host "GLSLC:   $glslc"
-
-          if (-not (Test-Path $header)) {
-            Write-Error "Vulkan headers not found at $header"
-            exit 1
-          }
-
-          if (-not (Test-Path $library)) {
-            Write-Error "Vulkan library not found at $library"
-            exit 1
-          }
-
-          if (-not (Test-Path $glslc)) {
-            Write-Error "glslc not found at $glslc"
-            exit 1
-          }
-
-          Write-Host "Vulkan SDK verification successful."
-
-          & $glslc --version
-
-      - name: Configure
-        shell: pwsh
+      - name: Configure CMake
         run: |
-          if (Test-Path "build/ci") {
-            Remove-Item -Recurse -Force "build/ci"
-          }
-
-          cmake --preset windows-ci
-
-      - name: Get version
-        shell: pwsh
-        run: |
-          $version = Get-Content "build/ci/CMakeCache.txt" |
-            Select-String "^CMAKE_PROJECT_VERSION:STATIC=" |
-            ForEach-Object {
-              ($_ -split "=")[1].Trim()
-            }
-
-          if (-not $version) {
-            Write-Error "Could not determine project version from CMake."
-            exit 1
-          }
-
-          Write-Host "Project version: $version"
-
-          "VERSION=$version" >> $env:GITHUB_ENV
+          cmake \
+            -S . \
+            -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Build
-        run: cmake --build --preset windows-ci
-
-      - name: Package
-        shell: pwsh
         run: |
-          $package = "EngineWorkspace-v${{ env.VERSION }}.zip"
+          cmake \
+            --build build \
+            --config Release \
+            --parallel
 
-          if (-not (Test-Path "sdk")) {
-            Write-Error "sdk directory does not exist."
-            exit 1
-          }
-
-          Compress-Archive `
-            -Path "sdk\*" `
-            -DestinationPath $package
-
-          Write-Host "Created package: $package"
-
-      - name: Upload artifact
+      - name: Upload compile commands
         uses: actions/upload-artifact@v4
         with:
-          name: "EngineWorkspace-v${{ env.VERSION }}"
-          path: "EngineWorkspace-v${{ env.VERSION }}.zip"
+          name: compile-commands
+          path: build/compile_commands.json
