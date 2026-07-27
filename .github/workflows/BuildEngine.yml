@@ -19,9 +19,9 @@ jobs:
       - name: Setup Vulkan SDK
         uses: humbletim/setup-vulkan-sdk@v1.2.1
         with:
-          version: 1.4.341.1
-          cache: true
-          vulkan-components: Vulkan-Headers;Vulkan-Loader;Glslang
+          vulkan-query-version: 1.4.341.1
+          vulkan-components: Vulkan-Headers, Vulkan-Loader, Glslang
+          vulkan-use-cache: true
 
       - name: Verify Vulkan SDK
         shell: pwsh
@@ -33,60 +33,32 @@ jobs:
             exit 1
           }
 
-          Write-Host ""
-          Write-Host "Vulkan SDK contents:"
-          Get-ChildItem -Path $env:VULKAN_SDK -Recurse -File |
-            Select-Object -First 100 FullName
+          $header = Join-Path $env:VULKAN_SDK "Include\vulkan\vulkan.h"
+          $library = Join-Path $env:VULKAN_SDK "Lib\vulkan-1.lib"
+          $glslc = Join-Path $env:VULKAN_SDK "Bin\glslc.exe"
 
-          Write-Host ""
-          Write-Host "Searching for Vulkan headers..."
-          $header = Get-ChildItem `
-            -Path $env:VULKAN_SDK `
-            -Recurse `
-            -Filter "vulkan.h" |
-            Select-Object -First 1
+          Write-Host "Header:  $header"
+          Write-Host "Library: $library"
+          Write-Host "GLSLC:   $glslc"
 
-          if (-not $header) {
-            Write-Error "vulkan.h was not found in the Vulkan SDK."
+          if (-not (Test-Path $header)) {
+            Write-Error "Vulkan headers not found at $header"
             exit 1
           }
 
-          Write-Host "Found: $($header.FullName)"
-
-          Write-Host ""
-          Write-Host "Searching for Vulkan library..."
-          $library = Get-ChildItem `
-            -Path $env:VULKAN_SDK `
-            -Recurse `
-            -Filter "vulkan-1.lib" |
-            Select-Object -First 1
-
-          if (-not $library) {
-            Write-Error "vulkan-1.lib was not found in the Vulkan SDK."
+          if (-not (Test-Path $library)) {
+            Write-Error "Vulkan library not found at $library"
             exit 1
           }
 
-          Write-Host "Found: $($library.FullName)"
-
-          Write-Host ""
-          Write-Host "Searching for glslc..."
-          $glslc = Get-ChildItem `
-            -Path $env:VULKAN_SDK `
-            -Recurse `
-            -Filter "glslc.exe" |
-            Select-Object -First 1
-
-          if (-not $glslc) {
-            Write-Error "glslc.exe was not found in the Vulkan SDK."
+          if (-not (Test-Path $glslc)) {
+            Write-Error "glslc not found at $glslc"
             exit 1
           }
 
-          Write-Host "Found: $($glslc.FullName)"
-
-          Write-Host ""
           Write-Host "Vulkan SDK verification successful."
 
-          & $glslc.FullName --version
+          & $glslc --version
 
       - name: Configure
         shell: pwsh
