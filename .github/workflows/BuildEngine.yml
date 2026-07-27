@@ -28,32 +28,67 @@ jobs:
           Write-Host "VULKAN_SDK = $env:VULKAN_SDK"
 
           if (-not $env:VULKAN_SDK) {
-            Write-Error "VULKAN_SDK is not set"
+            Write-Error "VULKAN_SDK environment variable is not set."
             exit 1
           }
 
+          $include = Join-Path $env:VULKAN_SDK "Include"
+          $header = Join-Path $include "vulkan\vulkan.h"
+          $library = Join-Path $env:VULKAN_SDK "Lib\vulkan-1.lib"
           $glslc = Join-Path $env:VULKAN_SDK "Bin\glslc.exe"
 
-          if (-not (Test-Path $glslc)) {
-            Write-Error "glslc.exe not found at $glslc"
-            Get-ChildItem "$env:VULKAN_SDK\Bin" | Select-Object Name
+          Write-Host "Vulkan Include: $include"
+          Write-Host "Vulkan Header:  $header"
+          Write-Host "Vulkan Library: $library"
+          Write-Host "GLSLC:          $glslc"
+
+          if (-not (Test-Path $header)) {
+            Write-Error "Vulkan headers not found at $header"
             exit 1
           }
 
-          Write-Host "Found glslc: $glslc"
+          if (-not (Test-Path $library)) {
+            Write-Error "Vulkan library not found at $library"
+            exit 1
+          }
+
+          if (-not (Test-Path $glslc)) {
+            Write-Error "glslc not found at $glslc"
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "Vulkan SDK is correctly installed."
+          Write-Host ""
+
           & $glslc --version
 
       - name: Configure
-        run: cmake --preset windows-ci
+        shell: pwsh
+        run: |
+          if (Test-Path "build/ci") {
+            Remove-Item -Recurse -Force "build/ci"
+          }
+
+          cmake --preset windows-ci `
+            -DVulkan_INCLUDE_DIR="$env:VULKAN_SDK\Include" `
+            -DVulkan_LIBRARY="$env:VULKAN_SDK\Lib\vulkan-1.lib"
 
       - name: Get version
         shell: pwsh
         run: |
-          $version = Get-Content build/ci/CMakeCache.txt |
+          $version = Get-Content "build/ci/CMakeCache.txt" |
             Select-String "^CMAKE_PROJECT_VERSION:STATIC=" |
             ForEach-Object { ($_ -split "=")[1].Trim() }
 
-          echo "VERSION=$version" >> $env:GITHUB_ENV
+          if (-not $version) {
+            Write-Error "Could not determine project version."
+            exit 1
+          }
+
+          Write-Host "Project version: $version"
+
+          "VERSION=$version" >> $env:GITHUB_ENV
 
       - name: Build
         run: cmake --build --preset windows-ci
@@ -61,9 +96,13 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
+          $package = "EngineWorkspace-v${{ env.VERSION }}.zip"
+
           Compress-Archive `
-            -Path sdk\* `
-            -DestinationPath "EngineWorkspace-v${{ env.VERSION }}.zip"
+            -Path "sdk\*" `
+            -DestinationPath $package
+
+          Write-Host "Created package: $package"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
