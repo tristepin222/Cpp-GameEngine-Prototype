@@ -17,51 +17,56 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install Vulkan SDK
-        uses: humbletim/install-vulkan-sdk@v1.2
-        with:
-          version: 1.4.341.1
-          cache: true
-
-      - name: Check Vulkan SDK
         shell: pwsh
         run: |
-          Write-Host "VULKAN_SDK = $env:VULKAN_SDK"
+          $version = "1.4.341.1"
+          $installer = "$env:RUNNER_TEMP\vulkan-sdk.exe"
 
-          if (-not $env:VULKAN_SDK) {
-            Write-Error "VULKAN_SDK environment variable is not set."
+          Invoke-WebRequest `
+            -Uri "https://sdk.lunarg.com/sdk/download/$version/windows/vulkan-sdk.exe" `
+            -OutFile $installer
+
+          Start-Process `
+            -FilePath $installer `
+            -ArgumentList "/S" `
+            -Wait
+
+          $sdkPath = "C:\VulkanSDK\$version"
+
+          if (-not (Test-Path $sdkPath)) {
+            Write-Error "Vulkan SDK was not installed at $sdkPath"
             exit 1
           }
 
-          Write-Host ""
-          Write-Host "Vulkan SDK contents:"
-          Get-ChildItem -Path $env:VULKAN_SDK -Recurse -File |
-            Select-Object -First 100 FullName
+          "VULKAN_SDK=$sdkPath" >> $env:GITHUB_ENV
+          "$sdkPath\Bin" >> $env:GITHUB_PATH
 
-          Write-Host ""
-          Write-Host "Searching for vulkan.h..."
-          Get-ChildItem -Path $env:VULKAN_SDK -Recurse -Filter "vulkan.h" |
-            Select-Object FullName
-
-          Write-Host ""
-          Write-Host "Searching for vulkan-1.lib..."
-          Get-ChildItem -Path $env:VULKAN_SDK -Recurse -Filter "vulkan-1.lib" |
-            Select-Object FullName
-
-          Write-Host ""
-          Write-Host "Searching for glslc.exe..."
-          Get-ChildItem -Path $env:VULKAN_SDK -Recurse -Filter "glslc.exe" |
-            Select-Object FullName
-
-      - name: Configure
+      - name: Verify Vulkan SDK
         shell: pwsh
         run: |
-          if (Test-Path "build/ci") {
-            Remove-Item -Recurse -Force "build/ci"
+          Write-Host "VULKAN_SDK=$env:VULKAN_SDK"
+
+          if (!(Test-Path "$env:VULKAN_SDK\Include\vulkan\vulkan.h")) {
+            Write-Error "vulkan.h not found"
+            exit 1
           }
 
-          cmake --preset windows-ci `
-            -DVulkan_INCLUDE_DIR="$env:VULKAN_SDK\Include" `
-            -DVulkan_LIBRARY="$env:VULKAN_SDK\Lib\vulkan-1.lib"
+          if (!(Test-Path "$env:VULKAN_SDK\Lib\vulkan-1.lib")) {
+            Write-Error "vulkan-1.lib not found"
+            exit 1
+          }
+
+          if (!(Test-Path "$env:VULKAN_SDK\Bin\glslc.exe")) {
+            Write-Error "glslc.exe not found"
+            exit 1
+          }
+
+          Write-Host "Vulkan SDK is valid."
+
+          & "$env:VULKAN_SDK\Bin\glslc.exe" --version
+
+      - name: Configure
+        run: cmake --preset windows-ci
 
       - name: Get version
         shell: pwsh
@@ -76,7 +81,6 @@ jobs:
           }
 
           Write-Host "Project version: $version"
-
           "VERSION=$version" >> $env:GITHUB_ENV
 
       - name: Build
@@ -90,8 +94,6 @@ jobs:
           Compress-Archive `
             -Path "sdk\*" `
             -DestinationPath $package
-
-          Write-Host "Created package: $package"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
