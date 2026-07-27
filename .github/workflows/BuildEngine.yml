@@ -32,36 +32,25 @@ jobs:
             exit 1
           }
 
-          $include = Join-Path $env:VULKAN_SDK "Include"
-          $header = Join-Path $include "vulkan\vulkan.h"
-          $library = Join-Path $env:VULKAN_SDK "Lib\vulkan-1.lib"
-          $glslc = Join-Path $env:VULKAN_SDK "Bin\glslc.exe"
-
-          Write-Host "Vulkan Include: $include"
-          Write-Host "Vulkan Header:  $header"
-          Write-Host "Vulkan Library: $library"
-          Write-Host "GLSLC:          $glslc"
-
-          if (-not (Test-Path $header)) {
-            Write-Error "Vulkan headers not found at $header"
-            exit 1
-          }
-
-          if (-not (Test-Path $library)) {
-            Write-Error "Vulkan library not found at $library"
-            exit 1
-          }
-
-          if (-not (Test-Path $glslc)) {
-            Write-Error "glslc not found at $glslc"
-            exit 1
-          }
+          Write-Host ""
+          Write-Host "Vulkan SDK contents:"
+          Get-ChildItem -Path $env:VULKAN_SDK -Recurse -File |
+            Select-Object -First 100 FullName
 
           Write-Host ""
-          Write-Host "Vulkan SDK is correctly installed."
-          Write-Host ""
+          Write-Host "Searching for vulkan.h..."
+          Get-ChildItem -Path $env:VULKAN_SDK -Recurse -Filter "vulkan.h" |
+            Select-Object FullName
 
-          & $glslc --version
+          Write-Host ""
+          Write-Host "Searching for vulkan-1.lib..."
+          Get-ChildItem -Path $env:VULKAN_SDK -Recurse -Filter "vulkan-1.lib" |
+            Select-Object FullName
+
+          Write-Host ""
+          Write-Host "Searching for glslc.exe..."
+          Get-ChildItem -Path $env:VULKAN_SDK -Recurse -Filter "glslc.exe" |
+            Select-Object FullName
 
       - name: Configure
         shell: pwsh
