@@ -1,51 +1,54 @@
-name: Build Engine
+name: Build EngineWorkspace
 
 on:
   push:
     branches:
-      - main
+      - master
+
+  pull_request:
+    branches:
+      - master
 
 jobs:
   build:
-    runs-on: windows-latest
+    name: Build
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Install Vulkan SDK
-        uses: humbletim/install-vulkan-sdk@v1.2
-        with:
-          version: 1.4.341.1
-          cache: true
-
-      - name: Configure
-        run: cmake --preset windows-ci
-
-      - name: Get version
-        shell: pwsh
+      - name: Install build dependencies
         run: |
-          $version = cmake -S . -B build/ci -LA -N |
-            Select-String "CMAKE_PROJECT_VERSION:STATIC=" |
-            ForEach-Object { ($_ -split "=")[1].Trim() }
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            ninja-build \
+            libvulkan-dev \
+            glslc \
+            libgl1-mesa-dev \
+            libwayland-dev \
+            libwayland-bin \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev
 
-          echo "VERSION=$version" >> $env:GITHUB_ENV
+      - name: Configure CMake
+        run: |
+          cmake \
+            -S . \
+            -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Build
-        run: cmake --build --preset windows-ci
-
-      - name: Package
-        shell: pwsh
         run: |
-          Compress-Archive `
-            -Path sdk\* `
-            -DestinationPath "EngineWorkspace-v${{ env.VERSION }}.zip"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: "EngineWorkspace-v${{ env.VERSION }}"
-          path: "EngineWorkspace-v${{ env.VERSION }}.zip"
+          cmake \
+            --build build \
+            --config Release \
+            --parallel
