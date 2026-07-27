@@ -9,7 +9,7 @@
 #include "ecs/components/Camera.hpp"
 #include "ecs/components/inputComponent.hpp"
 #include "ecs/components/Grid.hpp"
-#include "ecs/components/primitives.hpp"
+#include "ecs/components/Primitives.hpp"
 #include "ecs/components/Skeleton.hpp"
 #include "ecs/components/Animator.hpp"
 #include <GLFW/glfw3.h>
