@@ -25,8 +25,15 @@ jobs:
             cmake \
             ninja-build \
             libvulkan-dev \
-            vulkan-tools \
-            glslc
+            glslc \
+            libwayland-dev \
+            wayland-protocols \
+            libwayland-bin \
+            libx11-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev
 
       - name: Configure CMake
         run: |
@@ -43,9 +50,3 @@ jobs:
             --build build \
             --config Release \
             --parallel
-
-      - name: Upload compile commands
-        uses: actions/upload-artifact@v4
-        with:
-          name: compile-commands
-          path: build/compile_commands.json
