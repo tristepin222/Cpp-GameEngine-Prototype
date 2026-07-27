@@ -16,12 +16,32 @@ jobs:
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Setup Vulkan SDK
-        uses: humbletim/setup-vulkan-sdk@v1.2.1
+      - name: Install Vulkan SDK
+        uses: humbletim/install-vulkan-sdk@v1.2
         with:
-          vulkan-query-version: 1.4.341.1
-          vulkan-components: Vulkan-Headers, Vulkan-Loader, Glslang, SPIRV-Tools
-          vulkan-use-cache: true
+          version: 1.4.341.1
+          cache: true
+
+      - name: Check Vulkan SDK
+        shell: pwsh
+        run: |
+          Write-Host "VULKAN_SDK = $env:VULKAN_SDK"
+
+          if (-not $env:VULKAN_SDK) {
+            Write-Error "VULKAN_SDK is not set"
+            exit 1
+          }
+
+          $glslc = Join-Path $env:VULKAN_SDK "Bin\glslc.exe"
+
+          if (-not (Test-Path $glslc)) {
+            Write-Error "glslc.exe not found at $glslc"
+            Get-ChildItem "$env:VULKAN_SDK\Bin" | Select-Object Name
+            exit 1
+          }
+
+          Write-Host "Found glslc: $glslc"
+          & $glslc --version
 
       - name: Configure
         run: cmake --preset windows-ci
