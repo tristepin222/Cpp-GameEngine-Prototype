@@ -26,6 +26,7 @@ jobs:
             ninja-build \
             libvulkan-dev \
             glslc \
+            libgl1-mesa-dev \
             libwayland-dev \
             libwayland-bin \
             wayland-protocols \
