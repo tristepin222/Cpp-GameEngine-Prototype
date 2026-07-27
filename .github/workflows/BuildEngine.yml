@@ -1,0 +1,42 @@
+name: Build Engine
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake --preset windows-msvc-x64
+
+      - name: Get version
+        shell: pwsh
+        run: |
+          $version = cmake -S . -B build/msvc -LA -N |
+            Select-String "CMAKE_PROJECT_VERSION:STATIC=" |
+            ForEach-Object { ($_ -split "=")[1].Trim() }
+
+          echo "VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Build
+        run: cmake --build --preset windows-msvc-x64
+
+      - name: Package
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path sdk\* `
+            -DestinationPath "EngineWorkspace-v${{ env.VERSION }}.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "EngineWorkspace-v${{ env.VERSION }}"
+          path: "EngineWorkspace-v${{ env.VERSION }}.zip"
