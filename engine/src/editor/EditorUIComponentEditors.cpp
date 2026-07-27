@@ -612,13 +612,23 @@ void EditorUI::drawAnimatorEditor() {
             if (ext == ".fbx" || ext == ".FBX" || ext == ".anim" || ext == ".gltf" || ext == ".glb") {
                 strncpy_s(animPathBuf, pathStr.c_str(), sizeof(animPathBuf) - 1);
                 
+                bool isAnimFile = (ext == ".anim");
                 SkeletonComponent* skeleton = registry.get<SkeletonComponent>(selectedEntity);
-                if (!skeleton) {
+                if (!skeleton && !isAnimFile) {
                     SkeletonComponent newSkel{};
                     registry.emplace<SkeletonComponent>(selectedEntity, std::move(newSkel));
                     skeleton = registry.get<SkeletonComponent>(selectedEntity);
                 }
-                if (renderer.resourceManager->loadSkeletonAndAnimations(pathStr, *skeleton, *animator)) {
+                
+                bool loaded = false;
+                if (skeleton) {
+                    loaded = renderer.resourceManager->loadSkeletonAndAnimations(pathStr, *skeleton, *animator);
+                } else {
+                    SkeletonComponent dummySkel;
+                    loaded = renderer.resourceManager->loadSkeletonAndAnimations(pathStr, dummySkel, *animator);
+                }
+                
+                if (loaded) {
                     animator->loadedAnimPath = pathStr;
                     if (auto* material = registry.get<Material>(selectedEntity)) {
                         bool hasSkin = entityHasSkin(registry, selectedEntity);
@@ -640,13 +650,24 @@ void EditorUI::drawAnimatorEditor() {
     
     if (Button("Load Anim")) {
         std::string pathStr(animPathBuf);
+        auto loadExt = std::filesystem::path(pathStr).extension().string();
+        bool isAnimFile = (loadExt == ".anim");
         SkeletonComponent* skeleton = registry.get<SkeletonComponent>(selectedEntity);
-        if (!skeleton) {
+        if (!skeleton && !isAnimFile) {
             SkeletonComponent newSkel{};
             registry.emplace<SkeletonComponent>(selectedEntity, std::move(newSkel));
             skeleton = registry.get<SkeletonComponent>(selectedEntity);
         }
-        if (renderer.resourceManager->loadSkeletonAndAnimations(pathStr, *skeleton, *animator)) {
+        
+        bool loaded = false;
+        if (skeleton) {
+            loaded = renderer.resourceManager->loadSkeletonAndAnimations(pathStr, *skeleton, *animator);
+        } else {
+            SkeletonComponent dummySkel;
+            loaded = renderer.resourceManager->loadSkeletonAndAnimations(pathStr, dummySkel, *animator);
+        }
+        
+        if (loaded) {
             animator->loadedAnimPath = pathStr;
             if (auto* material = registry.get<Material>(selectedEntity)) {
                 bool hasSkin = entityHasSkin(registry, selectedEntity);
@@ -1006,8 +1027,9 @@ void EditorUI::drawAnimationControllerEditor() {
                             std::string pathStr(droppedPath);
                             auto ext = std::filesystem::path(pathStr).extension().string();
                             if (ext == ".anim" || ext == ".fbx" || ext == ".FBX") {
+                                bool isAnimFile = (ext == ".anim");
                                 SkeletonComponent* skeleton = registry.get<SkeletonComponent>(selectedEntity);
-                                if (!skeleton) {
+                                if (!skeleton && !isAnimFile) {
                                     SkeletonComponent newSkel{};
                                     registry.emplace<SkeletonComponent>(selectedEntity, std::move(newSkel));
                                     skeleton = registry.get<SkeletonComponent>(selectedEntity);
@@ -1017,7 +1039,16 @@ void EditorUI::drawAnimationControllerEditor() {
                                     registry.emplace<AnimatorComponent>(selectedEntity, std::move(newAnim));
                                     animator = registry.get<AnimatorComponent>(selectedEntity);
                                 }
-                                if (skeleton && animator && renderer.resourceManager->loadSkeletonAndAnimations(pathStr, *skeleton, *animator, true)) {
+                                
+                                bool loaded = false;
+                                if (skeleton) {
+                                    loaded = renderer.resourceManager->loadSkeletonAndAnimations(pathStr, *skeleton, *animator, true);
+                                } else {
+                                    SkeletonComponent dummySkel;
+                                    loaded = renderer.resourceManager->loadSkeletonAndAnimations(pathStr, dummySkel, *animator, true);
+                                }
+                                
+                                if (loaded) {
                                     if (!animator->animations.empty()) {
                                         state.clipName = animator->animations.back().name;
                                     }
@@ -1086,8 +1117,9 @@ void EditorUI::drawAnimationControllerEditor() {
                                         std::string pathStr(droppedPath);
                                         auto ext = std::filesystem::path(pathStr).extension().string();
                                         if (ext == ".anim" || ext == ".fbx" || ext == ".FBX") {
+                                            bool isAnimFile = (ext == ".anim");
                                             SkeletonComponent* skeleton = registry.get<SkeletonComponent>(selectedEntity);
-                                            if (!skeleton) {
+                                            if (!skeleton && !isAnimFile) {
                                                 SkeletonComponent newSkel{};
                                                 registry.emplace<SkeletonComponent>(selectedEntity, std::move(newSkel));
                                                 skeleton = registry.get<SkeletonComponent>(selectedEntity);
@@ -1097,7 +1129,16 @@ void EditorUI::drawAnimationControllerEditor() {
                                                 registry.emplace<AnimatorComponent>(selectedEntity, std::move(newAnim));
                                                 animator = registry.get<AnimatorComponent>(selectedEntity);
                                             }
-                                            if (skeleton && animator && renderer.resourceManager->loadSkeletonAndAnimations(pathStr, *skeleton, *animator, true)) {
+                                            
+                                            bool loaded = false;
+                                            if (skeleton) {
+                                                loaded = renderer.resourceManager->loadSkeletonAndAnimations(pathStr, *skeleton, *animator, true);
+                                            } else {
+                                                SkeletonComponent dummySkel;
+                                                loaded = renderer.resourceManager->loadSkeletonAndAnimations(pathStr, dummySkel, *animator, true);
+                                            }
+                                            
+                                            if (loaded) {
                                                 if (!animator->animations.empty()) {
                                                     node.clipName = animator->animations.back().name;
                                                 }

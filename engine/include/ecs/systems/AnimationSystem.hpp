@@ -48,6 +48,10 @@ public:
             // 0. Synchronize child animators & controllers with parent animators
             for (auto [entity, hierarchy, animator] : registry.view<HierarchyComponent, AnimatorComponent>()) {
                 if (hierarchy.parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hierarchy.parent)) {
+                    // Skip synchronization if child has its own controller or independent animations
+                    if (registry.has<AnimationControllerComponent>(entity) || !animator.animations.empty()) {
+                        continue;
+                    }
                     if (auto* parentAnimator = registry.get<AnimatorComponent>(hierarchy.parent)) {
                         animator.activeAnimationIndex = parentAnimator->activeAnimationIndex;
                         animator.currentTime = parentAnimator->currentTime;
@@ -60,6 +64,12 @@ public:
 
             for (auto [entity, hierarchy, controller] : registry.view<HierarchyComponent, AnimationControllerComponent>()) {
                 if (hierarchy.parent.getId() != Entity::INVALID_ENTITY && registry.isValid(hierarchy.parent)) {
+                    // Skip synchronization if child has its own independent animations
+                    if (auto* animator = registry.get<AnimatorComponent>(entity)) {
+                        if (!animator->animations.empty()) {
+                            continue;
+                        }
+                    }
                     if (auto* parentController = registry.get<AnimationControllerComponent>(hierarchy.parent)) {
                         controller.currentState = parentController->currentState;
                         controller.currentStateTime = parentController->currentStateTime;
@@ -92,7 +102,9 @@ public:
             // 2. Second Pass: Process skeletal transforms, blending, and IK adjustments in parallel
             animatedEntities.clear();
             for (auto [entity, skeleton, animator] : registry.view<SkeletonComponent, AnimatorComponent>()) {
-                animatedEntities.push_back(entity);
+                if (!skeleton.joints.empty()) {
+                    animatedEntities.push_back(entity);
+                }
             }
 
             Engine::JobSystem::getInstance().parallelFor(static_cast<int>(animatedEntities.size()), [&](int idx) {
@@ -107,7 +119,8 @@ public:
 
             // 3. Third Pass: Process generic property-only animations for entities without skeletons (Main Thread)
             for (auto [entity, animator] : registry.view<AnimatorComponent>()) {
-                if (!registry.has<SkeletonComponent>(entity)) {
+                auto* skeleton = registry.get<SkeletonComponent>(entity);
+                if (!skeleton || skeleton->joints.empty()) {
                     float entityDt = (editorMode.isPlaying || animator.isPreviewing || animator.playbackSpeed > 0.0f) ? dt : 0.0f;
                     updateGenericAnimation(entity, animator, entityDt);
                 }

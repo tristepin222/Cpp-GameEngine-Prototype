@@ -837,14 +837,20 @@ static bool registerBuiltinComponents() {
                 }
 
                 if (!loadedAnimPath.empty()) {
+                    bool isAnimFile = (loadedAnimPath.length() >= 5 && loadedAnimPath.substr(loadedAnimPath.length() - 5) == ".anim");
                     SkeletonComponent* skeleton = registry.get<SkeletonComponent>(entity);
-                    if (!skeleton) {
+                    if (!skeleton && !isAnimFile) {
                         SkeletonComponent newSkel{};
                         registry.emplace<SkeletonComponent>(entity, std::move(newSkel));
                         skeleton = registry.get<SkeletonComponent>(entity);
                     }
-                    if (animator && skeleton) {
-                        renderer.resourceManager->loadSkeletonAndAnimations(loadedAnimPath, *skeleton, *animator);
+                    if (animator) {
+                        if (skeleton) {
+                            renderer.resourceManager->loadSkeletonAndAnimations(loadedAnimPath, *skeleton, *animator);
+                        } else {
+                            SkeletonComponent dummySkel;
+                            renderer.resourceManager->loadSkeletonAndAnimations(loadedAnimPath, dummySkel, *animator);
+                        }
                         animator->loadedAnimPath = loadedAnimPath;
                     }
                 }
