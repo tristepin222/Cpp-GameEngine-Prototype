@@ -4,11 +4,21 @@
     {
       "name": "windows-msvc-x64",
       "displayName": "Visual Studio 17 2022 x64 (MSVC)",
-      "description": "Configures the project with the standard MSVC toolset and avoids ClangCL fallback issues.",
+      "description": "Configures the project with Visual Studio 2022 and the v143 MSVC toolset.",
       "generator": "Visual Studio 17 2022",
       "architecture": "x64",
       "toolset": "v143",
       "binaryDir": "${sourceDir}/build/msvc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "windows-ci",
+      "displayName": "Windows CI (MSVC + Ninja)",
+      "description": "Configures the project for GitHub Actions using MSVC and Ninja.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/ci",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
@@ -18,6 +28,11 @@
     {
       "name": "windows-msvc-x64",
       "configurePreset": "windows-msvc-x64",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-ci",
+      "configurePreset": "windows-ci",
       "configuration": "Release"
     }
   ]

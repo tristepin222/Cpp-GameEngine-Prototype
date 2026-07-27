@@ -13,20 +13,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Configure
-        run: cmake --preset windows-msvc-x64
+        run: cmake --preset windows-ci
 
       - name: Get version
         shell: pwsh
         run: |
-          $version = cmake -S . -B build/msvc -LA -N |
+          $version = cmake -S . -B build/ci -LA -N |
             Select-String "CMAKE_PROJECT_VERSION:STATIC=" |
             ForEach-Object { ($_ -split "=")[1].Trim() }
 
           echo "VERSION=$version" >> $env:GITHUB_ENV
 
       - name: Build
-        run: cmake --build --preset windows-msvc-x64
+        run: cmake --build --preset windows-ci
 
       - name: Package
         shell: pwsh
