@@ -10,9 +10,19 @@
 
 #if defined(_MSC_VER)
 #include <intrin.h>
+#if defined(_M_ARM) || defined(_M_ARM64)
+#define SPIN_PAUSE() __yield()
+#else
 #define SPIN_PAUSE() _mm_pause()
-#elif defined(__GNUC__) || defined(__clang__)
+#endif
+#elif defined(__i386__) || defined(__x86_64__)
+#if defined(__clang__) || defined(__GNUC__)
 #define SPIN_PAUSE() __builtin_ia32_pause()
+#else
+#define SPIN_PAUSE() do {} while(0)
+#endif
+#elif defined(__arm__) || defined(__aarch64__)
+#define SPIN_PAUSE() __asm__ __volatile__("yield")
 #else
 #define SPIN_PAUSE() do {} while(0)
 #endif

@@ -194,9 +194,16 @@ add_custom_command(
     TARGET reflection_generator POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/bin/"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:reflection_generator> "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/bin/"
-    COMMAND $<TARGET_FILE:reflection_generator> "${CMAKE_CURRENT_SOURCE_DIR}/include/ecs/components" "${CMAKE_CURRENT_SOURCE_DIR}/src/meta/engine_generated_reflection.cpp"
-    COMMENT "Copying reflection_generator to SDK bin and generating engine reflection..."
+    COMMENT "Copying reflection_generator to SDK bin..."
 )
+
+if(NOT CMAKE_CROSSCOMPILING)
+    add_custom_command(
+        TARGET reflection_generator POST_BUILD
+        COMMAND $<TARGET_FILE:reflection_generator> "${CMAKE_CURRENT_SOURCE_DIR}/include/ecs/components" "${CMAKE_CURRENT_SOURCE_DIR}/src/meta/engine_generated_reflection.cpp"
+        COMMENT "Generating engine reflection..."
+    )
+endif()
 
 
 
