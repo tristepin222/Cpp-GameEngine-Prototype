@@ -129,34 +129,46 @@ jobs:
           version: 'latest'
           cache: true
 
-      - name: Extract Vulkan SDK ARM64 Libs
+      - name: Generate Vulkan SDK ARM64 Lib
         shell: powershell
         run: |
-          $val = "1.4.357.0"
-          $url = "https://sdk.lunarg.com/sdk/download/$val/warm/vulkansdk-windows-ARM64-$val.exe"
-          echo "Downloading Vulkan SDK ARM64 from $url"
-          Invoke-WebRequest -Uri $url -OutFile vulkansdk-arm64.exe
-          echo "Extracting installer..."
-          7z x vulkansdk-arm64.exe -oextracted -y
-          echo "Extracting nested archives..."
-          Get-ChildItem -Path extracted -Filter "*.7z" -Recurse | ForEach-Object { 7z x $_.FullName -oextracted_sub -y }
-          echo "Locating and copying vulkan-1.lib..."
-          New-Item -ItemType Directory -Force -Path "C:\VulkanSDK\$val\Lib-ARM64"
-          $copied = $false
-          Get-ChildItem -Path @("extracted", "extracted_sub") -Filter "vulkan-1.lib" -Recurse | ForEach-Object {
-              if ($_.FullName -match "ARM64" -and -not $copied) {
-                  echo "Found ARM64 library at: $_.FullName"
-                  Copy-Item $_.FullName -Destination "C:\VulkanSDK\$val\Lib-ARM64\vulkan-1.lib" -Force
-                  $copied = $true
+          # 1. Locate Vulkan SDK paths
+          $vulkanDir = Get-ChildItem -Path "C:\VulkanSDK" -Directory | Select-Object -First 1
+          $vulkanLib = "$($vulkanDir.FullName)\Lib\vulkan-1.lib"
+          $vulkanArm64Dir = "$($vulkanDir.FullName)\Lib-ARM64"
+          
+          # 2. Locate MSVC tools (lib.exe and dumpbin.exe)
+          $msvcDir = Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC" -Directory | Select-Object -First 1
+          $binPath = "$($msvcDir.FullName)\bin\Hostx64\x64"
+          $libExe = "$binPath\lib.exe"
+          $dumpbinExe = "$binPath\dumpbin.exe"
+          
+          echo "Vulkan SDK Lib: $vulkanLib"
+          echo "MSVC Bin Path: $binPath"
+          
+          # 3. Dump symbols from x64 vulkan-1.lib
+          echo "Dumping exports from x64 Vulkan library..."
+          $symbols = & $dumpbinExe /linkermember $vulkanLib
+          
+          # 4. Parse symbols starting with "vk"
+          $exports = $symbols | ForEach-Object {
+              if ($_ -match '^\s+[0-9a-fA-F]+\s+(vk[A-Za-z0-9_]+)$') {
+                  $Matches[1]
               }
-          }
-          if (-not $copied) {
-              Get-ChildItem -Path @("extracted", "extracted_sub") -Filter "vulkan-1.lib" -Recurse | Select-Object -First 1 | ForEach-Object {
-                  echo "Fallback: Found library at: $_.FullName"
-                  Copy-Item $_.FullName -Destination "C:\VulkanSDK\$val\Lib-ARM64\vulkan-1.lib" -Force
-                  $copied = $true
-              }
-          }
+          } | Sort-Object -Unique
+          
+          echo "Found $($exports.Count) Vulkan export symbols."
+          
+          # 5. Write .def file
+          $defContent = @("LIBRARY vulkan-1", "EXPORTS") + $exports
+          $defContent | Out-File -FilePath vulkan-1.def -Encoding ascii
+          
+          # 6. Generate the native ARM64 vulkan-1.lib
+          echo "Generating native ARM64 import library..."
+          New-Item -ItemType Directory -Force -Path $vulkanArm64Dir
+          & $libExe /def:vulkan-1.def /out:"$vulkanArm64Dir\vulkan-1.lib" /machine:ARM64
+          
+          echo "Successfully generated ARM64 library at $vulkanArm64Dir\vulkan-1.lib"
 
       - name: Configure CMake
         run: |
