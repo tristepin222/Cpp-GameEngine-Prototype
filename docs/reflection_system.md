@@ -21,21 +21,26 @@ Our engine implements a **Compile-Time Static Reflection** model:
 
 ## 2. Annotation & Syntax
 
-To register a component and its fields with the reflection engine, developers use the following annotations inside component headers:
+To register a component and its fields with the reflection engine, developers place comments and registration macros inside component headers:
 
 ```cpp
-struct TransformComponent {
-    REFLECT_BODY(TransformComponent)
-
-    PROPERTY(glm::vec3, position)
-    PROPERTY(glm::vec3, rotation)
-    PROPERTY(glm::vec3, scale)
+// [ReflectClass]
+struct ENGINE_API TransformComponent {
+    // [ReflectField]
+    glm::vec3 position{ 0.0f };
+    // [ReflectField]
+    glm::vec3 rotation{ 0.0f };
+    // [ReflectField]
+    glm::vec3 scale{ 1.0f };
 };
+
+REGISTER_COMPONENT(TransformComponent, "General");
 ```
 
-### Key Macros
-*   `REFLECT_BODY(Type)`: Declares type introspection helpers inside the struct (such as its registered name string).
-*   `PROPERTY(Type, Name)`: Registers the member field with its type and identifier name, enabling the parser to record its size, offset, and type info.
+### Key Annotations
+*   `// [ReflectClass]`: Marks a class/struct to be scanned by the reflection generator.
+*   `// [ReflectField]`: Marks the member variable immediately following the comment to be parsed. Supported types include `float`/`double`, `int`/`uint32_t`/`size_t`, `bool`, `glm::vec2`/`vec3`/`vec4`, `std::string`, and custom engine types like `Entity` or `RigidBodyType`.
+*   `REGISTER_COMPONENT(Type, MenuPath)`: A macro to register the component's runtime metadata and assign its category/display name for the editor UI (e.g., `"Physics/Rigid Body"`). It also sets up standard ECS lifecycle callbacks (`add`, `has`, `remove`, `get`) using templates.
 
 ---
 
@@ -47,23 +52,35 @@ The compilation pipeline separates reflection code generation from core compilat
 graph TD
     Source[Component Headers *.hpp] -->|1. Parse Annotations| Parser[reflection_generator.exe]
     Parser -->|2. Generate Code| GenCpp[generated_reflection.cpp]
-    GenCpp -->|3. Compile SDK| Compiler[MSVC / GCC Compiler]
-    Compiler -->|4. Output DLL/EXE| SDK[Engine SDK]
+    GenCpp -->|3. Compile target| Compiler[MSVC / GCC Compiler]
+    Compiler -->|4. Output DLL/EXE| Target[Executable / Script DLL]
 ```
 
 ### Execution Flow
-During the build step, the custom `reflection_generator` executable parses the component header files:
-1.  **Header Scanner**: Scans designated include paths for `PROPERTY` declarations.
-2.  **Metadata Baking**: Resolves field offsets (`offsetof(Struct, Field)`) and basic type descriptors (e.g., `float`, `int`, `vec3`, `std::string`, `bool`).
-3.  **Code Output**: Generates `generated_reflection.cpp`, containing static registration arrays:
+During the pre-build or custom-build step, the custom `reflection_generator` executable parses the component header files:
+1.  **Header Scanner**: Scans designated include paths for `// [ReflectClass]` and `// [ReflectField]` annotations.
+2.  **Metadata Baking**: Resolves field offsets (`offsetof(Struct, Field)`) and basic type descriptors.
+3.  **Code Output**: Generates `generated_reflection.cpp`, containing static registration code:
 
 ```cpp
 // Example of generated metadata code
-void registerTransforms() {
-    ComponentRegistry::registerComponent<TransformComponent>("TransformComponent");
-    ComponentRegistry::registerProperty("TransformComponent", "position", &TransformComponent::position);
-    ComponentRegistry::registerProperty("TransformComponent", "rotation", &TransformComponent::rotation);
-    ComponentRegistry::registerProperty("TransformComponent", "scale", &TransformComponent::scale);
+void registerEngineReflection() {
+    {
+        Engine::ComponentReflection refl;
+        refl.name = "TransformComponent";
+        refl.category = "General";
+        refl.displayName = "Transform Component";
+        refl.fields = {
+            { "position", Engine::FieldType::Vec3, offsetof(TransformComponent, position) },
+            { "rotation", Engine::FieldType::Vec3, offsetof(TransformComponent, rotation) },
+            { "scale", Engine::FieldType::Vec3, offsetof(TransformComponent, scale) }
+        };
+        refl.add = [](Registry& reg, Entity e) { reg.emplace<TransformComponent>(e, TransformComponent{}); };
+        refl.has = [](Registry& reg, Entity e) { return reg.has<TransformComponent>(e); };
+        refl.remove = [](Registry& reg, Entity e) { reg.remove<TransformComponent>(e); };
+        refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<TransformComponent>(e)); };
+        Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
+    }
 }
 ```
 
