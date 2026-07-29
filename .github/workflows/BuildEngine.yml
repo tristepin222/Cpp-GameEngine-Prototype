@@ -1,4 +1,4 @@
-name: Build EngineWorkspace
+name: Build and Release Engine
 
 on:
   push:
@@ -9,14 +9,19 @@ on:
     branches:
       - master
 
+permissions:
+  contents: write
+
 jobs:
   build:
-    name: Build
+    name: Build & Release
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install build dependencies
         run: |
@@ -52,3 +57,48 @@ jobs:
             --build build \
             --config Release \
             --parallel
+
+      - name: Extract CMake Version
+        id: get_version
+        run: |
+          VERSION=$(grep -oP 'project\(EngineWorkspace\s+VERSION\s+\K[0-9.]+' CMakeLists.txt)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+      - name: Package Release Assets
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          mkdir -p CrimsonEngine
+          cp build/engine/libengine.so CrimsonEngine/ || true
+          cp build/engine/editor CrimsonEngine/ || true
+          cp build/engine/game_runtime CrimsonEngine/ || true
+          if [ -d build/shaders ]; then
+            cp -r build/shaders CrimsonEngine/
+          fi
+          if [ -d build/plugins ]; then
+            cp -r build/plugins CrimsonEngine/
+          fi
+          tar -czf CrimsonEngine-Linux-x64.tar.gz CrimsonEngine
+
+      - name: Create GitHub Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="v${{ steps.get_version.outputs.VERSION }}"
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Release $TAG_NAME already exists. Skipping release creation."
+          else
+            echo "Fetching merged PR description..."
+            PR_BODY=$(gh api repos/${{ github.repository }}/commits/${{ github.sha }}/pulls --jq '.[0].body' || echo "")
+            if [ "$PR_BODY" = "null" ] || [ -z "$PR_BODY" ]; then
+              PR_BODY="Automated release of Crimson Engine $TAG_NAME"
+            fi
+            echo "$PR_BODY" > release_notes.txt
+
+            echo "Creating new release for $TAG_NAME..."
+            gh release create "$TAG_NAME" CrimsonEngine-Linux-x64.tar.gz \
+              --title "Release $TAG_NAME" \
+              --notes-file release_notes.txt \
+              --target "${{ github.sha }}"
+          fi
