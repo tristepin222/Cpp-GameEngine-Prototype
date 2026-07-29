@@ -85,7 +85,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Vulkan SDK
-        uses: asaimius/setup-vulkan@v1
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          version: 'latest'
+          cache: true
 
       - name: Configure CMake
         run: |
@@ -121,7 +124,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Vulkan SDK
-        uses: asaimius/setup-vulkan@v1
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          version: 'latest'
+          cache: true
 
       - name: Configure CMake
         run: |
