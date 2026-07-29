@@ -1,5 +1,43 @@
 #pragma once
 
+#ifndef _WIN32
+#include <cstring>
+#include <algorithm>
+
+template <size_t N>
+inline int strcpy_s(char (&dest)[N], const char* src) {
+    if (!src) {
+        if (N > 0) dest[0] = '\0';
+        return -1; // EINVAL
+    }
+    size_t i = 0;
+    for (; i < N - 1 && src[i] != '\0'; ++i) {
+        dest[i] = src[i];
+    }
+    dest[i] = '\0';
+    if (src[i] != '\0') {
+        if (N > 0) dest[0] = '\0';
+        return -2; // ERANGE
+    }
+    return 0;
+}
+
+template <size_t N>
+inline int strncpy_s(char (&dest)[N], const char* src, size_t count) {
+    if (!src) {
+        if (N > 0) dest[0] = '\0';
+        return -1; // EINVAL
+    }
+    size_t limit = std::min(N - 1, count);
+    size_t i = 0;
+    for (; i < limit && src[i] != '\0'; ++i) {
+        dest[i] = src[i];
+    }
+    dest[i] = '\0';
+    return 0;
+}
+#endif
+
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
