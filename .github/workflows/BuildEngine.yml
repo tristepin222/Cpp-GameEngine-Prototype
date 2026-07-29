@@ -129,6 +129,35 @@ jobs:
           version: 'latest'
           cache: true
 
+      - name: Extract Vulkan SDK ARM64 Libs
+        shell: powershell
+        run: |
+          $val = "1.4.357.0"
+          $url = "https://sdk.lunarg.com/sdk/download/$val/warm/vulkansdk-windows-ARM64-$val.exe"
+          echo "Downloading Vulkan SDK ARM64 from $url"
+          Invoke-WebRequest -Uri $url -OutFile vulkansdk-arm64.exe
+          echo "Extracting installer..."
+          7z x vulkansdk-arm64.exe -oextracted -y
+          echo "Extracting nested archives..."
+          Get-ChildItem -Path extracted -Filter "*.7z" -Recurse | ForEach-Object { 7z x $_.FullName -oextracted_sub -y }
+          echo "Locating and copying vulkan-1.lib..."
+          New-Item -ItemType Directory -Force -Path "C:\VulkanSDK\$val\Lib-ARM64"
+          $copied = $false
+          Get-ChildItem -Path @("extracted", "extracted_sub") -Filter "vulkan-1.lib" -Recurse | ForEach-Object {
+              if ($_.FullName -match "ARM64" -and -not $copied) {
+                  echo "Found ARM64 library at: $_.FullName"
+                  Copy-Item $_.FullName -Destination "C:\VulkanSDK\$val\Lib-ARM64\vulkan-1.lib" -Force
+                  $copied = $true
+              }
+          }
+          if (-not $copied) {
+              Get-ChildItem -Path @("extracted", "extracted_sub") -Filter "vulkan-1.lib" -Recurse | Select-Object -First 1 | ForEach-Object {
+                  echo "Fallback: Found library at: $_.FullName"
+                  Copy-Item $_.FullName -Destination "C:\VulkanSDK\$val\Lib-ARM64\vulkan-1.lib" -Force
+                  $copied = $true
+              }
+          }
+
       - name: Configure CMake
         run: |
           cmake -S . -B build -G "Visual Studio 17 2022" -A ARM64 -DCMAKE_BUILD_TYPE=Release

@@ -197,7 +197,7 @@ add_custom_command(
     COMMENT "Copying reflection_generator to SDK bin..."
 )
 
-if(NOT CMAKE_CROSSCOMPILING)
+if(NOT CMAKE_GENERATOR_PLATFORM MATCHES "ARM")
     add_custom_command(
         TARGET reflection_generator POST_BUILD
         COMMAND $<TARGET_FILE:reflection_generator> "${CMAKE_CURRENT_SOURCE_DIR}/include/ecs/components" "${CMAKE_CURRENT_SOURCE_DIR}/src/meta/engine_generated_reflection.cpp"
