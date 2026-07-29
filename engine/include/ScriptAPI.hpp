@@ -7,7 +7,7 @@
 
 // Components
 #include "ecs/components/Transform.hpp"
-#include "ecs/components/Rigidbody.hpp"
+#include "ecs/components/RigidBody.hpp"
 #include "ecs/components/Collider.hpp"
 #include "ecs/components/Camera.hpp"
 #include "ecs/components/EditorCamera.hpp"
