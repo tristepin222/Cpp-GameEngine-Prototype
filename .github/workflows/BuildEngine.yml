@@ -78,7 +78,7 @@ jobs:
 
   build-windows-x64:
     name: Build Windows x86-64
-    runs-on: windows-latest
+    runs-on: windows-2022
 
     steps:
       - name: Checkout repository
@@ -117,7 +117,7 @@ jobs:
 
   build-windows-arm64:
     name: Build Windows ARM64
-    runs-on: windows-latest
+    runs-on: windows-2022
 
     steps:
       - name: Checkout repository
