@@ -14,6 +14,13 @@ set(ENV{GIT_HTTP_LOW_SPEED_TIME} 12000)
 # --- Dependencies Configuration (Shared across projects) ---
 
 # 1. Vulkan SDK
+if(MSVC AND (CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64" OR CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64"))
+    if(DEFINED ENV{VULKAN_SDK})
+        set(Vulkan_LIBRARY "$ENV{VULKAN_SDK}/Lib-ARM64/vulkan-1.lib" CACHE FILEPATH "Vulkan Library Path override for ARM64" FORCE)
+        message(STATUS "Overriding Vulkan library path for ARM64: ${Vulkan_LIBRARY}")
+    endif()
+endif()
+
 find_package(Vulkan REQUIRED)
 message(STATUS "Found Vulkan SDK: ${Vulkan_LIBRARIES}")
 
