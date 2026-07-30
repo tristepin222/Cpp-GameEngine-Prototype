@@ -42,6 +42,7 @@ inline int strncpy_s(char (&dest)[N], const char* src, size_t count) {
 #include <string>
 #include <vector>
 #include <functional>
+#include <filesystem>
 #include <vulkan/vulkan.h>
 
 #include "../ecs/Entity.hpp"
@@ -159,6 +160,14 @@ private:
     void drawAnimationEditorWindow();
     void drawNodeGraphDemoWindow();
     void drawAnimatorControllerWindow();
+    /**
+     * @brief Renders the Sprite Sheet Slicer window.
+     */
+    void drawSpriteSlicerWindow();
+    /**
+     * @brief Slices a sprite sheet texture into multiple separate PNG texture files.
+     */
+    void sliceSpriteSheet(const std::filesystem::path& path, int cellWidth, int cellHeight, const std::string& prefix);
 
     /**
      * @brief Renders the Tilemap component inspector panel.
