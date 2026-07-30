@@ -16,6 +16,8 @@ PLUGIN_API void registerEngineReflection() {
     {
         Engine::ComponentReflection refl;
         refl.name = "PhysgunScript";
+        refl.category = "General";
+        refl.displayName = "PhysgunScript";
         refl.fields = {
             { "Kp", Engine::FieldType::Float, offsetof(PhysgunScript, Kp) },
             { "Kd", Engine::FieldType::Float, offsetof(PhysgunScript, Kd) },
