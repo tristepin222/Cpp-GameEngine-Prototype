@@ -65,6 +65,11 @@ bool s_openTilesetEditorWindow = false;
 bool s_openAnimationEditorWindow = false;
 bool s_openNodeGraphDemoWindow = false;
 bool s_openAnimatorControllerWindow = false;
+bool s_openSpriteSlicerWindow = false;
+std::filesystem::path s_spriteSlicerAssetPath;
+int s_sliceCellWidth = 64;
+int s_sliceCellHeight = 64;
+std::string s_sliceOutputPrefix = "";
 
 std::string s_editingTilesetPath;
 Engine::TilesetAsset s_editingTileset;

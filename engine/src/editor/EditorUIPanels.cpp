@@ -1,5 +1,8 @@
 #include "editor/EditorUI.hpp"
 #include "editor/EditorUIInternal.hpp"
+#include "stb_image.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 #include "editor/NodeGraphFramework.hpp"
 #include "editor/EntityArchetypeRegistry.hpp"
 #include "meta/ComponentReflection.hpp"
@@ -125,6 +128,9 @@ void EditorUI::drawPanels() {
             if (ImGui::MenuItem("Node Graph Demo")) {
                 s_openNodeGraphDemoWindow = true;
             }
+            if (ImGui::MenuItem("Sprite Sheet Slicer")) {
+                s_openSpriteSlicerWindow = true;
+            }
             ImGui::EndMenu();
         }
         // Center-aligned Play / Stop buttons in the Main Menu Bar
@@ -210,6 +216,9 @@ void EditorUI::drawPanels() {
 
     // 7e. Floating Node Graph Demo window
     drawNodeGraphDemoWindow();
+
+    // 7f. Floating Sprite Sheet Slicer window
+    drawSpriteSlicerWindow();
 
     // 8. Build Settings panel (floating modal)
     if (showBuildSettings) {
@@ -1053,6 +1062,13 @@ void EditorUI::drawAssetBrowser() {
                             s_importSettingsAssetPath = entry.path();
                             s_triggerLoadImportSettings = true;
                         }
+                        if (isTexture && MenuItem("Sprite Sheet Slicer...")) {
+                            s_spriteSlicerAssetPath = entry.path();
+                            s_openSpriteSlicerWindow = true;
+                            s_sliceCellWidth = 64;
+                            s_sliceCellHeight = 64;
+                            s_sliceOutputPrefix = s_spriteSlicerAssetPath.stem().string();
+                        }
                         Separator();
                     }
                     if (isModel && MenuItem("Load Mesh to Selected")) {
@@ -1600,6 +1616,152 @@ void EditorUI::drawImportSettingsWindow() {
     }
 
     End();
+}
+
+void EditorUI::drawSpriteSlicerWindow() {
+    if (!s_openSpriteSlicerWindow) return;
+
+    ImGui::SetNextWindowSize(ImVec2(450, 350), ImGuiCond_FirstUseEver);
+    
+    ImGui::Begin("Sprite Sheet Slicer", &s_openSpriteSlicerWindow);
+
+    std::string pathStr = s_spriteSlicerAssetPath.empty() ? "None (Drag & Drop texture here)" : s_spriteSlicerAssetPath.generic_string();
+    
+    ImGui::Button("Source Texture", ImVec2(-1, 40));
+    if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+            std::filesystem::path droppedPath = (const char*)payload->Data;
+            std::string ext = droppedPath.extension().string();
+            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga") {
+                s_spriteSlicerAssetPath = droppedPath;
+                s_sliceOutputPrefix = s_spriteSlicerAssetPath.stem().string();
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
+    
+    if (!s_spriteSlicerAssetPath.empty()) {
+        ImGui::Text("Selected: %s", pathStr.c_str());
+        
+        int texWidth = 0, texHeight = 0, texChannels = 0;
+        if (stbi_info(s_spriteSlicerAssetPath.string().c_str(), &texWidth, &texHeight, &texChannels)) {
+            ImGui::Text("Dimensions: %d x %d (%d channels)", texWidth, texHeight, texChannels);
+            
+            ImGui::Separator();
+            drawSectionHeader("Slicing Settings");
+            
+            ImGui::InputInt("Cell Width", &s_sliceCellWidth);
+            ImGui::InputInt("Cell Height", &s_sliceCellHeight);
+            
+            char prefixBuf[256];
+            strncpy_s(prefixBuf, s_sliceOutputPrefix.c_str(), sizeof(prefixBuf) - 1);
+            if (ImGui::InputText("Output Prefix", prefixBuf, sizeof(prefixBuf))) {
+                s_sliceOutputPrefix = prefixBuf;
+            }
+            
+            if (s_sliceCellWidth <= 0) s_sliceCellWidth = 16;
+            if (s_sliceCellHeight <= 0) s_sliceCellHeight = 16;
+            
+            int cols = texWidth / s_sliceCellWidth;
+            int rows = texHeight / s_sliceCellHeight;
+            int totalSprites = cols * rows;
+            
+            ImGui::Text("This will generate %d textures (%d columns x %d rows)", totalSprites, cols, rows);
+            
+            ImGui::Spacing();
+            if (totalSprites > 0) {
+                if (ImGui::Button("Slice and Save Sprite Sheet", ImVec2(-1, 30))) {
+                    sliceSpriteSheet(s_spriteSlicerAssetPath, s_sliceCellWidth, s_sliceCellHeight, s_sliceOutputPrefix);
+                }
+            } else {
+                ImGui::TextColored(ImVec4(1, 0, 0, 1), "Warning: Cell size is larger than texture dimensions!");
+            }
+        } else {
+            ImGui::TextColored(ImVec4(1, 0, 0, 1), "Failed to read texture headers.");
+        }
+    } else {
+        ImGui::Text("Drag and drop a texture file from the Asset Browser here.");
+    }
+    
+    ImGui::End();
+}
+
+void EditorUI::sliceSpriteSheet(const std::filesystem::path& path, int cellWidth, int cellHeight, const std::string& prefix) {
+    stbi_set_flip_vertically_on_load(false);
+    
+    int texWidth = 0, texHeight = 0, texChannels = 0;
+    stbi_uc* pixels = stbi_load(path.string().c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    
+    if (!pixels) {
+        statusMessage = "Error: Failed to load source texture: " + path.string();
+        return;
+    }
+    
+    if (cellWidth <= 0 || cellHeight <= 0 || cellWidth > texWidth || cellHeight > texHeight) {
+        statusMessage = "Error: Invalid cell dimensions.";
+        stbi_image_free(pixels);
+        return;
+    }
+    
+    int cols = texWidth / cellWidth;
+    int rows = texHeight / cellHeight;
+    
+    if (cols <= 0 || rows <= 0) {
+        statusMessage = "Error: Cell dimensions too large.";
+        stbi_image_free(pixels);
+        return;
+    }
+    
+    std::filesystem::path parentDir = path.parent_path();
+    
+    int count = 0;
+    std::vector<stbi_uc> cellBuffer(cellWidth * cellHeight * 4);
+    
+    for (int r = 0; r < rows; ++r) {
+        for (int c = 0; c < cols; ++c) {
+            int startX = c * cellWidth;
+            int startY = r * cellHeight;
+            
+            for (int y = 0; y < cellHeight; ++y) {
+                int sourceY = startY + y;
+                int sourceX = startX;
+                
+                stbi_uc* sourceRow = &pixels[(sourceY * texWidth + sourceX) * 4];
+                stbi_uc* destRow = &cellBuffer[y * cellWidth * 4];
+                std::memcpy(destRow, sourceRow, cellWidth * 4);
+            }
+            
+            std::string outputName = prefix + "_" + std::to_string(count) + ".png";
+            std::filesystem::path outputPath = parentDir / outputName;
+            
+            if (stbi_write_png(outputPath.string().c_str(), cellWidth, cellHeight, 4, cellBuffer.data(), cellWidth * 4)) {
+                count++;
+            } else {
+                std::cerr << "[SpriteSlicer] Failed to write file: " << outputPath << std::endl;
+            }
+        }
+    }
+    
+    stbi_image_free(pixels);
+    
+    statusMessage = "Successfully sliced " + std::to_string(count) + " sprites to " + parentDir.generic_string();
+    
+    std::filesystem::path sandboxBase("../../../sandbox_game");
+    if (std::filesystem::exists(sandboxBase / "assets")) {
+        std::string pathString = parentDir.generic_string();
+        size_t assetsPos = pathString.find("assets/");
+        if (assetsPos != std::string::npos) {
+            std::string subPath = pathString.substr(assetsPos);
+            std::filesystem::path destFolder = sandboxBase / subPath;
+            std::filesystem::create_directories(destFolder);
+            
+            for (int i = 0; i < count; ++i) {
+                std::string file = prefix + "_" + std::to_string(i) + ".png";
+                std::error_code ec;
+                std::filesystem::copy_file(parentDir / file, destFolder / file, std::filesystem::copy_options::overwrite_existing, ec);
+            }
+        }
+    }
 }
 
 void EditorUI::drawBuildSettingsPanel() {
