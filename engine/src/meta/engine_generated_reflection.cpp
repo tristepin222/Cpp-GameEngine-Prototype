@@ -9,6 +9,7 @@
 #include "ecs/components/AudioListener.hpp"
 #include "ecs/components/AudioSource.hpp"
 #include "ecs/components/Camera.hpp"
+#include "ecs/components/CinemachineComponent.hpp"
 #include "ecs/components/Collider.hpp"
 #include "ecs/components/Grid.hpp"
 #include "ecs/components/IKSolver.hpp"
@@ -114,6 +115,35 @@ PLUGIN_API void registerEngineReflection() {
         refl.has = [](Registry& reg, Entity e) { return reg.has<Camera>(e); };
         refl.remove = [](Registry& reg, Entity e) { reg.remove<Camera>(e); };
         refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<Camera>(e)); };
+        Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
+    }
+    {
+        Engine::ComponentReflection refl;
+        refl.name = "CinemachineVirtualCamera";
+        refl.category = "General";
+        refl.displayName = "CinemachineVirtualCamera";
+        refl.fields = {
+            { "followTargetName", Engine::FieldType::String, offsetof(CinemachineVirtualCamera, followTargetName) },
+            { "lookAtTargetName", Engine::FieldType::String, offsetof(CinemachineVirtualCamera, lookAtTargetName) },
+            { "lockToBone", Engine::FieldType::String, offsetof(CinemachineVirtualCamera, lockToBone) },
+            { "mouseOrbit", Engine::FieldType::Bool, offsetof(CinemachineVirtualCamera, mouseOrbit) },
+            { "mouseLook", Engine::FieldType::Bool, offsetof(CinemachineVirtualCamera, mouseLook) },
+            { "orbitSensitivity", Engine::FieldType::Float, offsetof(CinemachineVirtualCamera, orbitSensitivity) },
+            { "orbitYaw", Engine::FieldType::Float, offsetof(CinemachineVirtualCamera, orbitYaw) },
+            { "orbitPitch", Engine::FieldType::Float, offsetof(CinemachineVirtualCamera, orbitPitch) },
+            { "cameraYaw", Engine::FieldType::Float, offsetof(CinemachineVirtualCamera, cameraYaw) },
+            { "cameraPitch", Engine::FieldType::Float, offsetof(CinemachineVirtualCamera, cameraPitch) },
+            { "followOffset", Engine::FieldType::Vec3, offsetof(CinemachineVirtualCamera, followOffset) },
+            { "followDamping", Engine::FieldType::Float, offsetof(CinemachineVirtualCamera, followDamping) },
+            { "lookAtDamping", Engine::FieldType::Float, offsetof(CinemachineVirtualCamera, lookAtDamping) },
+            { "fov", Engine::FieldType::Float, offsetof(CinemachineVirtualCamera, fov) },
+            { "priority", Engine::FieldType::Int, offsetof(CinemachineVirtualCamera, priority) },
+            { "active", Engine::FieldType::Bool, offsetof(CinemachineVirtualCamera, active) }
+        };
+        refl.add = [](Registry& reg, Entity e) { reg.emplace<CinemachineVirtualCamera>(e, CinemachineVirtualCamera{}); };
+        refl.has = [](Registry& reg, Entity e) { return reg.has<CinemachineVirtualCamera>(e); };
+        refl.remove = [](Registry& reg, Entity e) { reg.remove<CinemachineVirtualCamera>(e); };
+        refl.get = [](Registry& reg, Entity e) { return static_cast<void*>(reg.get<CinemachineVirtualCamera>(e)); };
         Engine::ComponentReflectionRegistry::getInstance().registerComponent(refl);
     }
     {

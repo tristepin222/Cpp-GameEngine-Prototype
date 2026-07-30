@@ -1,5 +1,4 @@
 #include "ScriptAPI.hpp"
-#include "CinemachineComponent.hpp"
 #include "ecs/components/PhysgunScript.hpp"
 
 struct Ray {
