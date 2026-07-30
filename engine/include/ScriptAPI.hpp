@@ -14,7 +14,6 @@
 #include "ecs/components/Name.hpp"
 #include "ecs/components/Hierarchy.hpp"
 #include "ecs/components/PlayerControllerComponent.hpp"
-#include "ecs/components/CinemachineComponent.hpp"
 #include "ecs/components/AudioSource.hpp"
 #include "ecs/components/Tilemap.hpp"
 #include "scenes/SceneManagement.hpp"
