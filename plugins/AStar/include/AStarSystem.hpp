@@ -15,6 +15,8 @@ struct AStarAgent {
     // [ReflectField]
     int targetY = 0;
     // [ReflectField]
+    float speed = 2.0f;
+    // [ReflectField]
     bool allowDiagonal = true;
     // [ReflectField]
     bool showDebugPath = true;
@@ -45,12 +47,14 @@ namespace AStar {
     );
 }
 
+// [ReflectClass]
 class AStarSystem : public System {
 public:
     AStarSystem(Registry& reg, VulkanRenderer& renderer, EditorModeState& editorMode);
     ~AStarSystem() = default;
 
     void update(float dt) override;
+    void renderDebugUI() override;
 
 private:
     Registry& registry;

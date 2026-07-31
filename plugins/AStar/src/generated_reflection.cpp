@@ -21,6 +21,7 @@ PLUGIN_API void registerEngineReflection() {
         refl.fields = {
             { "targetX", Engine::FieldType::Int, offsetof(AStarAgent, targetX) },
             { "targetY", Engine::FieldType::Int, offsetof(AStarAgent, targetY) },
+            { "speed", Engine::FieldType::Float, offsetof(AStarAgent, speed) },
             { "allowDiagonal", Engine::FieldType::Bool, offsetof(AStarAgent, allowDiagonal) },
             { "showDebugPath", Engine::FieldType::Bool, offsetof(AStarAgent, showDebugPath) }
         };
@@ -35,6 +36,11 @@ PLUGIN_API void registerEngineReflection() {
 PLUGIN_API void initPlugin(PluginContext* context) {
     if (context && context->imguiContext) ImGui::SetCurrentContext(context->imguiContext);
     registerEngineReflection();
+
+    // Register AStarSystem
+    {
+        context->systemManager->addSystem(std::make_shared<AStarSystem>(*context->registry, *context->renderer, *context->editorMode));
+    }
 
 }
 

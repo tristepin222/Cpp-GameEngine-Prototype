@@ -183,17 +183,6 @@ void AStarSystem::update(float dt) {
 
     glm::mat4 tilemapModel = tilemapTransform->matrix();
     glm::mat4 tilemapInv = glm::inverse(tilemapModel);
-    glm::mat4 viewProj = renderer.getActiveCameraViewProj();
-    ImGuiIO& io = ImGui::GetIO();
-
-    auto projectToScreen = [&](const glm::vec3& worldPos, ImVec2& screenPos) -> bool {
-        glm::vec4 clipPos = viewProj * glm::vec4(worldPos, 1.0f);
-        if (clipPos.w < 0.0001f) return false;
-        glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
-        screenPos.x = (ndc.x + 1.0f) * 0.5f * io.DisplaySize.x;
-        screenPos.y = (ndc.y + 1.0f) * 0.5f * io.DisplaySize.y;
-        return true;
-    };
 
     // 2. Process all entities with an AStarAgent and Transform component
     for (auto [entity, agent, trans] : registry.view<AStarAgent, Transform>()) {
@@ -212,13 +201,65 @@ void AStarSystem::update(float dt) {
             agent.lastTarget = currentTarget;
         }
 
-        // 3. Render debug path overlay in editor if enabled
+        // Move agent along the path if in play mode
+        if (editorMode.isPlaying && !agent.path.empty()) {
+            glm::ivec2 nextTile = agent.path[0];
+            if (agent.path.size() > 1) {
+                nextTile = agent.path[1];
+            }
+
+            glm::vec3 localTarget((nextTile.x + 0.5f) * tilemap->tileSize, (nextTile.y + 0.5f) * tilemap->tileSize, localPos.z);
+            glm::vec3 worldTarget = glm::vec3(tilemapModel * glm::vec4(localTarget, 1.0f));
+
+            glm::vec3 toTarget = worldTarget - trans.position;
+            float dist = glm::length(toTarget);
+            float stopThreshold = 0.05f;
+
+            if (dist > stopThreshold) {
+                float step = agent.speed * dt;
+                if (step >= dist) {
+                    trans.position = worldTarget;
+                } else {
+                    trans.position += (toTarget / dist) * step;
+                }
+            }
+        }
+    }
+}
+
+void AStarSystem::renderDebugUI() {
+    // 1. Locate the first active tilemap in the scene
+    Engine::TilemapComponent* tilemap = nullptr;
+    Transform* tilemapTransform = nullptr;
+
+    for (auto [ent, tm, trans] : registry.view<Engine::TilemapComponent, Transform>()) {
+        tilemap = &tm;
+        tilemapTransform = &trans;
+        break;
+    }
+
+    if (!tilemap || !tilemapTransform) return;
+
+    glm::mat4 tilemapModel = tilemapTransform->matrix();
+    glm::mat4 viewProj = renderer.getActiveCameraViewProj();
+    ImGuiIO& io = ImGui::GetIO();
+
+    auto projectToScreen = [&](const glm::vec3& worldPos, ImVec2& screenPos) -> bool {
+        glm::vec4 clipPos = viewProj * glm::vec4(worldPos, 1.0f);
+        if (clipPos.w < 0.0001f) return false;
+        glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
+        screenPos.x = (ndc.x + 1.0f) * 0.5f * io.DisplaySize.x;
+        screenPos.y = (ndc.y + 1.0f) * 0.5f * io.DisplaySize.y;
+        return true;
+    };
+
+    // 2. Process all entities with an AStarAgent and Transform component
+    for (auto [entity, agent, trans] : registry.view<AStarAgent, Transform>()) {
         if (agent.showDebugPath && !agent.path.empty()) {
             ImDrawList* drawList = ImGui::GetBackgroundDrawList();
             ImU32 pathColor = ImColor(0, 255, 127, 240); // Spring green
             ImU32 targetColor = ImColor(255, 69, 0, 245); // Orange red
 
-            // Draw line connections along the path
             ImVec2 prevScreen;
             bool prevValid = false;
 
@@ -231,7 +272,6 @@ void AStarSystem::update(float dt) {
                     if (prevValid) {
                         drawList->AddLine(prevScreen, currScreen, pathColor, 3.0f);
                     }
-                    // Draw node points
                     drawList->AddCircleFilled(currScreen, 4.0f, pathColor);
                     prevScreen = currScreen;
                     prevValid = true;
@@ -240,7 +280,7 @@ void AStarSystem::update(float dt) {
                 }
             }
 
-            // Draw target circle indicator
+            glm::ivec2 currentTarget(agent.targetX, agent.targetY);
             glm::vec3 targetLocal((currentTarget.x + 0.5f) * tilemap->tileSize, (currentTarget.y + 0.5f) * tilemap->tileSize, 0.06f);
             glm::vec3 targetWorld = glm::vec3(tilemapModel * glm::vec4(targetLocal, 1.0f));
             ImVec2 targetScreen;
