@@ -6,6 +6,8 @@
 #include <vector>
 #include <glm/glm.hpp>
 
+#include "meta/ComponentReflection.hpp"
+
 // [ReflectClass]
 struct AStarAgent {
     // [ReflectField]
@@ -24,6 +26,7 @@ struct AStarAgent {
     glm::ivec2 lastStart = glm::ivec2(-9999);
     glm::ivec2 lastTarget = glm::ivec2(-9999);
 };
+REGISTER_COMPONENT(AStarAgent, "AI/AStar Agent");
 
 namespace Engine {
     struct TilemapComponent;

@@ -4,8 +4,16 @@ project(AStarPlugin LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Custom command to generate reflection boilerplate
+add_custom_command(
+    OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/src/generated_reflection.cpp"
+    COMMAND $<TARGET_FILE:reflection_generator> "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src/generated_reflection.cpp"
+    DEPENDS reflection_generator "${CMAKE_CURRENT_SOURCE_DIR}/include/AStarSystem.hpp"
+    COMMENT "[Reflection Generator] Parsing annotations and generating registration code for AStar..."
+)
+
 set(PLUGIN_SOURCES
-    src/AStarPlugin.cpp
+    src/generated_reflection.cpp
     src/AStarSystem.cpp
 )
 

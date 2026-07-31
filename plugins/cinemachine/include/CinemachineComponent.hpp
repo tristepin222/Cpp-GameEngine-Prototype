@@ -91,3 +91,6 @@ struct CinemachineVirtualCamera {
     /** @brief Flag indicating whether camera initial transform was initialized. */
     bool initialized = false;
 };
+
+#include "meta/ComponentReflection.hpp"
+REGISTER_COMPONENT(CinemachineVirtualCamera, "Camera/Cinemachine Virtual Camera");
