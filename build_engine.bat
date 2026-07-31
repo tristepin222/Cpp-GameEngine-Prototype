@@ -99,6 +99,10 @@ if exist %BUILD_DIR%\plugins\cinemachine\%CONFIG%\cinemachine_plugin.dll (
     mkdir %SDK_DIR%\plugins
     copy /Y %BUILD_DIR%\plugins\cinemachine\%CONFIG%\cinemachine_plugin.dll %SDK_DIR%\plugins\
 )
+if exist %BUILD_DIR%\plugins\AStar\%CONFIG%\astar_plugin.dll (
+    mkdir %SDK_DIR%\plugins
+    copy /Y %BUILD_DIR%\plugins\AStar\%CONFIG%\astar_plugin.dll %SDK_DIR%\plugins\
+)
 
 REM Copy EngineConfig.cmake (for standalone game CMake projects)
 copy /Y engine\cmake\EngineConfig.cmake %SDK_DIR%\cmake\
