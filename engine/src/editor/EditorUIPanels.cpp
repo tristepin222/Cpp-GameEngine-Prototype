@@ -90,7 +90,7 @@ void EditorUI::drawPanels() {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("Save Scene", "Ctrl+S")) {
                 if (Scene* currentScene = sceneManager.getCurrentScene()) {
-                    currentScene->saveToFile("sandbox_game/assets/scenes/test_scene.json");
+                    currentScene->saveToFile(scenePath);
                     statusMessage = "Scene saved successfully.";
                 }
             }
@@ -98,7 +98,7 @@ void EditorUI::drawPanels() {
                 if (Scene* currentScene = sceneManager.getCurrentScene()) {
                     SceneSerializer serializer(registry, renderer);
                     std::vector<Entity> loadedEntities;
-                    if (serializer.deserialize("sandbox_game/assets/scenes/test_scene.json", loadedEntities)) {
+                    if (serializer.deserialize(scenePath, loadedEntities)) {
                         statusMessage = "Scene loaded successfully.";
                     } else {
                         statusMessage = "Failed to load scene.";
@@ -1015,11 +1015,7 @@ void EditorUI::drawAssetBrowser() {
                     if (MenuItem("Delete Folder")) {
                         try {
                             std::filesystem::path activePath = entry.path();
-                            std::filesystem::path sourcePath = std::filesystem::path("../../../sandbox_game") / activePath;
                             std::filesystem::remove_all(activePath);
-                            if (std::filesystem::exists(sourcePath)) {
-                                std::filesystem::remove_all(sourcePath);
-                            }
                             statusMessage = "Deleted folder: " + name;
                         } catch (const std::exception& e) {
                             statusMessage = std::string("Failed to delete folder: ") + e.what();
@@ -1162,11 +1158,7 @@ void EditorUI::drawAssetBrowser() {
                     if (MenuItem("Delete File")) {
                         try {
                             std::filesystem::path activePath = entry.path();
-                            std::filesystem::path sourcePath = std::filesystem::path("../../../sandbox_game") / activePath;
                             std::filesystem::remove(activePath);
-                            if (std::filesystem::exists(sourcePath)) {
-                                std::filesystem::remove(sourcePath);
-                            }
                             statusMessage = "Deleted file: " + name;
                         } catch (const std::exception& e) {
                             statusMessage = std::string("Failed to delete file: ") + e.what();
@@ -1254,9 +1246,7 @@ void EditorUI::drawAssetBrowser() {
         if (Button("Create", ImVec2(120, 0))) {
             if (s_createFolderBuffer[0] != '\0') {
                 std::filesystem::path newActive = s_createFolderParentPath / s_createFolderBuffer;
-                std::filesystem::path newSource = std::filesystem::path("../../../sandbox_game") / newActive;
                 std::filesystem::create_directories(newActive);
-                std::filesystem::create_directories(newSource);
                 statusMessage = "Created folder: " + std::string(s_createFolderBuffer);
             }
             CloseCurrentPopup();
@@ -1280,11 +1270,8 @@ void EditorUI::drawAssetBrowser() {
                 std::string sname = s_createSceneBuffer;
                 if (sname.rfind(".json") == std::string::npos) sname += ".json";
                 std::filesystem::path newActive = s_createSceneParentPath / sname;
-                std::filesystem::path newSource = std::filesystem::path("../../../sandbox_game") / newActive;
                 std::ofstream fActive(newActive);
                 if (fActive.is_open()) { fActive << "[]"; fActive.close(); }
-                std::ofstream fSource(newSource);
-                if (fSource.is_open()) { fSource << "[]"; fSource.close(); }
                 statusMessage = "Created scene: " + sname;
             }
             CloseCurrentPopup();
@@ -1306,7 +1293,6 @@ void EditorUI::drawAssetBrowser() {
         if (Button("Create", ImVec2(120, 0))) {
             if (s_createFileBuffer[0] != '\0') {
                 std::filesystem::path newActive = s_createFileParentPath / s_createFileBuffer;
-                std::filesystem::path newSource = std::filesystem::path("../../../sandbox_game") / newActive;
                 auto writeNewFile = [](const std::filesystem::path& p) {
                     std::ofstream f(p, std::ios::binary);
                     if (f.is_open()) {
@@ -1324,7 +1310,6 @@ void EditorUI::drawAssetBrowser() {
                     }
                 };
                 writeNewFile(newActive);
-                writeNewFile(newSource);
                 if (newActive.extension().string() == ".anim") {
                     statusMessage = "Created animation file: " + std::string(s_createFileBuffer);
                 } else {
@@ -1352,13 +1337,7 @@ void EditorUI::drawAssetBrowser() {
                 try {
                     std::filesystem::path parent = s_renameTargetPath.parent_path();
                     std::filesystem::path newActive = parent / s_renameBuffer;
-                    std::filesystem::path newSource = std::filesystem::path("../../../sandbox_game") / newActive;
-                    std::filesystem::path oldSource = std::filesystem::path("../../../sandbox_game") / s_renameTargetPath;
-
                     std::filesystem::rename(s_renameTargetPath, newActive);
-                    if (std::filesystem::exists(oldSource)) {
-                        std::filesystem::rename(oldSource, newSource);
-                    }
                     statusMessage = "Renamed " + s_renameTargetPath.filename().string() + " to " + s_renameBuffer;
                 } catch (const std::exception& e) {
                     statusMessage = std::string("Rename failed: ") + e.what();
@@ -1453,12 +1432,6 @@ void EditorUI::drawImportSettingsWindow() {
                 std::filesystem::create_directories("assets/animations");
                 bool success = renderer.resourceManager->saveBinarySkeletonAndAnimations(relativePath, tempSkel, tempAnim);
                 
-                std::filesystem::path sourceBase("../../../sandbox_game");
-                if (std::filesystem::exists(sourceBase / "assets")) {
-                    std::filesystem::create_directories(sourceBase / "assets/animations");
-                    renderer.resourceManager->saveBinarySkeletonAndAnimations((sourceBase / relativePath).generic_string(), tempSkel, tempAnim);
-                }
-                
                 if (success) {
                     statusMessage = "Extracted all animations to " + relativePath;
                 } else {
@@ -1490,12 +1463,6 @@ void EditorUI::drawImportSettingsWindow() {
                         
                         std::filesystem::create_directories("assets/animations");
                         bool success = renderer.resourceManager->saveBinarySkeletonAndAnimations(relativePath, tempSkel, tempAnim);
-                        
-                        std::filesystem::path sourceBase("../../../sandbox_game");
-                        if (std::filesystem::exists(sourceBase / "assets")) {
-                            std::filesystem::create_directories(sourceBase / "assets/animations");
-                            renderer.resourceManager->saveBinarySkeletonAndAnimations((sourceBase / relativePath).generic_string(), tempSkel, tempAnim);
-                        }
                         
                         if (success) {
                             statusMessage = "Extracted animation to " + relativePath;
@@ -1746,22 +1713,6 @@ void EditorUI::sliceSpriteSheet(const std::filesystem::path& path, int cellWidth
     
     statusMessage = "Successfully sliced " + std::to_string(count) + " sprites to " + parentDir.generic_string();
     
-    std::filesystem::path sandboxBase("../../../sandbox_game");
-    if (std::filesystem::exists(sandboxBase / "assets")) {
-        std::string pathString = parentDir.generic_string();
-        size_t assetsPos = pathString.find("assets/");
-        if (assetsPos != std::string::npos) {
-            std::string subPath = pathString.substr(assetsPos);
-            std::filesystem::path destFolder = sandboxBase / subPath;
-            std::filesystem::create_directories(destFolder);
-            
-            for (int i = 0; i < count; ++i) {
-                std::string file = prefix + "_" + std::to_string(i) + ".png";
-                std::error_code ec;
-                std::filesystem::copy_file(parentDir / file, destFolder / file, std::filesystem::copy_options::overwrite_existing, ec);
-            }
-        }
-    }
 }
 
 void EditorUI::drawBuildSettingsPanel() {

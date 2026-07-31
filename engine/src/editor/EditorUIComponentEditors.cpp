@@ -688,10 +688,10 @@ void EditorUI::drawAnimatorEditor() {
     if (Button("Save Binary (.anim)")) {
         SkeletonComponent* skeleton = registry.get<SkeletonComponent>(selectedEntity);
         if (skeleton) {
-            std::filesystem::create_directories("sandbox_game/assets/animations");
-            std::string savePath = "sandbox_game/assets/animations/model.anim";
+            std::filesystem::create_directories("assets/animations");
+            std::string savePath = "assets/animations/model.anim";
             if (auto* nameComp = registry.get<Name>(selectedEntity)) {
-                savePath = "sandbox_game/assets/animations/" + nameComp->value + ".anim";
+                savePath = "assets/animations/" + nameComp->value + ".anim";
             }
             if (renderer.resourceManager->saveBinarySkeletonAndAnimations(savePath, *skeleton, *animator)) {
                 statusMessage = "Saved binary animation to " + savePath;

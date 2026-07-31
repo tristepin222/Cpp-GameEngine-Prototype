@@ -42,25 +42,7 @@ void Scene::unload() {
  */
 bool Scene::saveToFile(const std::string& path) {
     SceneSerializer serializer(registry, renderer);
-    bool ok = serializer.serialize(path, ownedEntities);
-    if (ok) {
-        std::filesystem::path p(path);
-        std::string pathStr = p.generic_string();
-        
-        if (pathStr.rfind("./", 0) == 0) {
-            pathStr = pathStr.substr(2);
-        }
-        
-        if (pathStr.rfind("assets/", 0) == 0) {
-            std::string sourcePath = "../../../sandbox_game/" + pathStr;
-            std::filesystem::path sourceDirPath = std::filesystem::path(sourcePath).parent_path();
-            if (std::filesystem::exists("../../../sandbox_game/assets")) {
-                std::filesystem::create_directories(sourceDirPath);
-                serializer.serialize(sourcePath, ownedEntities);
-            }
-        }
-    }
-    return ok;
+    return serializer.serialize(path, ownedEntities);
 }
 
 /**
