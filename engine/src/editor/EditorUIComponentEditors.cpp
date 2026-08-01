@@ -688,10 +688,10 @@ void EditorUI::drawAnimatorEditor() {
     if (Button("Save Binary (.anim)")) {
         SkeletonComponent* skeleton = registry.get<SkeletonComponent>(selectedEntity);
         if (skeleton) {
-            std::filesystem::create_directories("sandbox_game/assets/animations");
-            std::string savePath = "sandbox_game/assets/animations/model.anim";
+            std::filesystem::create_directories("assets/animations");
+            std::string savePath = "assets/animations/model.anim";
             if (auto* nameComp = registry.get<Name>(selectedEntity)) {
-                savePath = "sandbox_game/assets/animations/" + nameComp->value + ".anim";
+                savePath = "assets/animations/" + nameComp->value + ".anim";
             }
             if (renderer.resourceManager->saveBinarySkeletonAndAnimations(savePath, *skeleton, *animator)) {
                 statusMessage = "Saved binary animation to " + savePath;
@@ -1417,6 +1417,39 @@ void EditorUI::drawAnimationControllerEditor() {
     }
 }
 
+static bool doesEntityHaveRequiredComponent(Registry& registry, Entity entity, const std::string& fieldName) {
+    if (!registry.isValid(entity)) return false;
+
+    std::string lowerField = fieldName;
+    for (char& c : lowerField) c = std::tolower(static_cast<unsigned char>(c));
+
+    bool hasRequirement = false;
+    bool meetsAllRequirements = true;
+
+    auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
+    for (const auto& refl : reflReg.getReflections()) {
+        std::string compName = refl.name;
+        std::string lowerComp = compName;
+        for (char& c : lowerComp) c = std::tolower(static_cast<unsigned char>(c));
+
+        // Check if the field name contains the component name directly (e.g. "targetTransform" contains "transform")
+        if (lowerField.find(lowerComp) != std::string::npos) {
+            hasRequirement = true;
+            if (!refl.has(registry, entity)) {
+                meetsAllRequirements = false;
+                break;
+            }
+        }
+    }
+
+    if (hasRequirement) {
+        return meetsAllRequirements;
+    }
+
+    // No specific component requirement matched, accept any entity
+    return true;
+}
+
 void EditorUI::drawReflectedComponentsEditor() {
     auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
     for (const auto& refl : reflReg.getReflections()) {
@@ -1583,6 +1616,18 @@ void EditorUI::drawReflectedComponentsEditor() {
                     }
                     ImGui::EndCombo();
                 }
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PAYLOAD_HIERARCHY_ENTITY")) {
+                        std::uint32_t draggedId = *static_cast<const std::uint32_t*>(payload->Data);
+                        Entity draggedEntity(draggedId);
+                        if (doesEntityHaveRequiredComponent(registry, draggedEntity, field.name)) {
+                            *target = draggedEntity;
+                        } else {
+                            statusMessage = "Rejected drop: Entity lacks required component for field: " + field.name;
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
             }
         }
 
@@ -1722,24 +1767,113 @@ void EditorUI::drawTilemapInspector() {
         if (changed) {
             int newW = std::max(1, w);
             int newH = std::max(1, h);
-            std::vector<int> newTiles(newW * newH, -1);
-            for (int y = 0; y < std::min(tm->height, newH); ++y)
-                for (int x = 0; x < std::min(tm->width, newW); ++x)
-                    newTiles[y * newW + x] = (y * tm->width + x < (int)tm->tiles.size())
-                        ? tm->tiles[y * tm->width + x] : -1;
+            for (auto& layer : tm->layers) {
+                std::vector<int> newTiles(newW * newH, -1);
+                for (int y = 0; y < std::min(tm->height, newH); ++y) {
+                    for (int x = 0; x < std::min(tm->width, newW); ++x) {
+                        int oldIdx = y * tm->width + x;
+                        if (oldIdx >= 0 && oldIdx < (int)layer.tiles.size()) {
+                            newTiles[y * newW + x] = layer.tiles[oldIdx];
+                        }
+                    }
+                }
+                layer.tiles = std::move(newTiles);
+            }
             tm->width  = newW;
             tm->height = newH;
-            tm->tiles  = std::move(newTiles);
             tm->isDirty = true;
         }
 
         DragFloat("Tile Size##tmTS", &tm->tileSize, 0.01f, 0.01f, 100.f);
 
         Spacing();
-        if (Button("Clear All Tiles")) {
-            std::fill(tm->tiles.begin(), tm->tiles.end(), -1);
+        Text("Layers (Active paint, Visible, Name, Tag, zOffset, Delete):");
+
+        int layerToDelete = -1;
+        for (int i = 0; i < (int)tm->layers.size(); ++i) {
+            auto& layer = tm->layers[i];
+            PushID(i);
+            
+            // Active radio button
+            bool isActive = (s_tilemapActiveLayer == i);
+            if (RadioButton("##active", isActive)) {
+                s_tilemapActiveLayer = i;
+            }
+            SameLine();
+
+            // Visibility checkbox
+            Checkbox("##visible", &layer.isVisible);
+            if (IsItemDeactivatedAfterEdit()) {
+                tm->isDirty = true;
+            }
+            SameLine();
+
+            // Name input
+            char nameBuf[256];
+            strncpy_s(nameBuf, layer.name.c_str(), sizeof(nameBuf) - 1);
+            SetNextItemWidth(100.0f);
+            if (InputText("##name", nameBuf, sizeof(nameBuf))) {
+                layer.name = nameBuf;
+            }
+            SameLine();
+
+            // Tag input
+            char tagBuf[256];
+            strncpy_s(tagBuf, layer.tag.c_str(), sizeof(tagBuf) - 1);
+            SetNextItemWidth(80.0f);
+            if (InputText("##tag", tagBuf, sizeof(tagBuf))) {
+                layer.tag = tagBuf;
+                tm->isDirty = true;
+            }
+            SameLine();
+
+            // zOffset drag float
+            SetNextItemWidth(60.0f);
+            if (DragFloat("##zoffset", &layer.zOffset, 0.01f, -100.0f, 100.0f, "%.2f")) {
+                tm->isDirty = true;
+            }
+            SameLine();
+
+            // Delete button
+            if (tm->layers.size() > 1) {
+                if (Button("X")) {
+                    layerToDelete = i;
+                }
+            } else {
+                TextDisabled("X");
+            }
+
+            PopID();
+        }
+
+        if (layerToDelete != -1) {
+            tm->layers.erase(tm->layers.begin() + layerToDelete);
+            if (s_tilemapActiveLayer >= (int)tm->layers.size()) {
+                s_tilemapActiveLayer = (int)tm->layers.size() - 1;
+            }
             tm->isDirty = true;
-            statusMessage = "Cleared tilemap.";
+            statusMessage = "Deleted layer.";
+        }
+
+        if (Button("Add Layer")) {
+            Engine::TilemapLayer newLayer;
+            newLayer.name = "Layer " + to_string(tm->layers.size());
+            newLayer.zOffset = tm->layers.empty() ? 0.0f : (tm->layers.back().zOffset + 0.01f);
+            newLayer.tag = "";
+            newLayer.isVisible = true;
+            newLayer.tiles.assign(tm->width * tm->height, -1);
+            tm->layers.push_back(newLayer);
+            tm->isDirty = true;
+            statusMessage = "Added layer: " + newLayer.name;
+        }
+
+        Spacing();
+        if (Button("Clear All Tiles")) {
+            for (auto& layer : tm->layers) {
+                std::fill(layer.tiles.begin(), layer.tiles.end(), -1);
+            }
+            tm->isDirty = true;
+            statusMessage = "Cleared all tilemap layers.";
         }
         SameLine();
         if (Button("Open Tileset Editor")) {

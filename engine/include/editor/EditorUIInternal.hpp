@@ -49,6 +49,7 @@ extern bool s_tilesetLoaded;
 extern int s_brushTileId;
 extern bool s_brushModeActive;
 extern Entity s_brushTilemapEntity;
+extern int s_tilemapActiveLayer;
 extern ImVec2 s_tsPanOffset;
 extern float s_tsCellSize;
 extern bool s_tsIsPanning;

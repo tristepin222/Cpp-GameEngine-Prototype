@@ -341,6 +341,7 @@ PLUGIN_API void registerEngineReflection() {
         refl.displayName = "Transform";
         refl.fields = {
             { "position", Engine::FieldType::Vec3, offsetof(Transform, position) },
+            { "rotation", Engine::FieldType::Vec3, offsetof(Transform, rotation) },
             { "scale", Engine::FieldType::Vec3, offsetof(Transform, scale) }
         };
         refl.add = [](Registry& reg, Entity e) { reg.emplace<Transform>(e, Transform{}); };

@@ -77,6 +77,7 @@ bool s_tilesetLoaded = false;
 int s_brushTileId = -1;
 bool s_brushModeActive = false;
 Entity s_brushTilemapEntity;
+int s_tilemapActiveLayer = 0;
 ImVec2 s_tsPanOffset{ 0.f, 0.f };
 float s_tsCellSize = 64.f;
 bool s_tsIsPanning = false;
@@ -203,11 +204,6 @@ void saveImportSettings() {
 
         // Write active copy
         writeMeta(relativePath);
-        // Write source copy
-        std::filesystem::path sourceBase("../../../sandbox_game");
-        if (std::filesystem::exists(sourceBase / "assets")) {
-            writeMeta(sourceBase / relativePath);
-        }
         return;
     }
 
@@ -225,24 +221,6 @@ void saveImportSettings() {
             f.close();
         }
         
-        // Write source copy
-        std::filesystem::path sourceBase("../../../sandbox_game");
-        if (std::filesystem::exists(sourceBase / "assets")) {
-            std::filesystem::path sourcePath = sourceBase / relativePath;
-            if (!sourcePath.parent_path().empty()) {
-                std::filesystem::create_directories(sourcePath.parent_path());
-            }
-            std::ofstream fSrc(sourcePath);
-            if (fSrc.is_open()) {
-                fSrc << "{\n"
-                     << "  \"scale\": " << s_importMetadata.scale << ",\n"
-                     << "  \"generateNormals\": " << (s_importMetadata.generateNormals ? "true" : "false") << ",\n"
-                     << "  \"allowMissingPos\": " << (s_importMetadata.allowMissingPos ? "true" : "false") << ",\n"
-                     << "  \"forceInPlace\": " << (s_importMetadata.forceInPlace ? "true" : "false") << "\n"
-                     << "}\n";
-                fSrc.close();
-            }
-        }
     } catch (...) {}
 }
 
@@ -257,19 +235,6 @@ bool writeExtractedFile(const std::string& relativePath, const void* data, size_
     activeOut.write(reinterpret_cast<const char*>(data), size);
     activeOut.close();
 
-    // 2. Write to source folder if it exists (makes it persistent across builds/cleans)
-    std::filesystem::path sourceBase("../../../sandbox_game");
-    if (std::filesystem::exists(sourceBase / "assets")) {
-        std::filesystem::path sourcePath = sourceBase / relativePath;
-        if (!sourcePath.parent_path().empty()) {
-            std::filesystem::create_directories(sourcePath.parent_path());
-        }
-        std::ofstream sourceOut(sourcePath, std::ios::binary);
-        if (sourceOut.is_open()) {
-            sourceOut.write(reinterpret_cast<const char*>(data), size);
-            sourceOut.close();
-        }
-    }
     return true;
 }
 

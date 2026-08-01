@@ -30,6 +30,16 @@ public:
         }
     }
 
+    /**
+     * @brief Triggers debug rendering on all registered systems.
+     * Called during the ImGui rendering phase.
+     */
+    void renderDebugAll() {
+        for (auto& system : systems) {
+            system->renderDebugUI();
+        }
+    }
+
 
 
     /**

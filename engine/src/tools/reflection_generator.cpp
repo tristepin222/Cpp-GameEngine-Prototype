@@ -40,7 +40,7 @@ std::string getFieldTypeEnum(const std::string& type) {
 
     if (type == "bool") return "Engine::FieldType::Bool";
     if (type == "glm::vec2" || type == "vec2") return "Engine::FieldType::Vec2";
-    if (type == "glm::vec3" || type == "vec3") return "Engine::FieldType::Vec3";
+    if (type == "glm::vec3" || type == "vec3" || type == "RotationField") return "Engine::FieldType::Vec3";
     if (type == "glm::vec4" || type == "vec4") return "Engine::FieldType::Vec4";
     if (type == "std::string" || type == "string") return "Engine::FieldType::String";
     if (type == "RigidBodyType") return "Engine::FieldType::RigidBodyType";

@@ -257,9 +257,22 @@ void EditorUI::handleViewportPicking() {
                                 }
 
                                 size_t expectedSize = static_cast<size_t>(tm->width) * tm->height;
-                                if (tm->tiles.size() != expectedSize) {
-                                    tm->tiles.resize(expectedSize, -1);
+                                if (tm->layers.empty()) {
+                                    Engine::TilemapLayer defaultLayer;
+                                    defaultLayer.name = "Ground";
+                                    defaultLayer.zOffset = 0.0f;
+                                    defaultLayer.tag = "ground";
+                                    defaultLayer.isVisible = true;
+                                    defaultLayer.tiles.assign(expectedSize, -1);
+                                    tm->layers.push_back(defaultLayer);
                                     tm->isDirty = true;
+                                }
+
+                                for (auto& layer : tm->layers) {
+                                    if (layer.tiles.size() != expectedSize) {
+                                        layer.tiles.resize(expectedSize, -1);
+                                        tm->isDirty = true;
+                                    }
                                 }
 
                                 glm::mat4 modelMatrix = transform->matrix();
@@ -278,10 +291,18 @@ void EditorUI::handleViewportPicking() {
 
                                         if (cellX >= 0 && cellX < tm->width && cellY >= 0 && cellY < tm->height) {
                                             int idx = cellY * tm->width + cellX;
-                                            if (idx >= 0 && idx < static_cast<int>(tm->tiles.size())) {
+                                            
+                                            // Clamp painting layer to valid bounds
+                                            if (s_tilemapActiveLayer < 0) s_tilemapActiveLayer = 0;
+                                            if (s_tilemapActiveLayer >= (int)tm->layers.size()) {
+                                                s_tilemapActiveLayer = (int)tm->layers.size() - 1;
+                                            }
+
+                                            auto& targetLayerTiles = tm->layers[s_tilemapActiveLayer].tiles;
+                                            if (idx >= 0 && idx < static_cast<int>(targetLayerTiles.size())) {
                                                 int newValue = leftMouseDown ? s_brushTileId : -1;
-                                                if (tm->tiles[idx] != newValue) {
-                                                    tm->tiles[idx] = newValue;
+                                                if (targetLayerTiles[idx] != newValue) {
+                                                    targetLayerTiles[idx] = newValue;
                                                     tm->isDirty = true;
                                                 }
                                             }

@@ -1,4 +1,5 @@
 #include "CinemachineSystem.hpp"
+#include "renderer/VulkanRenderer.hpp"
 #include "ecs/components/Camera.hpp"
 #include "ecs/components/EditorCamera.hpp"
 #include "ecs/components/Transform.hpp"
@@ -67,7 +68,7 @@ glm::mat4 getJointWorldMatrix(Registry& registry, Entity entity, const std::stri
     return getEntityWorldMatrix(registry, entity) * modelMatrix;
 }
 
-CinemachineSystem::CinemachineSystem(Registry& reg, EditorModeState& mode)
+CinemachineSystem::CinemachineSystem(Registry& reg, VulkanRenderer& renderer, EditorModeState& mode)
     : registry(reg), editorMode(mode) {}
 
 void CinemachineSystem::update(float dt) {

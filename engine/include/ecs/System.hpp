@@ -23,6 +23,12 @@ public:
     virtual void update(float dt) = 0;
     
     /**
+     * @brief Optional rendering/debug drawing function.
+     * Called during the ImGui rendering phase.
+     */
+    virtual void renderDebugUI() {}
+    
+    /**
      * @brief Adds an entity to the system tracking list.
      * @param e Entity to track.
      */
