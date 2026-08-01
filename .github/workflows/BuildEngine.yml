@@ -66,7 +66,8 @@ jobs:
             cp -r build/shaders CrimsonEngine/
           fi
           if [ -d build/plugins ]; then
-            cp -r build/plugins CrimsonEngine/
+            mkdir -p CrimsonEngine/plugins
+            find build/plugins -name "*.so" -exec cp {} CrimsonEngine/plugins/ \;
           fi
           tar -czf CrimsonEngine-Linux-x64.tar.gz CrimsonEngine
 
@@ -106,7 +107,10 @@ jobs:
           if (Test-Path build\engine\Release\editor.exe) { Copy-Item build\engine\Release\editor.exe CrimsonEngine\ }
           if (Test-Path build\engine\Release\game_runtime.exe) { Copy-Item build\engine\Release\game_runtime.exe CrimsonEngine\ }
           if (Test-Path build\shaders) { Copy-Item -Recurse -Force build\shaders CrimsonEngine\ }
-          if (Test-Path build\plugins) { Copy-Item -Recurse -Force build\plugins CrimsonEngine\ }
+          if (Test-Path build\plugins) {
+              New-Item -ItemType Directory -Force -Path CrimsonEngine\plugins
+              Get-ChildItem -Path build\plugins -Filter *.dll -Recurse | Copy-Item -Destination CrimsonEngine\plugins\
+          }
           Compress-Archive -Path CrimsonEngine -DestinationPath CrimsonEngine-Windows-x64.zip
 
       - name: Upload Windows x64 Artifact
@@ -186,7 +190,10 @@ jobs:
           if (Test-Path build\engine\Release\editor.exe) { Copy-Item build\engine\Release\editor.exe CrimsonEngine\ }
           if (Test-Path build\engine\Release\game_runtime.exe) { Copy-Item build\engine\Release\game_runtime.exe CrimsonEngine\ }
           if (Test-Path build\shaders) { Copy-Item -Recurse -Force build\shaders CrimsonEngine\ }
-          if (Test-Path build\plugins) { Copy-Item -Recurse -Force build\plugins CrimsonEngine\ }
+          if (Test-Path build\plugins) {
+              New-Item -ItemType Directory -Force -Path CrimsonEngine\plugins
+              Get-ChildItem -Path build\plugins -Filter *.dll -Recurse | Copy-Item -Destination CrimsonEngine\plugins\
+          }
           Compress-Archive -Path CrimsonEngine -DestinationPath CrimsonEngine-Windows-ARM64.zip
 
       - name: Upload Windows ARM64 Artifact
