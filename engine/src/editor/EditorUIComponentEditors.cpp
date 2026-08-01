@@ -1417,6 +1417,39 @@ void EditorUI::drawAnimationControllerEditor() {
     }
 }
 
+static bool doesEntityHaveRequiredComponent(Registry& registry, Entity entity, const std::string& fieldName) {
+    if (!registry.isValid(entity)) return false;
+
+    std::string lowerField = fieldName;
+    for (char& c : lowerField) c = std::tolower(static_cast<unsigned char>(c));
+
+    bool hasRequirement = false;
+    bool meetsAllRequirements = true;
+
+    auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
+    for (const auto& refl : reflReg.getReflections()) {
+        std::string compName = refl.name;
+        std::string lowerComp = compName;
+        for (char& c : lowerComp) c = std::tolower(static_cast<unsigned char>(c));
+
+        // Check if the field name contains the component name directly (e.g. "targetTransform" contains "transform")
+        if (lowerField.find(lowerComp) != std::string::npos) {
+            hasRequirement = true;
+            if (!refl.has(registry, entity)) {
+                meetsAllRequirements = false;
+                break;
+            }
+        }
+    }
+
+    if (hasRequirement) {
+        return meetsAllRequirements;
+    }
+
+    // No specific component requirement matched, accept any entity
+    return true;
+}
+
 void EditorUI::drawReflectedComponentsEditor() {
     auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
     for (const auto& refl : reflReg.getReflections()) {
@@ -1582,6 +1615,18 @@ void EditorUI::drawReflectedComponentsEditor() {
                         }
                     }
                     ImGui::EndCombo();
+                }
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PAYLOAD_HIERARCHY_ENTITY")) {
+                        std::uint32_t draggedId = *static_cast<const std::uint32_t*>(payload->Data);
+                        Entity draggedEntity(draggedId);
+                        if (doesEntityHaveRequiredComponent(registry, draggedEntity, field.name)) {
+                            *target = draggedEntity;
+                        } else {
+                            statusMessage = "Rejected drop: Entity lacks required component for field: " + field.name;
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
                 }
             }
         }

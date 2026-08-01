@@ -32,6 +32,7 @@ struct ParentNameComponent {
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <unordered_map>
 
 // Static initializer to register core engine components with the registry
 /**
@@ -1147,14 +1148,8 @@ bool SceneSerializer::serialize(const std::string& path, const std::vector<Entit
         first = false;
 
         out << JSONUtils::indent(2) << "{\n";
+        out << JSONUtils::indent(3) << "\"id\": " << entity.getId() << ",\n";
         out << JSONUtils::indent(3) << "\"name\": " << JSONUtils::quote(name->value);
-        if (transform && !isUI) {
-            out << ",\n" << JSONUtils::indent(3) << "\"transform\": {\n";
-            out << JSONUtils::indent(4) << "\"position\": " << JSONUtils::vec3ToJson(transform->position) << ",\n";
-            out << JSONUtils::indent(4) << "\"rotation\": " << JSONUtils::vec3ToJson(transform->rotation) << ",\n";
-            out << JSONUtils::indent(4) << "\"scale\": " << JSONUtils::vec3ToJson(transform->scale) << "\n";
-            out << JSONUtils::indent(3) << "}";
-        }
 
 
         // Dynamically invoke all registered component serializers to append component sub-objects
@@ -1222,6 +1217,7 @@ bool SceneSerializer::deserializeFromString(const std::string& jsonContent, std:
 }
 
 bool SceneSerializer::deserialize(const std::string& path, std::vector<Entity>& outEntities) {
+    std::unordered_map<std::uint32_t, Entity> oldToNewEntityMap;
     std::ifstream in(path);
 
     if (!in.is_open()) {
@@ -1246,9 +1242,19 @@ bool SceneSerializer::deserialize(const std::string& path, std::vector<Entity>& 
             continue;
         }
 
+        float oldIdVal = 0.0f;
+        std::uint32_t oldId = Entity::INVALID_ENTITY;
+        if (JSONUtils::extractFloatValue(entityJson, "id", oldIdVal)) {
+            oldId = static_cast<std::uint32_t>(oldIdVal);
+        }
+
         Entity entity = registry.create();
         if (entity.getId() == Entity::INVALID_ENTITY) {
             continue;
+        }
+
+        if (oldId != Entity::INVALID_ENTITY) {
+            oldToNewEntityMap[oldId] = entity;
         }
 
         // Initialize core components
@@ -1335,6 +1341,32 @@ bool SceneSerializer::deserialize(const std::string& path, std::vector<Entity>& 
     }
     for (Entity e : toClean) {
         registry.remove<ParentNameComponent>(e);
+    }
+
+    // Resolve all reflected Entity fields using the oldToNewEntityMap
+    auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
+    for (Entity entity : outEntities) {
+        for (const auto& refl : reflReg.getReflections()) {
+            if (refl.has(registry, entity)) {
+                void* compPtr = refl.get(registry, entity);
+                if (!compPtr) continue;
+
+                for (const auto& field : refl.fields) {
+                    if (field.type == Engine::FieldType::Entity) {
+                        Entity* refEntity = reinterpret_cast<Entity*>(static_cast<char*>(compPtr) + field.offset);
+                        if (refEntity->getId() != Entity::INVALID_ENTITY) {
+                            auto it = oldToNewEntityMap.find(refEntity->getId());
+                            if (it != oldToNewEntityMap.end()) {
+                                *refEntity = it->second;
+                            } else {
+                                // If the referenced entity wasn't in this scene, reset it to invalid
+                                *refEntity = Entity();
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     return !outEntities.empty();

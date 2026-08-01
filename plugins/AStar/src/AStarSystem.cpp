@@ -198,8 +198,8 @@ void AStarSystem::update(float dt) {
     for (auto [entity, agent, trans] : registry.view<AStarAgent, Transform>()) {
         // Resolve target entity's position to local tile coordinates
         glm::ivec2 targetTile(-9999);
-        if (registry.isValid(agent.targetEntity)) {
-            if (const auto* targetTrans = registry.get<Transform>(agent.targetEntity)) {
+        if (registry.isValid(agent.targetTransform)) {
+            if (const auto* targetTrans = registry.get<Transform>(agent.targetTransform)) {
                 glm::vec3 targetLocalPos = glm::vec3(tilemapInv * glm::vec4(targetTrans->position, 1.0f));
                 targetTile.x = static_cast<int>(std::floor(targetLocalPos.x / tilemap->tileSize));
                 targetTile.y = static_cast<int>(std::floor(targetLocalPos.y / tilemap->tileSize));
@@ -335,8 +335,8 @@ void AStarSystem::renderDebugUI() {
 
             // Resolve target entity's position to local tile coordinates
             glm::ivec2 targetTile(-9999);
-            if (registry.isValid(agent.targetEntity)) {
-                if (const auto* targetTrans = registry.get<Transform>(agent.targetEntity)) {
+            if (registry.isValid(agent.targetTransform)) {
+                if (const auto* targetTrans = registry.get<Transform>(agent.targetTransform)) {
                     glm::vec3 targetLocalPos = glm::vec3(tilemapInv * glm::vec4(targetTrans->position, 1.0f));
                     targetTile.x = static_cast<int>(std::floor(targetLocalPos.x / tilemap->tileSize));
                     targetTile.y = static_cast<int>(std::floor(targetLocalPos.y / tilemap->tileSize));
