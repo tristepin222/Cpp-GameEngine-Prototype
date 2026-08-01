@@ -5,6 +5,14 @@
 
 namespace Engine {
 
+    struct TilemapLayer {
+        std::string name;
+        std::vector<int> tiles;
+        float zOffset = 0.0f;
+        std::string tag;
+        bool isVisible = true;
+    };
+
     /**
      * @struct TilemapComponent
      * @brief Represents a 2D tile grid in the scene.
@@ -25,14 +33,24 @@ namespace Engine {
         std::string tilesetPath;
 
 
-        /**
-         * @brief 1D tile grid of size width*height.
-         *        Value = index into TilesetAsset::tiles[].  -1 = empty cell.
-         */
+        // Dynamic layers (handled manually in serialization and inspector UI)
+        std::vector<TilemapLayer> layers;
+
+        // Deprecated compatibility fields
         std::vector<int> tiles;
+        std::vector<int> obstacleTiles;
 
         /** @brief Flag requesting mesh + collision rebuild next frame. */
         bool isDirty = true;
+
+        TilemapComponent() {
+            TilemapLayer defaultLayer;
+            defaultLayer.name = "Ground";
+            defaultLayer.zOffset = 0.0f;
+            defaultLayer.tag = "ground";
+            defaultLayer.isVisible = true;
+            layers.push_back(defaultLayer);
+        }
     };
 
 } // namespace Engine

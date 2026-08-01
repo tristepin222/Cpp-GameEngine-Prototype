@@ -55,11 +55,34 @@ namespace AStar {
 
         auto isPassable = [&](int x, int y) {
             int tileIndex = y * tilemap.width + x;
-            if (tileIndex < 0 || tileIndex >= static_cast<int>(tilemap.tiles.size())) return false;
-            int tileId = tilemap.tiles[tileIndex];
-            
-            for (int blocked : blockedTileIds) {
-                if (tileId == blocked) return false;
+
+            // Check all layers for obstacle tag
+            for (const auto& layer : tilemap.layers) {
+                std::string lowerTag = layer.tag;
+                for (char& c : lowerTag) c = std::tolower(static_cast<unsigned char>(c));
+
+                if (lowerTag.find("obstacle") != std::string::npos) {
+                    if (tileIndex >= 0 && tileIndex < static_cast<int>(layer.tiles.size())) {
+                        if (layer.tiles[tileIndex] != -1) {
+                            return false; // Blocked by obstacle layer!
+                        }
+                    }
+                }
+            }
+
+            // Fallback check for base layer blocked tile IDs
+            if (!tilemap.layers.empty()) {
+                const auto& baseLayer = tilemap.layers[0];
+                if (tileIndex >= 0 && tileIndex < static_cast<int>(baseLayer.tiles.size())) {
+                    int tileId = baseLayer.tiles[tileIndex];
+                    for (int blocked : blockedTileIds) {
+                        if (tileId == blocked) return false;
+                    }
+                } else {
+                    return false;
+                }
+            } else {
+                return false;
             }
             return true;
         };
@@ -164,10 +187,34 @@ namespace AStar {
 
     bool isTileBlocked(const Engine::TilemapComponent& tilemap, const glm::ivec2& point, const std::vector<int>& blockedTileIds) {
         int tileIndex = point.y * tilemap.width + point.x;
-        if (tileIndex < 0 || tileIndex >= static_cast<int>(tilemap.tiles.size())) return true;
-        int tileId = tilemap.tiles[tileIndex];
-        for (int blocked : blockedTileIds) {
-            if (tileId == blocked) return true;
+
+        // Check all layers for obstacle tag
+        for (const auto& layer : tilemap.layers) {
+            std::string lowerTag = layer.tag;
+            for (char& c : lowerTag) c = std::tolower(static_cast<unsigned char>(c));
+
+            if (lowerTag.find("obstacle") != std::string::npos) {
+                if (tileIndex >= 0 && tileIndex < static_cast<int>(layer.tiles.size())) {
+                    if (layer.tiles[tileIndex] != -1) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // Fallback check for base layer blocked tile IDs
+        if (!tilemap.layers.empty()) {
+            const auto& baseLayer = tilemap.layers[0];
+            if (tileIndex >= 0 && tileIndex < static_cast<int>(baseLayer.tiles.size())) {
+                int tileId = baseLayer.tiles[tileIndex];
+                for (int blocked : blockedTileIds) {
+                    if (tileId == blocked) return true;
+                }
+            } else {
+                return true;
+            }
+        } else {
+            return true;
         }
         return false;
     }

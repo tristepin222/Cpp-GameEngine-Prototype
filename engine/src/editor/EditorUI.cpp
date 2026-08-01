@@ -77,6 +77,7 @@ bool s_tilesetLoaded = false;
 int s_brushTileId = -1;
 bool s_brushModeActive = false;
 Entity s_brushTilemapEntity;
+int s_tilemapActiveLayer = 0;
 ImVec2 s_tsPanOffset{ 0.f, 0.f };
 float s_tsCellSize = 64.f;
 bool s_tsIsPanning = false;

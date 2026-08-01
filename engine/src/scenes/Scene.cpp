@@ -25,12 +25,21 @@ Scene::Scene(Registry& registry, VulkanRenderer& renderer)
 Scene::~Scene() {
 }
 
+#include "ecs/components/EditorCamera.hpp"
+
 /**
  * @brief Destroys all entities tracked by this scene.
  */
 void Scene::unload() {
-    for (Entity entity : ownedEntities) {
-        registry.destroy(entity);
+    std::vector<Entity> toDestroy;
+    for (uint32_t id : registry.getAlive()) {
+        Entity e(id);
+        if (!registry.has<EditorCamera>(e)) {
+            toDestroy.push_back(e);
+        }
+    }
+    for (Entity e : toDestroy) {
+        registry.destroy(e);
     }
     ownedEntities.clear();
 }

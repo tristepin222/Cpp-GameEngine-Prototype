@@ -925,17 +925,30 @@ static bool registerBuiltinComponents() {
                 out << JSONUtils::indent(indent) << "\"tileSize\": " << tm->tileSize << ",\n";
                 out << JSONUtils::indent(indent) << "\"tilesetPath\": " << JSONUtils::quote(tm->tilesetPath) << ",\n";
 
-                out << JSONUtils::indent(indent) << "\"tiles\": [";
-                for (size_t i = 0; i < tm->tiles.size(); ++i) {
-                    out << tm->tiles[i];
-                    if (i + 1 < tm->tiles.size()) out << ", ";
+                out << JSONUtils::indent(indent) << "\"layers\": [\n";
+                for (size_t l = 0; l < tm->layers.size(); ++l) {
+                    const auto& layer = tm->layers[l];
+                    out << JSONUtils::indent(indent + 1) << "{\n";
+                    out << JSONUtils::indent(indent + 2) << "\"name\": " << JSONUtils::quote(layer.name) << ",\n";
+                    out << JSONUtils::indent(indent + 2) << "\"zOffset\": " << layer.zOffset << ",\n";
+                    out << JSONUtils::indent(indent + 2) << "\"tag\": " << JSONUtils::quote(layer.tag) << ",\n";
+                    out << JSONUtils::indent(indent + 2) << "\"isVisible\": " << (layer.isVisible ? "true" : "false") << ",\n";
+                    out << JSONUtils::indent(indent + 2) << "\"tiles\": [";
+                    for (size_t i = 0; i < layer.tiles.size(); ++i) {
+                        out << layer.tiles[i];
+                        if (i + 1 < layer.tiles.size()) out << ", ";
+                    }
+                    out << "]\n";
+                    out << JSONUtils::indent(indent + 1) << "}";
+                    if (l + 1 < tm->layers.size()) out << ",";
+                    out << "\n";
                 }
-                out << "]";
+                out << JSONUtils::indent(indent) << "]\n";
             }
         },
         [](Registry& registry, VulkanRenderer&, Entity entity, const std::string& json) {
             std::string type = JSONUtils::extractStringValue(json, "entityType");
-            if (type == "Tilemap" || json.find("\"tiles\":") != std::string::npos) {
+            if (type == "Tilemap" || json.find("\"tiles\":") != std::string::npos || json.find("\"layers\":") != std::string::npos) {
                 if (!registry.has<Engine::TilemapComponent>(entity)) {
                     registry.emplace<Engine::TilemapComponent>(entity, Engine::TilemapComponent{});
                 }
@@ -945,13 +958,108 @@ static bool registerBuiltinComponents() {
                     if (JSONUtils::extractFloatValue(json, "height",   val)) tm->height   = (int)val;
                     if (JSONUtils::extractFloatValue(json, "tileSize", val)) tm->tileSize = val;
 
-                    // New: tilesetPath string (stable cross-scene reference)
                     tm->tilesetPath = JSONUtils::extractStringValue(json, "tilesetPath");
 
-                    std::vector<int> tilesList;
-                    if (JSONUtils::extractIntVector(json, "tiles", tilesList)) {
-                        tm->tiles = std::move(tilesList);
+                    tm->layers.clear();
+
+                    size_t layersPos = json.find("\"layers\":");
+                    if (layersPos != std::string::npos) {
+                        size_t startBracket = json.find('[', layersPos);
+                        if (startBracket != std::string::npos) {
+                            int bracketDepth = 1;
+                            size_t endBracket = startBracket + 1;
+                            while (endBracket < json.size() && bracketDepth > 0) {
+                                if (json[endBracket] == '[') bracketDepth++;
+                                else if (json[endBracket] == ']') bracketDepth--;
+                                endBracket++;
+                            }
+                            if (bracketDepth == 0) {
+                                std::string layersArrayContent = json.substr(startBracket + 1, (endBracket - 1) - startBracket - 1);
+                                size_t searchPos = 0;
+                                while (true) {
+                                    size_t openBrace = layersArrayContent.find('{', searchPos);
+                                    if (openBrace == std::string::npos) break;
+
+                                    int braceDepth = 1;
+                                    size_t closeBrace = openBrace + 1;
+                                    while (closeBrace < layersArrayContent.size() && braceDepth > 0) {
+                                        if (layersArrayContent[closeBrace] == '{') braceDepth++;
+                                        else if (layersArrayContent[closeBrace] == '}') braceDepth--;
+                                        closeBrace++;
+                                    }
+
+                                    if (braceDepth == 0) {
+                                        std::string layerJson = layersArrayContent.substr(openBrace, closeBrace - openBrace);
+                                        Engine::TilemapLayer layer;
+                                        layer.name = JSONUtils::extractStringValue(layerJson, "name");
+
+                                        float zOffsetVal = 0.0f;
+                                        JSONUtils::extractFloatValue(layerJson, "zOffset", zOffsetVal);
+                                        layer.zOffset = zOffsetVal;
+
+                                        layer.tag = JSONUtils::extractStringValue(layerJson, "tag");
+
+                                        layer.isVisible = true;
+                                        size_t visPos = layerJson.find("\"isVisible\":");
+                                        if (visPos != std::string::npos) {
+                                            size_t valPos = layerJson.find("false", visPos);
+                                            if (valPos != std::string::npos && valPos - visPos < 20) {
+                                                layer.isVisible = false;
+                                            }
+                                        }
+
+                                        JSONUtils::extractIntVector(layerJson, "tiles", layer.tiles);
+                                        if (layer.tiles.size() != static_cast<size_t>(tm->width * tm->height)) {
+                                            layer.tiles.resize(tm->width * tm->height, -1);
+                                        }
+                                        tm->layers.push_back(layer);
+                                    }
+                                    searchPos = closeBrace;
+                                }
+                            }
+                        }
                     }
+
+                    if (tm->layers.empty()) {
+                        std::vector<int> tilesList;
+                        if (JSONUtils::extractIntVector(json, "tiles", tilesList)) {
+                            Engine::TilemapLayer groundLayer;
+                            groundLayer.name = "Ground";
+                            groundLayer.zOffset = 0.0f;
+                            groundLayer.tag = "ground";
+                            groundLayer.isVisible = true;
+                            groundLayer.tiles = std::move(tilesList);
+                            if (groundLayer.tiles.size() != static_cast<size_t>(tm->width * tm->height)) {
+                                groundLayer.tiles.resize(tm->width * tm->height, -1);
+                            }
+                            tm->layers.push_back(groundLayer);
+                        }
+
+                        std::vector<int> obsList;
+                        if (JSONUtils::extractIntVector(json, "obstacleTiles", obsList)) {
+                            Engine::TilemapLayer obstacleLayer;
+                            obstacleLayer.name = "Obstacles";
+                            obstacleLayer.zOffset = 0.01f;
+                            obstacleLayer.tag = "obstacle";
+                            obstacleLayer.isVisible = true;
+                            obstacleLayer.tiles = std::move(obsList);
+                            if (obstacleLayer.tiles.size() != static_cast<size_t>(tm->width * tm->height)) {
+                                obstacleLayer.tiles.resize(tm->width * tm->height, -1);
+                            }
+                            tm->layers.push_back(obstacleLayer);
+                        }
+                    }
+
+                    if (tm->layers.empty()) {
+                        Engine::TilemapLayer defaultLayer;
+                        defaultLayer.name = "Ground";
+                        defaultLayer.zOffset = 0.0f;
+                        defaultLayer.tag = "ground";
+                        defaultLayer.isVisible = true;
+                        defaultLayer.tiles.assign(tm->width * tm->height, -1);
+                        tm->layers.push_back(defaultLayer);
+                    }
+
                     tm->isDirty = true;
                 }
             }

@@ -96,6 +96,13 @@ public:
     }
 
     /**
+     * @brief Exposes the vector of currently alive entity IDs.
+     */
+    const std::vector<uint32_t>& getAlive() const {
+        return entities.getAlive();
+    }
+
+    /**
      * @brief Emplaces a component on an entity.
      * @tparam T Component type to emplace.
      * @param e Entity to emplace component on.

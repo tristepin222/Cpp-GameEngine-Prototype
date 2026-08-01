@@ -47,33 +47,37 @@ namespace Engine {
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
 
-        for (int y = 0; y < tilemap.height; ++y) {
-            for (int x = 0; x < tilemap.width; ++x) {
-                int cellIdx = y * tilemap.width + x;
-                if (cellIdx < 0 || cellIdx >= static_cast<int>(tilemap.tiles.size())) continue;
-                int tileIdx = tilemap.tiles[cellIdx];
-                if (tileIdx < 0 || tileIdx >= static_cast<int>(tileset->tiles.size())) continue;
+        for (const auto& layer : tilemap.layers) {
+            if (!layer.isVisible) continue;
 
-                // UV rectangle for this tile inside the atlas
-                const glm::vec4& uv = tileset->tiles[tileIdx].atlasUV;
-                float u0 = uv.x, v0 = uv.y, u1 = uv.z, v1 = uv.w;
+            for (int y = 0; y < tilemap.height; ++y) {
+                for (int x = 0; x < tilemap.width; ++x) {
+                    int cellIdx = y * tilemap.width + x;
+                    if (cellIdx < 0 || cellIdx >= static_cast<int>(layer.tiles.size())) continue;
+                    int tileIdx = layer.tiles[cellIdx];
+                    if (tileIdx < 0 || tileIdx >= static_cast<int>(tileset->tiles.size())) continue;
 
-                // World-space quad corners for this cell
-                float tx0 = x * tilemap.tileSize;
-                float ty0 = y * tilemap.tileSize;
-                float tx1 = (x + 1) * tilemap.tileSize;
-                float ty1 = (y + 1) * tilemap.tileSize;
+                    // UV rectangle for this tile inside the atlas
+                    const glm::vec4& uv = tileset->tiles[tileIdx].atlasUV;
+                    float u0 = uv.x, v0 = uv.y, u1 = uv.z, v1 = uv.w;
 
-                uint32_t vOff = static_cast<uint32_t>(vertices.size());
-                glm::vec3 normal(0.0f, 0.0f, 1.0f);
+                    // World-space quad corners for this cell (applying layer's zOffset)
+                    float tx0 = x * tilemap.tileSize;
+                    float ty0 = y * tilemap.tileSize;
+                    float tx1 = (x + 1) * tilemap.tileSize;
+                    float ty1 = (y + 1) * tilemap.tileSize;
 
-                vertices.push_back(Vertex(glm::vec3(tx0, ty0, 0.f), normal, glm::vec2(u0, v1))); // BL
-                vertices.push_back(Vertex(glm::vec3(tx1, ty0, 0.f), normal, glm::vec2(u1, v1))); // BR
-                vertices.push_back(Vertex(glm::vec3(tx1, ty1, 0.f), normal, glm::vec2(u1, v0))); // TR
-                vertices.push_back(Vertex(glm::vec3(tx0, ty1, 0.f), normal, glm::vec2(u0, v0))); // TL
+                    uint32_t vOff = static_cast<uint32_t>(vertices.size());
+                    glm::vec3 normal(0.0f, 0.0f, 1.0f);
 
-                indices.push_back(vOff + 0); indices.push_back(vOff + 1); indices.push_back(vOff + 2);
-                indices.push_back(vOff + 2); indices.push_back(vOff + 3); indices.push_back(vOff + 0);
+                    vertices.push_back(Vertex(glm::vec3(tx0, ty0, layer.zOffset), normal, glm::vec2(u0, v1))); // BL
+                    vertices.push_back(Vertex(glm::vec3(tx1, ty0, layer.zOffset), normal, glm::vec2(u1, v1))); // BR
+                    vertices.push_back(Vertex(glm::vec3(tx1, ty1, layer.zOffset), normal, glm::vec2(u1, v0))); // TR
+                    vertices.push_back(Vertex(glm::vec3(tx0, ty1, layer.zOffset), normal, glm::vec2(u0, v0))); // TL
+
+                    indices.push_back(vOff + 0); indices.push_back(vOff + 1); indices.push_back(vOff + 2);
+                    indices.push_back(vOff + 2); indices.push_back(vOff + 3); indices.push_back(vOff + 0);
+                }
             }
         }
 
@@ -147,14 +151,74 @@ namespace Engine {
         }
         for (Entity child : toDestroy) registry.destroy(child);
 
+        glm::mat4 tilemapModel = glm::mat4(1.0f);
+        if (auto* t = registry.get<Transform>(entity)) {
+            tilemapModel = t->matrix();
+        }
+        glm::mat4 tilemapInv = glm::inverse(tilemapModel);
+
         for (int y = 0; y < tilemap.height; ++y) {
             for (int x = 0; x < tilemap.width; ++x) {
                 int cellIdx = y * tilemap.width + x;
-                if (cellIdx < 0 || cellIdx >= static_cast<int>(tilemap.tiles.size())) continue;
-                int tileIdx = tilemap.tiles[cellIdx];
-                if (tileIdx < 0 || tileIdx >= static_cast<int>(tileset->tiles.size())) continue;
-                if (!tileset->tiles[tileIdx].isSolid) continue;
+                bool shouldHaveCollider = false;
 
+                // Check all layers for obstacle tag
+                for (const auto& layer : tilemap.layers) {
+                    if (cellIdx >= 0 && cellIdx < static_cast<int>(layer.tiles.size())) {
+                        int tileIdx = layer.tiles[cellIdx];
+                        if (tileIdx != -1) {
+                            std::string lowerTag = layer.tag;
+                            for (char& c : lowerTag) c = std::tolower(static_cast<unsigned char>(c));
+
+                            if (lowerTag.find("obstacle") != std::string::npos) {
+                                shouldHaveCollider = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Fallback check for solid tiles on base layer
+                if (!shouldHaveCollider && !tilemap.layers.empty() && cellIdx >= 0 && cellIdx < static_cast<int>(tilemap.layers[0].tiles.size())) {
+                    int tileIdx = tilemap.layers[0].tiles[cellIdx];
+                    if (tileIdx >= 0 && tileIdx < static_cast<int>(tileset->tiles.size())) {
+                        if (tileset->tiles[tileIdx].isSolid) {
+                            shouldHaveCollider = true;
+                        }
+                    }
+                }
+
+                if (!shouldHaveCollider) continue;
+
+                // Check if any active dynamic entity (AStarAgent, player, etc.) is standing on this cell
+                bool isActorAtCell = false;
+                for (auto [actorEnt, actorTrans] : registry.view<Transform>()) {
+                    if (actorEnt == entity) continue;
+                    bool isDynamic = false;
+                    if (auto* rb = registry.get<RigidBodyComponent>(actorEnt)) {
+                        if (rb->type != RigidBodyType::Static) isDynamic = true;
+                    } else {
+                        if (auto* nameComp = registry.get<Name>(actorEnt)) {
+                            std::string n = nameComp->value;
+                            for (char& c : n) c = std::tolower(static_cast<unsigned char>(c));
+                            if (n == "cube" || n == "player" || n.find("agent") != std::string::npos) {
+                                isDynamic = true;
+                            }
+                        }
+                    }
+
+                    if (isDynamic) {
+                        glm::vec3 localActorPos = glm::vec3(tilemapInv * glm::vec4(actorTrans.position, 1.0f));
+                        int ax = static_cast<int>(std::floor(localActorPos.x / tilemap.tileSize));
+                        int ay = static_cast<int>(std::floor(localActorPos.y / tilemap.tileSize));
+                        if (ax == x && ay == y) {
+                            isActorAtCell = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (isActorAtCell) continue;
 
                 Entity colEnt = registry.create();
                 registry.emplace<Name>(colEnt, Name{ "TileCollider_" + std::to_string(x) + "_" + std::to_string(y) });
