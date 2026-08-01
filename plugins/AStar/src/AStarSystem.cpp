@@ -161,6 +161,16 @@ namespace AStar {
 
         return path;
     }
+
+    bool isTileBlocked(const Engine::TilemapComponent& tilemap, const glm::ivec2& point, const std::vector<int>& blockedTileIds) {
+        int tileIndex = point.y * tilemap.width + point.x;
+        if (tileIndex < 0 || tileIndex >= static_cast<int>(tilemap.tiles.size())) return true;
+        int tileId = tilemap.tiles[tileIndex];
+        for (int blocked : blockedTileIds) {
+            if (tileId == blocked) return true;
+        }
+        return false;
+    }
 }
 
 AStarSystem::AStarSystem(Registry& reg, VulkanRenderer& rend, EditorModeState& mode)
@@ -186,41 +196,83 @@ void AStarSystem::update(float dt) {
 
     // 2. Process all entities with an AStarAgent and Transform component
     for (auto [entity, agent, trans] : registry.view<AStarAgent, Transform>()) {
+        // Resolve target entity's position to local tile coordinates
+        glm::ivec2 targetTile(-9999);
+        if (registry.isValid(agent.targetEntity)) {
+            if (const auto* targetTrans = registry.get<Transform>(agent.targetEntity)) {
+                glm::vec3 targetLocalPos = glm::vec3(tilemapInv * glm::vec4(targetTrans->position, 1.0f));
+                targetTile.x = static_cast<int>(std::floor(targetLocalPos.x / tilemap->tileSize));
+                targetTile.y = static_cast<int>(std::floor(targetLocalPos.y / tilemap->tileSize));
+            }
+        }
+
+        if (targetTile == glm::ivec2(-9999)) {
+            agent.path.clear();
+            agent.lastTarget = glm::ivec2(-9999);
+            continue;
+        }
+
         // Convert agent's current position to local tile coordinates
         glm::vec3 localPos = glm::vec3(tilemapInv * glm::vec4(trans.position, 1.0f));
         int startX = static_cast<int>(std::floor(localPos.x / tilemap->tileSize));
         int startY = static_cast<int>(std::floor(localPos.y / tilemap->tileSize));
-
         glm::ivec2 currentStart(startX, startY);
-        glm::ivec2 currentTarget(agent.targetX, agent.targetY);
 
-        // Recalculate path only if start or target coordinates changed
-        if (currentStart != agent.lastStart || currentTarget != agent.lastTarget) {
-            agent.path = AStar::findPath(*tilemap, currentStart, currentTarget, { 1 }, agent.allowDiagonal); // Assumes '1' is blocked/wall
+        // Check if any tile in the current path is blocked
+        int firstBlockedIdx = -1;
+        for (int i = 0; i < static_cast<int>(agent.path.size()); ++i) {
+            if (AStar::isTileBlocked(*tilemap, agent.path[i], { 1 })) {
+                firstBlockedIdx = i;
+                break;
+            }
+        }
+        bool pathBlocked = (firstBlockedIdx != -1);
+        bool targetChanged = (targetTile != agent.lastTarget);
+
+        // Recalculate path only if target changed or path is blocked
+        if (targetChanged || pathBlocked) {
+            bool detourFound = false;
+            if (pathBlocked && !targetChanged && firstBlockedIdx > 0) {
+                // detouring: recalculate from the node just before the blocked one
+                glm::ivec2 replStart = agent.path[firstBlockedIdx - 1];
+                std::vector<glm::ivec2> detourPath = AStar::findPath(*tilemap, replStart, targetTile, { 1 }, agent.allowDiagonal);
+                if (!detourPath.empty()) {
+                    agent.path.resize(firstBlockedIdx - 1);
+                    agent.path.insert(agent.path.end(), detourPath.begin(), detourPath.end());
+                    detourFound = true;
+                }
+            }
+
+            if (!detourFound) {
+                // fall back to full recalculation
+                agent.path = AStar::findPath(*tilemap, currentStart, targetTile, { 1 }, agent.allowDiagonal);
+            }
+            agent.lastTarget = targetTile;
             agent.lastStart = currentStart;
-            agent.lastTarget = currentTarget;
         }
 
         // Move agent along the path if in play mode
-        if (editorMode.isPlaying && !agent.path.empty()) {
-            glm::ivec2 nextTile = agent.path[0];
-            if (agent.path.size() > 1) {
-                nextTile = agent.path[1];
-            }
+        if (editorMode.isPlaying) {
+            while (!agent.path.empty()) {
+                glm::ivec2 nextTile = agent.path[0];
+                glm::vec3 localTarget((nextTile.x + 0.5f) * tilemap->tileSize, (nextTile.y + 0.5f) * tilemap->tileSize, localPos.z);
+                glm::vec3 worldTarget = glm::vec3(tilemapModel * glm::vec4(localTarget, 1.0f));
 
-            glm::vec3 localTarget((nextTile.x + 0.5f) * tilemap->tileSize, (nextTile.y + 0.5f) * tilemap->tileSize, localPos.z);
-            glm::vec3 worldTarget = glm::vec3(tilemapModel * glm::vec4(localTarget, 1.0f));
+                glm::vec3 toTarget = worldTarget - trans.position;
+                float dist = glm::length(toTarget);
 
-            glm::vec3 toTarget = worldTarget - trans.position;
-            float dist = glm::length(toTarget);
-            float stopThreshold = 0.05f;
-
-            if (dist > stopThreshold) {
-                float step = agent.speed * dt;
-                if (step >= dist) {
-                    trans.position = worldTarget;
+                // If close enough to target waypoint, pop and look at next
+                if (dist < 0.15f) {
+                    agent.path.erase(agent.path.begin());
                 } else {
-                    trans.position += (toTarget / dist) * step;
+                    float step = agent.speed * dt;
+                    if (step >= dist) {
+                        trans.position = worldTarget;
+                        agent.path.erase(agent.path.begin());
+                    } else {
+                        trans.position += (toTarget / dist) * step;
+                    }
+                    break; // Done moving for this frame
                 }
             }
         }
@@ -241,6 +293,7 @@ void AStarSystem::renderDebugUI() {
     if (!tilemap || !tilemapTransform) return;
 
     glm::mat4 tilemapModel = tilemapTransform->matrix();
+    glm::mat4 tilemapInv = glm::inverse(tilemapModel);
     glm::mat4 viewProj = renderer.getActiveCameraViewProj();
     ImGuiIO& io = ImGui::GetIO();
 
@@ -280,12 +333,23 @@ void AStarSystem::renderDebugUI() {
                 }
             }
 
-            glm::ivec2 currentTarget(agent.targetX, agent.targetY);
-            glm::vec3 targetLocal((currentTarget.x + 0.5f) * tilemap->tileSize, (currentTarget.y + 0.5f) * tilemap->tileSize, 0.06f);
-            glm::vec3 targetWorld = glm::vec3(tilemapModel * glm::vec4(targetLocal, 1.0f));
-            ImVec2 targetScreen;
-            if (projectToScreen(targetWorld, targetScreen)) {
-                drawList->AddCircle(targetScreen, 8.0f, targetColor, 16, 2.5f);
+            // Resolve target entity's position to local tile coordinates
+            glm::ivec2 targetTile(-9999);
+            if (registry.isValid(agent.targetEntity)) {
+                if (const auto* targetTrans = registry.get<Transform>(agent.targetEntity)) {
+                    glm::vec3 targetLocalPos = glm::vec3(tilemapInv * glm::vec4(targetTrans->position, 1.0f));
+                    targetTile.x = static_cast<int>(std::floor(targetLocalPos.x / tilemap->tileSize));
+                    targetTile.y = static_cast<int>(std::floor(targetLocalPos.y / tilemap->tileSize));
+                }
+            }
+
+            if (targetTile != glm::ivec2(-9999)) {
+                glm::vec3 targetLocal((targetTile.x + 0.5f) * tilemap->tileSize, (targetTile.y + 0.5f) * tilemap->tileSize, 0.06f);
+                glm::vec3 targetWorld = glm::vec3(tilemapModel * glm::vec4(targetLocal, 1.0f));
+                ImVec2 targetScreen;
+                if (projectToScreen(targetWorld, targetScreen)) {
+                    drawList->AddCircle(targetScreen, 8.0f, targetColor, 16, 2.5f);
+                }
             }
         }
     }

@@ -19,8 +19,7 @@ PLUGIN_API void registerEngineReflection() {
         refl.category = "General";
         refl.displayName = "AStarAgent";
         refl.fields = {
-            { "targetX", Engine::FieldType::Int, offsetof(AStarAgent, targetX) },
-            { "targetY", Engine::FieldType::Int, offsetof(AStarAgent, targetY) },
+            { "targetEntity", Engine::FieldType::Entity, offsetof(AStarAgent, targetEntity) },
             { "speed", Engine::FieldType::Float, offsetof(AStarAgent, speed) },
             { "allowDiagonal", Engine::FieldType::Bool, offsetof(AStarAgent, allowDiagonal) },
             { "showDebugPath", Engine::FieldType::Bool, offsetof(AStarAgent, showDebugPath) }

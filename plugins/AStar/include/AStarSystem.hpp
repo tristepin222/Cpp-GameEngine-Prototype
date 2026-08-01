@@ -11,9 +11,7 @@
 // [ReflectClass]
 struct AStarAgent {
     // [ReflectField]
-    int targetX = 0;
-    // [ReflectField]
-    int targetY = 0;
+    Entity targetEntity = Entity();
     // [ReflectField]
     float speed = 2.0f;
     // [ReflectField]
