@@ -27,12 +27,21 @@ set(SCRIPT_SOURCES
 )
 
 # Set up custom command to compile/generate script reflection boilerplate code automatically
-add_custom_command(
-    OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/src/generated_reflection.cpp"
-    COMMAND "${REFLECTION_GENERATOR_EXE}" "${SCRIPT_PUBLIC_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src/generated_reflection.cpp"
-    DEPENDS ${SCRIPT_SOURCES} "${SCRIPT_PUBLIC_DIR}/ecs/components/PhysgunScript.hpp"
-    COMMENT "[Reflection Generator] Parsing annotations and generating registration code..."
-)
+if(NOT CMAKE_GENERATOR_PLATFORM MATCHES "ARM" AND NOT CMAKE_CROSSCOMPILING)
+    add_custom_command(
+        OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/src/generated_reflection.cpp"
+        COMMAND "${REFLECTION_GENERATOR_EXE}" "${SCRIPT_PUBLIC_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src/generated_reflection.cpp"
+        DEPENDS ${SCRIPT_SOURCES} "${SCRIPT_PUBLIC_DIR}/ecs/components/PhysgunScript.hpp"
+        COMMENT "[Reflection Generator] Parsing annotations and generating registration code..."
+    )
+else()
+    add_custom_command(
+        OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/src/generated_reflection.cpp"
+        COMMAND ${CMAKE_COMMAND} -E echo "[Reflection Generator] Skipping generation for scripts (ARM/Cross-compilation, using pre-generated file)"
+        DEPENDS ${SCRIPT_SOURCES} "${SCRIPT_PUBLIC_DIR}/ecs/components/PhysgunScript.hpp"
+        COMMENT "[Reflection Generator] Skipping generation for scripts..."
+    )
+endif()
 
 
 
