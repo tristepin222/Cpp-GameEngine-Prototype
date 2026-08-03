@@ -38,7 +38,6 @@
 #include "ecs/components/RigidBody.hpp"
 #include "ecs/components/Collider.hpp"
 #include "ecs/components/PlayerControllerComponent.hpp"
-#include "ecs/components/PhysgunScript.hpp"
 #include "ecs/components/Tilemap.hpp"
 #include "scenes/TilesetAsset.hpp"
 #include "ecs/components/UIComponents.hpp"
@@ -248,8 +247,8 @@ bool entityHasSkin(Registry& registry, Entity entity) {
     return false;
 }
 
-EditorUI::EditorUI(Registry& registry, VulkanRenderer& renderer, SceneManager& sceneManager, EditorModeState& editorMode, const std::string& startScenePath, BuildGameCallback buildGameCallback)
-    : registry(registry), renderer(renderer), sceneManager(sceneManager), editorMode(editorMode), scenePath(startScenePath), buildGameCallback(std::move(buildGameCallback)) {
+EditorUI::EditorUI(Registry& registry, VulkanRenderer& renderer, SceneManager& sceneManager, EditorModeState& editorMode, const std::string& startScenePath, BuildGameCallback buildGameCallback, CompileScriptsCallback compileScriptsCallback)
+    : registry(registry), renderer(renderer), sceneManager(sceneManager), editorMode(editorMode), scenePath(startScenePath), buildGameCallback(std::move(buildGameCallback)), compileScriptsCallback(std::move(compileScriptsCallback)) {
 }
 
 EditorUI::~EditorUI() {

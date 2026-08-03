@@ -61,6 +61,7 @@ class VulkanRenderer;
 class EditorUI {
 public:
     using BuildGameCallback = std::function<int(const std::string& projectPath, const std::string& outPath)>;
+    using CompileScriptsCallback = std::function<int(const std::string& projectPath)>;
 
     /**
      * @brief Construct a new Editor UI object.
@@ -69,7 +70,7 @@ public:
      * @param sceneManager Reference to the Scene Manager.
      * @param editorMode Reference to the Editor Mode State.
      */
-    EditorUI(Registry& registry, VulkanRenderer& renderer, SceneManager& sceneManager, EditorModeState& editorMode, const std::string& startScenePath = "assets/scenes/test_scene.json", BuildGameCallback buildGameCallback = {});
+    EditorUI(Registry& registry, VulkanRenderer& renderer, SceneManager& sceneManager, EditorModeState& editorMode, const std::string& startScenePath = "assets/scenes/test_scene.json", BuildGameCallback buildGameCallback = {}, CompileScriptsCallback compileScriptsCallback = {});
     /**
      * @brief Destroy the Editor UI object.
      */
@@ -324,4 +325,6 @@ private:
     bool buildInProgress = false;
     /** @brief Optional callback used to build the game while the editor is running. */
     BuildGameCallback buildGameCallback;
+    /** @brief Optional callback used to compile user scripts while the editor is running. */
+    CompileScriptsCallback compileScriptsCallback;
 };

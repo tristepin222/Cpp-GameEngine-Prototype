@@ -128,6 +128,9 @@ namespace Engine {
         editorUI = std::make_unique<EditorUI>(registry, *renderer, sceneManager, editorMode, config.startScenePath,
             [this](const std::string& projectPath, const std::string& outPath) {
                 return buildGame(projectPath, outPath);
+            },
+            [this](const std::string& projectPath) {
+                return compileScripts(projectPath);
             });
         editorUI->initialize(window);
 
@@ -207,17 +210,53 @@ namespace Engine {
         }
 
         std::string batchPath = "build_game_package.bat";
-        if (!config.exeDir.empty()) {
+        bool found = false;
+
+        // 1. Try project root
+        std::filesystem::path projBatch = std::filesystem::path(projectPath) / "build_game_package.bat";
+        if (std::filesystem::exists(projBatch)) {
+            batchPath = std::filesystem::absolute(projBatch).string();
+            found = true;
+        }
+
+        // 2. Try config.exeDir (engine root)
+        if (!found && !config.exeDir.empty()) {
             std::filesystem::path exeBatch = std::filesystem::path(config.exeDir) / "build_game_package.bat";
             if (std::filesystem::exists(exeBatch)) {
-                batchPath = exeBatch.string();
+                batchPath = std::filesystem::absolute(exeBatch).string();
+                found = true;
             }
         }
 
-        std::string cmd = "\"\"" + batchPath + "\" \"" + projectPath + "\" \"" + outPathArg + "\"\"";
-        std::cout << "[BuildSystem] Running: " << cmd << std::endl;
+        // 3. Try config.exeDir/.. (fallback if started from sdk/bin/ or subdir)
+        if (!found && !config.exeDir.empty()) {
+            std::filesystem::path exeBatchParent = std::filesystem::path(config.exeDir) / ".." / "build_game_package.bat";
+            if (std::filesystem::exists(exeBatchParent)) {
+                batchPath = std::filesystem::absolute(exeBatchParent).string();
+                found = true;
+            }
+        }
 
-        int result = std::system(cmd.c_str());
+        // 4. Try CWD
+        if (!found) {
+            std::filesystem::path cwdBatch = std::filesystem::current_path() / "build_game_package.bat";
+            if (std::filesystem::exists(cwdBatch)) {
+                batchPath = std::filesystem::absolute(cwdBatch).string();
+                found = true;
+            } else {
+                // Fallback to absolute resolving of CWD filename
+                batchPath = std::filesystem::absolute(batchPath).string();
+            }
+        }
+
+        int result = -1;
+        if (found) {
+            std::string cmd = "\"\"" + batchPath + "\" \"" + projectPath + "\" \"" + outPathArg + "\"\"";
+            std::cout << "[BuildSystem] Running: " << cmd << std::endl;
+            result = std::system(cmd.c_str());
+        } else {
+            result = fallbackBuildGame(projectPath, outPath);
+        }
 
         if (pluginManager) {
             pluginManager->loadPlugins();
@@ -225,6 +264,177 @@ namespace Engine {
         }
 
         return result;
+    }
+
+    int Application::compileScripts(const std::string& projectPath) {
+        if (pluginManager) {
+            pluginManager->unloadPlugins();
+        }
+
+        std::filesystem::path scriptsDir = std::filesystem::path(projectPath) / "scripts";
+        std::filesystem::path buildDir = std::filesystem::path(projectPath) / ".script_build";
+        
+        std::filesystem::create_directories(buildDir);
+
+        // Run CMake config and build dynamically (Release build)
+        std::string configCmd = "cmake -S \"" + scriptsDir.string() + "\" -B \"" + buildDir.string() + "\" -G \"Visual Studio 17 2022\" -A x64 -T v143 -DCMAKE_BUILD_TYPE=Release";
+        std::string buildCmd = "cmake --build \"" + buildDir.string() + "\" --config Release";
+
+        std::cout << "[BuildSystem] Configuring scripts: " << configCmd << std::endl;
+        int result = std::system(configCmd.c_str());
+        if (result == 0) {
+            std::cout << "[BuildSystem] Building scripts: " << buildCmd << std::endl;
+            result = std::system(buildCmd.c_str());
+        }
+
+        if (pluginManager) {
+            pluginManager->loadPlugins();
+            pluginManager->loadScripts(config.projectPath);
+        }
+
+        return result;
+    }
+
+    static void copyDir(const std::filesystem::path& source, const std::filesystem::path& destination) {
+        std::filesystem::create_directories(destination);
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(source)) {
+            const auto& path = entry.path();
+            auto relative = std::filesystem::relative(path, source);
+            if (std::filesystem::is_directory(path)) {
+                std::filesystem::create_directories(destination / relative);
+            } else if (std::filesystem::is_regular_file(path)) {
+                std::filesystem::copy_file(path, destination / relative, std::filesystem::copy_options::overwrite_existing);
+            }
+        }
+    }
+
+    int Application::fallbackBuildGame(const std::string& projectPath, const std::string& outPath) {
+        std::cout << "[BuildSystem] Performing fallback game packaging in C++..." << std::endl;
+
+        std::filesystem::path projPathFs = std::filesystem::absolute(projectPath).lexically_normal();
+        std::filesystem::path outPathFs = std::filesystem::absolute(outPath).lexically_normal();
+
+        // 1. Recreate output directory
+        try {
+            if (std::filesystem::exists(outPathFs)) {
+                std::filesystem::remove_all(outPathFs);
+            }
+            std::filesystem::create_directories(outPathFs);
+        } catch (const std::exception& e) {
+            std::cerr << "[BuildSystem] Failed to recreate output directory: " << e.what() << std::endl;
+            return 1;
+        }
+
+        // Determine SDK directory from config.exeDir
+        std::filesystem::path sdkDir = config.exeDir.empty() ? std::filesystem::current_path() : std::filesystem::path(config.exeDir);
+
+        // 2. Copy game_runtime.exe as game.exe
+        std::filesystem::path runtimeSrc = sdkDir / "bin" / "game_runtime.exe";
+        if (!std::filesystem::exists(runtimeSrc)) {
+            runtimeSrc = sdkDir / "game_runtime.exe";
+        }
+        if (!std::filesystem::exists(runtimeSrc)) {
+            std::cerr << "[BuildSystem] [ERROR] game_runtime.exe not found in SDK path: " << sdkDir.string() << std::endl;
+            return 1;
+        }
+        try {
+            std::filesystem::copy_file(runtimeSrc, outPathFs / "game.exe", std::filesystem::copy_options::overwrite_existing);
+        } catch (const std::exception& e) {
+            std::cerr << "[BuildSystem] Failed to copy game_runtime.exe: " << e.what() << std::endl;
+            return 1;
+        }
+
+        // 3. Copy engine.dll
+        std::filesystem::path engineDll = sdkDir / "engine.dll";
+        if (std::filesystem::exists(engineDll)) {
+            try {
+                std::filesystem::copy_file(engineDll, outPathFs / "engine.dll", std::filesystem::copy_options::overwrite_existing);
+            } catch (const std::exception& e) {
+                std::cerr << "[BuildSystem] Failed to copy engine.dll: " << e.what() << std::endl;
+                return 1;
+            }
+        }
+
+        // 4. Copy engine plugins folder
+        std::filesystem::path pluginsSrc = sdkDir / "plugins";
+        if (std::filesystem::exists(pluginsSrc)) {
+            try {
+                copyDir(pluginsSrc, outPathFs / "plugins");
+            } catch (const std::exception& e) {
+                std::cerr << "[BuildSystem] Warning: Failed to copy plugins: " << e.what() << std::endl;
+            }
+        }
+
+        // 5. Copy shaders folder
+        std::filesystem::path shadersSrc = sdkDir / "shaders";
+        if (!std::filesystem::exists(shadersSrc)) {
+            shadersSrc = sdkDir / ".." / "shaders";
+        }
+        if (std::filesystem::exists(shadersSrc)) {
+            try {
+                copyDir(shadersSrc, outPathFs / "shaders");
+            } catch (const std::exception& e) {
+                std::cerr << "[BuildSystem] Warning: Failed to copy shaders: " << e.what() << std::endl;
+            }
+        }
+
+        // 6. Copy assets folder
+        std::filesystem::path assetsSrc = projPathFs / "assets";
+        if (std::filesystem::exists(assetsSrc)) {
+            try {
+                copyDir(assetsSrc, outPathFs / "assets");
+            } catch (const std::exception& e) {
+                std::cerr << "[BuildSystem] Warning: Failed to copy assets: " << e.what() << std::endl;
+            }
+        }
+
+        // 7. Copy scenes folder
+        std::filesystem::path scenesSrc = projPathFs / "scenes";
+        if (std::filesystem::exists(scenesSrc)) {
+            try {
+                copyDir(scenesSrc, outPathFs / "scenes");
+            } catch (const std::exception& e) {
+                std::cerr << "[BuildSystem] Warning: Failed to copy scenes: " << e.what() << std::endl;
+            }
+        }
+
+        // 8. Copy project.settings
+        std::filesystem::path settingsSrc = projPathFs / "project.settings";
+        if (std::filesystem::exists(settingsSrc)) {
+            try {
+                std::filesystem::copy_file(settingsSrc, outPathFs / "project.settings", std::filesystem::copy_options::overwrite_existing);
+            } catch (const std::exception& e) {
+                std::cerr << "[BuildSystem] Warning: Failed to copy project.settings: " << e.what() << std::endl;
+            }
+        }
+
+        // 9. Compile scripts
+        std::filesystem::path scriptsCMake = projPathFs / "scripts" / "CMakeLists.txt";
+        if (std::filesystem::exists(scriptsCMake)) {
+            int compileResult = compileScripts(projectPath);
+            if (compileResult != 0) {
+                std::cerr << "[BuildSystem] [ERROR] Script compilation failed during game build." << std::endl;
+                return compileResult;
+            }
+        }
+
+        // 10. Copy compiled DLLs from project bin/
+        std::filesystem::path binSrc = projPathFs / "bin";
+        if (std::filesystem::exists(binSrc)) {
+            try {
+                std::filesystem::create_directories(outPathFs / "bin");
+                for (const auto& entry : std::filesystem::directory_iterator(binSrc)) {
+                    if (entry.is_regular_file() && entry.path().extension() == ".dll") {
+                        std::filesystem::copy_file(entry.path(), outPathFs / "bin" / entry.path().filename(), std::filesystem::copy_options::overwrite_existing);
+                    }
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "[BuildSystem] Warning: Failed to copy dlls: " << e.what() << std::endl;
+            }
+        }
+
+        std::cout << "[BuildSystem] Game packaged successfully in C++." << std::endl;
+        return 0;
     }
 
     void Application::run() {
