@@ -89,9 +89,9 @@ namespace Engine {
         if (auto* img = registry.get<UIImageComponent>(entity)) {
             if (!img->texturePath.empty()) {
                 Texture* tex = renderer.resourceManager->loadTexture(img->texturePath, renderer);
-                if (tex && tex->descriptorSet != VK_NULL_HANDLE) {
+                if (tex && tex->singleDescriptorSet != VK_NULL_HANDLE) {
                     drawList->AddImage(
-                        (ImTextureID)tex->descriptorSet,
+                        (ImTextureID)tex->singleDescriptorSet,
                         ImVec2(absX, absY),
                         ImVec2(absX + w, absY + h),
                         ImVec2(0.0f, 0.0f),

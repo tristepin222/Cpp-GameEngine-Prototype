@@ -23,6 +23,10 @@ void VulkanDescriptors::destroy() {
         vkDestroyDescriptorSetLayout(device, textureDescriptorSetLayout, nullptr);
         textureDescriptorSetLayout = VK_NULL_HANDLE;
     }
+    if (singleTextureDescriptorSetLayout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(device, singleTextureDescriptorSetLayout, nullptr);
+        singleTextureDescriptorSetLayout = VK_NULL_HANDLE;
+    }
     if (jointsDescriptorSetLayout != VK_NULL_HANDLE) {
         vkDestroyDescriptorSetLayout(device, jointsDescriptorSetLayout, nullptr);
         jointsDescriptorSetLayout = VK_NULL_HANDLE;
@@ -142,6 +146,23 @@ void VulkanDescriptors::createTextureDescriptorSetLayout() {
         throw std::runtime_error("Failed to create texture descriptor set layout");
 }
 
+void VulkanDescriptors::createSingleTextureDescriptorSetLayout() {
+    VkDescriptorSetLayoutBinding binding{};
+    binding.binding = 0;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    binding.descriptorCount = 1;
+    binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    binding.pImmutableSamplers = nullptr;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = 1;
+    layoutInfo.pBindings = &binding;
+
+    if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &singleTextureDescriptorSetLayout) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create single texture descriptor set layout");
+}
+
 void VulkanDescriptors::allocateTextureDescriptorSet(
     VkDescriptorSet& descriptorSet,
     VkImageView diffuseView, VkSampler diffuseSampler,
@@ -191,6 +212,43 @@ void VulkanDescriptors::updateTextureDescriptorSet(
     }
 
     vkUpdateDescriptorSets(device, 3, descriptorWrites, 0, nullptr);
+}
+
+void VulkanDescriptors::allocateSingleTextureDescriptorSet(
+    VkDescriptorSet& descriptorSet,
+    VkImageView view, VkSampler sampler
+) {
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = descriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &singleTextureDescriptorSetLayout;
+
+    if (vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet) != VK_SUCCESS)
+        throw std::runtime_error("Failed to allocate single texture descriptor set");
+
+    updateSingleTextureDescriptorSet(descriptorSet, view, sampler);
+}
+
+void VulkanDescriptors::updateSingleTextureDescriptorSet(
+    VkDescriptorSet descriptorSet,
+    VkImageView view, VkSampler sampler
+) {
+    VkDescriptorImageInfo imageInfo{};
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imageInfo.imageView = view;
+    imageInfo.sampler = sampler;
+
+    VkWriteDescriptorSet descriptorWrite{};
+    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrite.dstSet = descriptorSet;
+    descriptorWrite.dstBinding = 0;
+    descriptorWrite.dstArrayElement = 0;
+    descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorWrite.descriptorCount = 1;
+    descriptorWrite.pImageInfo = &imageInfo;
+
+    vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
 }
 
 /**

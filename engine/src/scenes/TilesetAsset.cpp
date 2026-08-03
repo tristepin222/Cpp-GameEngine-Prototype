@@ -288,6 +288,7 @@ void TilesetAsset::buildAtlas(VulkanRenderer& renderer) {
         atlas.atlasWidth  = atlasW;
         atlas.atlasHeight = atlasH;
         atlas.descriptorSet = tex->descriptorSet;
+        atlas.singleDescriptorSet = tex->singleDescriptorSet;
         atlas.valid       = true;
     } else {
         std::cerr << "[TilesetAsset] Atlas GPU upload failed for: " << filePath << std::endl;

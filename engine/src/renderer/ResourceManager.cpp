@@ -337,6 +337,11 @@ Texture* ResourceManager::loadTexture(const std::string& rawPath, VulkanRenderer
             defaultNormalTexture.imageView, defaultNormalTexture.sampler,
             defaultMetallicTexture.imageView, defaultMetallicTexture.sampler
         );
+
+        renderer.descriptors.allocateSingleTextureDescriptorSet(
+            texture->singleDescriptorSet,
+            texture->imageView, texture->sampler
+        );
     } catch (const std::exception& e) {
         std::cerr << "[ResourceManager] Error loading texture " << path << ": " << e.what() << std::endl;
         return &defaultWhiteTexture; // Fallback
@@ -470,6 +475,10 @@ void ResourceManager::createDefaultTextures(VulkanRenderer& renderer) {
         defaultNormalTexture.imageView, defaultNormalTexture.sampler,
         defaultMetallicTexture.imageView, defaultMetallicTexture.sampler
     );
+    renderer.descriptors.allocateSingleTextureDescriptorSet(
+        defaultWhiteTexture.singleDescriptorSet,
+        defaultWhiteTexture.imageView, defaultWhiteTexture.sampler
+    );
 
     renderer.descriptors.allocateTextureDescriptorSet(
         defaultNormalTexture.descriptorSet,
@@ -477,11 +486,19 @@ void ResourceManager::createDefaultTextures(VulkanRenderer& renderer) {
         defaultNormalTexture.imageView, defaultNormalTexture.sampler,
         defaultMetallicTexture.imageView, defaultMetallicTexture.sampler
     );
+    renderer.descriptors.allocateSingleTextureDescriptorSet(
+        defaultNormalTexture.singleDescriptorSet,
+        defaultNormalTexture.imageView, defaultNormalTexture.sampler
+    );
 
     renderer.descriptors.allocateTextureDescriptorSet(
         defaultMetallicTexture.descriptorSet,
         defaultWhiteTexture.imageView, defaultWhiteTexture.sampler,
         defaultNormalTexture.imageView, defaultNormalTexture.sampler,
+        defaultMetallicTexture.imageView, defaultMetallicTexture.sampler
+    );
+    renderer.descriptors.allocateSingleTextureDescriptorSet(
+        defaultMetallicTexture.singleDescriptorSet,
         defaultMetallicTexture.imageView, defaultMetallicTexture.sampler
     );
 }
@@ -1848,6 +1865,10 @@ Texture* ResourceManager::createTextureFromPixels(const std::string& cacheKey,
             texture->imageView, texture->sampler,
             defaultNormalTexture.imageView, defaultNormalTexture.sampler,
             defaultMetallicTexture.imageView, defaultMetallicTexture.sampler
+        );
+        renderer.descriptors.allocateSingleTextureDescriptorSet(
+            texture->singleDescriptorSet,
+            texture->imageView, texture->sampler
         );
     } catch (const std::exception& e) {
         std::cerr << "[ResourceManager] createTextureFromPixels failed for key '"

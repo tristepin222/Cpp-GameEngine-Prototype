@@ -34,6 +34,7 @@
 #include "ufbx.h"
 #include "cgltf.h"
 
+#include <cstdlib>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <iostream>
@@ -42,6 +43,7 @@
 #include <algorithm>
 #include <functional>
 #include <map>
+#include <set>
 #include <sstream>
 
 using namespace ImGui;
@@ -899,6 +901,8 @@ void EditorUI::drawDebugPanel() {
     End();
 }
 
+void openInExplorer(const std::filesystem::path& path);
+
 void EditorUI::drawAssetBrowser() {
     Begin("Asset Browser", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
 
@@ -922,6 +926,10 @@ void EditorUI::drawAssetBrowser() {
     static bool s_openCreateScenePopup = false;
     static bool s_openCreateFilePopup = false;
     static bool s_openRenamePopup = false;
+    static std::set<std::filesystem::path> s_selectedAssetPaths;
+    static std::filesystem::path s_lastSelectedAssetPath;
+
+    std::vector<std::filesystem::path> visiblePaths;
 
     // ---- Toolbar ----
     if (Button("Refresh")) {
@@ -943,32 +951,107 @@ void EditorUI::drawAssetBrowser() {
             std::string pathStr = entry.path().generic_string();
 
             if (entry.is_directory()) {
+                visiblePaths.push_back(entry.path());
                 ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow;
                 std::string label = "[] " + name + "##" + pathStr;
+                
+                bool isSelected = s_selectedAssetPaths.find(entry.path()) != s_selectedAssetPaths.end();
+                if (isSelected) flags |= ImGuiTreeNodeFlags_Selected;
+
                 bool open = TreeNodeEx(label.c_str(), flags);
 
+                if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+                    if (ImGui::GetIO().KeyShift && !s_lastSelectedAssetPath.empty()) {
+                        auto itLast = std::find(visiblePaths.begin(), visiblePaths.end(), s_lastSelectedAssetPath);
+                        auto itCurr = std::find(visiblePaths.begin(), visiblePaths.end(), entry.path());
+                        if (itLast != visiblePaths.end() && itCurr != visiblePaths.end()) {
+                            int idxA = std::distance(visiblePaths.begin(), itLast);
+                            int idxB = std::distance(visiblePaths.begin(), itCurr);
+                            int startIdx = std::min(idxA, idxB);
+                            int endIdx = std::max(idxA, idxB);
+                            if (!ImGui::GetIO().KeyCtrl) {
+                                s_selectedAssetPaths.clear();
+                            }
+                            for (int idx = startIdx; idx <= endIdx; ++idx) {
+                                s_selectedAssetPaths.insert(visiblePaths[idx]);
+                            }
+                        }
+                    } else if (ImGui::GetIO().KeyCtrl) {
+                        if (isSelected) s_selectedAssetPaths.erase(entry.path());
+                        else s_selectedAssetPaths.insert(entry.path());
+                        s_lastSelectedAssetPath = entry.path();
+                    } else {
+                        s_selectedAssetPaths.clear();
+                        s_selectedAssetPaths.insert(entry.path());
+                        s_lastSelectedAssetPath = entry.path();
+                    }
+                }
+
+                if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                    if (s_selectedAssetPaths.find(entry.path()) == s_selectedAssetPaths.end()) {
+                        s_selectedAssetPaths.clear();
+                        s_selectedAssetPaths.insert(entry.path());
+                    }
+                }
+
                 if (BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                    std::string multiPaths;
+                    for (const auto& p : s_selectedAssetPaths) {
+                        if (!multiPaths.empty()) multiPaths += "|";
+                        multiPaths += p.generic_string();
+                    }
+                    if (s_selectedAssetPaths.find(entry.path()) == s_selectedAssetPaths.end()) {
+                        multiPaths = entry.path().generic_string();
+                    }
+
                     SetDragDropPayload("DND_PAYLOAD_ASSET_PATH", pathStr.c_str(), pathStr.size() + 1);
-                    Text("Dragging folder %s", name.c_str());
+                    SetDragDropPayload("DND_PAYLOAD_MULTI_ASSETS", multiPaths.c_str(), multiPaths.size() + 1);
+                    
+                    if (s_selectedAssetPaths.size() > 1 && s_selectedAssetPaths.find(entry.path()) != s_selectedAssetPaths.end()) {
+                        Text("Dragging %d assets", (int)s_selectedAssetPaths.size());
+                    } else {
+                        Text("Dragging folder %s", name.c_str());
+                    }
                     EndDragDropSource();
                 }
 
                 if (BeginDragDropTarget()) {
-                    if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
-                        const char* srcPath = (const char*)payload->Data;
-                        std::filesystem::path src(srcPath);
-                        std::filesystem::path dest = entry.path() / src.filename();
-                        
-                        std::string srcStr = src.generic_string();
-                        std::string destStr = dest.generic_string();
-                        if (srcStr == destStr || destStr.rfind(srcStr + "/", 0) == 0) {
-                            statusMessage = "Cannot move a folder into itself or its subfolder.";
-                        } else {
-                            try {
-                                std::filesystem::rename(src, dest);
-                                statusMessage = "Moved " + src.filename().string() + " to " + entry.path().filename().string();
-                            } catch (const std::exception& e) {
-                                statusMessage = std::string("Failed to move: ") + e.what();
+                    if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_MULTI_ASSETS")) {
+                        if (payload->Data && payload->DataSize > 0) {
+                            std::string pathsStr((const char*)payload->Data);
+                            std::stringstream ss(pathsStr);
+                            std::string item;
+                            int movedCount = 0;
+                            while (std::getline(ss, item, '|')) {
+                                std::filesystem::path src(item);
+                                std::filesystem::path dest = entry.path() / src.filename();
+                                
+                                std::string srcStr = src.generic_string();
+                                std::string destStr = dest.generic_string();
+                                if (srcStr != destStr && destStr.rfind(srcStr + "/", 0) != 0) {
+                                    try {
+                                        std::filesystem::rename(src, dest);
+                                        movedCount++;
+                                    } catch (...) {}
+                                }
+                            }
+                            if (movedCount > 0) {
+                                statusMessage = "Moved " + std::to_string(movedCount) + " assets to " + name;
+                            }
+                        }
+                    } else if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+                        if (payload->Data && payload->DataSize > 0) {
+                            const char* srcPath = (const char*)payload->Data;
+                            std::filesystem::path src(srcPath);
+                            std::filesystem::path dest = entry.path() / src.filename();
+                            
+                            std::string srcStr = src.generic_string();
+                            std::string destStr = dest.generic_string();
+                            if (srcStr != destStr && destStr.rfind(srcStr + "/", 0) != 0) {
+                                try {
+                                    std::filesystem::rename(src, dest);
+                                    statusMessage = "Moved " + src.filename().string() + " to " + name;
+                                } catch (...) {}
                             }
                         }
                     }
@@ -978,6 +1061,10 @@ void EditorUI::drawAssetBrowser() {
                 // Right click context menu on folders
                 if (BeginPopupContextItem(pathStr.c_str())) {
                     TextDisabled("Folder: %s", name.c_str());
+                    Separator();
+                    if (MenuItem("Show in Explorer")) {
+                        openInExplorer(entry.path());
+                    }
                     Separator();
                     if (BeginMenu("Create")) {
                         if (MenuItem("Folder")) {
@@ -1004,7 +1091,7 @@ void EditorUI::drawAssetBrowser() {
                         // Custom options registered to the asset browser menu
                         drawRegisteredAssetBrowserMenu(entry.path());
 
-                        EndMenu();
+                        ImGui::EndMenu();
                     }
                     if (MenuItem("Rename")) {
                         s_renameTargetPath = entry.path();
@@ -1012,13 +1099,31 @@ void EditorUI::drawAssetBrowser() {
                         s_openRenamePopup = true;
                     }
                     PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
-                    if (MenuItem("Delete Folder")) {
-                        try {
-                            std::filesystem::path activePath = entry.path();
-                            std::filesystem::remove_all(activePath);
-                            statusMessage = "Deleted folder: " + name;
-                        } catch (const std::exception& e) {
-                            statusMessage = std::string("Failed to delete folder: ") + e.what();
+                    if (s_selectedAssetPaths.size() > 1 && s_selectedAssetPaths.find(entry.path()) != s_selectedAssetPaths.end()) {
+                        std::string delLabel = "Delete Selected (" + std::to_string(s_selectedAssetPaths.size()) + ")";
+                        if (MenuItem(delLabel.c_str())) {
+                            int delCount = 0;
+                            for (const auto& p : s_selectedAssetPaths) {
+                                try {
+                                    if (std::filesystem::exists(p)) {
+                                        std::filesystem::remove_all(p);
+                                        delCount++;
+                                    }
+                                } catch (...) {}
+                            }
+                            statusMessage = "Deleted " + std::to_string(delCount) + " assets.";
+                            s_selectedAssetPaths.clear();
+                        }
+                    } else {
+                        if (MenuItem("Delete Folder")) {
+                            try {
+                                std::filesystem::path activePath = entry.path();
+                                std::filesystem::remove_all(activePath);
+                                statusMessage = "Deleted folder: " + name;
+                                s_selectedAssetPaths.erase(activePath);
+                            } catch (const std::exception& e) {
+                                statusMessage = std::string("Failed to delete folder: ") + e.what();
+                            }
                         }
                     }
                     PopStyleColor();
@@ -1030,6 +1135,7 @@ void EditorUI::drawAssetBrowser() {
                     TreePop();
                 }
             } else if (entry.is_regular_file()) {
+                visiblePaths.push_back(entry.path());
                 auto ext = entry.path().extension().string();
                 bool isModel = (ext == ".gltf" || ext == ".glb" || ext == ".fbx" || ext == ".FBX");
                 bool isTexture = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga");
@@ -1047,11 +1153,50 @@ void EditorUI::drawAssetBrowser() {
                 else if (isTile)    prefix = "[] ";
 
                 std::string labelStr = prefix + name + "##" + pathStr;
-                Selectable(labelStr.c_str(), false, ImGuiSelectableFlags_AllowOverlap);
+                
+                bool isSelected = s_selectedAssetPaths.find(entry.path()) != s_selectedAssetPaths.end();
+                
+                if (Selectable(labelStr.c_str(), isSelected, ImGuiSelectableFlags_AllowOverlap)) {
+                    if (ImGui::GetIO().KeyShift && !s_lastSelectedAssetPath.empty()) {
+                        auto itLast = std::find(visiblePaths.begin(), visiblePaths.end(), s_lastSelectedAssetPath);
+                        auto itCurr = std::find(visiblePaths.begin(), visiblePaths.end(), entry.path());
+                        if (itLast != visiblePaths.end() && itCurr != visiblePaths.end()) {
+                            int idxA = std::distance(visiblePaths.begin(), itLast);
+                            int idxB = std::distance(visiblePaths.begin(), itCurr);
+                            int startIdx = std::min(idxA, idxB);
+                            int endIdx = std::max(idxA, idxB);
+                            if (!ImGui::GetIO().KeyCtrl) {
+                                s_selectedAssetPaths.clear();
+                            }
+                            for (int idx = startIdx; idx <= endIdx; ++idx) {
+                                s_selectedAssetPaths.insert(visiblePaths[idx]);
+                            }
+                        }
+                    } else if (ImGui::GetIO().KeyCtrl) {
+                        if (isSelected) s_selectedAssetPaths.erase(entry.path());
+                        else s_selectedAssetPaths.insert(entry.path());
+                        s_lastSelectedAssetPath = entry.path();
+                    } else {
+                        s_selectedAssetPaths.clear();
+                        s_selectedAssetPaths.insert(entry.path());
+                        s_lastSelectedAssetPath = entry.path();
+                    }
+                }
+
+                if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                    if (s_selectedAssetPaths.find(entry.path()) == s_selectedAssetPaths.end()) {
+                        s_selectedAssetPaths.clear();
+                        s_selectedAssetPaths.insert(entry.path());
+                    }
+                }
 
                 // Right click context menu on files (must follow Selectable immediately to bind correctly)
                 if (BeginPopupContextItem(pathStr.c_str())) {
                     TextDisabled("File: %s", name.c_str());
+                    Separator();
+                    if (MenuItem("Show in Explorer")) {
+                        openInExplorer(entry.path());
+                    }
                     Separator();
                     if (isModel || isTexture) {
                         if (MenuItem("Import Settings...")) {
@@ -1155,13 +1300,31 @@ void EditorUI::drawAssetBrowser() {
                         s_openRenamePopup = true;
                     }
                     PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
-                    if (MenuItem("Delete File")) {
-                        try {
-                            std::filesystem::path activePath = entry.path();
-                            std::filesystem::remove(activePath);
-                            statusMessage = "Deleted file: " + name;
-                        } catch (const std::exception& e) {
-                            statusMessage = std::string("Failed to delete file: ") + e.what();
+                    if (s_selectedAssetPaths.size() > 1 && s_selectedAssetPaths.find(entry.path()) != s_selectedAssetPaths.end()) {
+                        std::string delLabel = "Delete Selected (" + std::to_string(s_selectedAssetPaths.size()) + ")";
+                        if (MenuItem(delLabel.c_str())) {
+                            int delCount = 0;
+                            for (const auto& p : s_selectedAssetPaths) {
+                                try {
+                                    if (std::filesystem::exists(p)) {
+                                        std::filesystem::remove(p);
+                                        delCount++;
+                                    }
+                                } catch (...) {}
+                            }
+                            statusMessage = "Deleted " + std::to_string(delCount) + " assets.";
+                            s_selectedAssetPaths.clear();
+                        }
+                    } else {
+                        if (MenuItem("Delete File")) {
+                            try {
+                                std::filesystem::path activePath = entry.path();
+                                std::filesystem::remove(activePath);
+                                statusMessage = "Deleted file: " + name;
+                                s_selectedAssetPaths.erase(activePath);
+                            } catch (const std::exception& e) {
+                                statusMessage = std::string("Failed to delete file: ") + e.what();
+                            }
                         }
                     }
                     PopStyleColor();
@@ -1169,8 +1332,23 @@ void EditorUI::drawAssetBrowser() {
                 }
 
                 if (BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                    std::string multiPaths;
+                    for (const auto& p : s_selectedAssetPaths) {
+                        if (!multiPaths.empty()) multiPaths += "|";
+                        multiPaths += p.generic_string();
+                    }
+                    if (s_selectedAssetPaths.find(entry.path()) == s_selectedAssetPaths.end()) {
+                        multiPaths = entry.path().generic_string();
+                    }
+
                     SetDragDropPayload("DND_PAYLOAD_ASSET_PATH", pathStr.c_str(), pathStr.size() + 1);
-                    Text("Dragging %s", name.c_str());
+                    SetDragDropPayload("DND_PAYLOAD_MULTI_ASSETS", multiPaths.c_str(), multiPaths.size() + 1);
+                    
+                    if (s_selectedAssetPaths.size() > 1 && s_selectedAssetPaths.find(entry.path()) != s_selectedAssetPaths.end()) {
+                        Text("Dragging %d assets", (int)s_selectedAssetPaths.size());
+                    } else {
+                        Text("Dragging %s", name.c_str());
+                    }
                     EndDragDropSource();
                 }
             }
@@ -1182,19 +1360,44 @@ void EditorUI::drawAssetBrowser() {
     std::string rootLabel = "[] assets##assets_root";
     if (TreeNodeEx(rootLabel.c_str(), rootFlags)) {
         if (BeginDragDropTarget()) {
-            if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
-                const char* srcPath = (const char*)payload->Data;
-                std::filesystem::path src(srcPath);
-                std::filesystem::path dest = std::filesystem::path("assets") / src.filename();
-                
-                std::string srcStr = src.generic_string();
-                std::string destStr = dest.generic_string();
-                if (srcStr != destStr && destStr.rfind(srcStr + "/", 0) != 0) {
-                    try {
-                        std::filesystem::rename(src, dest);
-                        statusMessage = "Moved " + src.filename().string() + " to assets root.";
-                    } catch (const std::exception& e) {
-                        statusMessage = std::string("Failed to move: ") + e.what();
+            if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_MULTI_ASSETS")) {
+                if (payload->Data && payload->DataSize > 0) {
+                    std::string pathsStr((const char*)payload->Data);
+                    std::stringstream ss(pathsStr);
+                    std::string item;
+                    int movedCount = 0;
+                    while (std::getline(ss, item, '|')) {
+                        std::filesystem::path src(item);
+                        std::filesystem::path dest = std::filesystem::path("assets") / src.filename();
+                        
+                        std::string srcStr = src.generic_string();
+                        std::string destStr = dest.generic_string();
+                        if (srcStr != destStr && destStr.rfind(srcStr + "/", 0) != 0) {
+                            try {
+                                std::filesystem::rename(src, dest);
+                                movedCount++;
+                            } catch (...) {}
+                        }
+                    }
+                    if (movedCount > 0) {
+                        statusMessage = "Moved " + std::to_string(movedCount) + " assets to assets root.";
+                    }
+                }
+            } else if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+                if (payload->Data && payload->DataSize > 0) {
+                    const char* srcPath = (const char*)payload->Data;
+                    std::filesystem::path src(srcPath);
+                    std::filesystem::path dest = std::filesystem::path("assets") / src.filename();
+                    
+                    std::string srcStr = src.generic_string();
+                    std::string destStr = dest.generic_string();
+                    if (srcStr != destStr && destStr.rfind(srcStr + "/", 0) != 0) {
+                        try {
+                            std::filesystem::rename(src, dest);
+                            statusMessage = "Moved " + src.filename().string() + " to assets root.";
+                        } catch (const std::exception& e) {
+                            statusMessage = std::string("Failed to move: ") + e.what();
+                        }
                     }
                 }
             }
@@ -1203,6 +1406,10 @@ void EditorUI::drawAssetBrowser() {
 
         // Right click context menu on assets root node
         if (BeginPopupContextItem("assets_root_ctx")) {
+            if (MenuItem("Show in Explorer")) {
+                openInExplorer("assets");
+            }
+            Separator();
             if (BeginMenu("Create")) {
                 if (MenuItem("Folder")) {
                     s_createFolderParentPath = "assets";
@@ -1225,7 +1432,7 @@ void EditorUI::drawAssetBrowser() {
                     s_openCreateFilePopup = true;
                 }
                 drawRegisteredAssetBrowserMenu("assets");
-                EndMenu();
+                ImGui::EndMenu();
             }
             EndPopup();
         }
@@ -1350,6 +1557,10 @@ void EditorUI::drawAssetBrowser() {
             CloseCurrentPopup();
         }
         EndPopup();
+    }
+
+    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsAnyItemHovered()) {
+        s_selectedAssetPaths.clear();
     }
 
     End();
@@ -1854,9 +2065,12 @@ void EditorUI::drawTilesetEditorWindow() {
             if (Selectable(fname.c_str(), selected, 0, ImVec2(-1, 0))) {
                 s_editingTilesetPath = fpath;
                 s_editingTileset     = Engine::TilesetAsset::loadFromFile(fpath);
+                Engine::invalidateTilesetCache(fpath);
+                if (auto* ts = Engine::loadOrGetTileset(fpath, renderer)) {
+                    s_editingTileset.atlas = ts->atlas;
+                }
                 s_tilesetLoaded      = true;
                 s_tsPanOffset        = ImVec2(0.f, 0.f);
-                Engine::invalidateTilesetCache(fpath);
             }
             PopStyleColor(2);
         }
@@ -1883,6 +2097,10 @@ void EditorUI::drawTilesetEditorWindow() {
                 newTs.tileWidth  = 16;
                 newTs.tileHeight = 16;
                 Engine::TilesetAsset::saveToFile(newTs);
+                Engine::invalidateTilesetCache(newPath);
+                if (auto* ts = Engine::loadOrGetTileset(newPath, renderer)) {
+                    newTs.atlas = ts->atlas;
+                }
                 s_editingTilesetPath = newPath;
                 s_editingTileset     = std::move(newTs);
                 s_tilesetLoaded      = true;
@@ -1928,6 +2146,7 @@ void EditorUI::drawTilesetEditorWindow() {
                 }
                 Engine::invalidateTilesetCache(s_editingTilesetPath);
                 if (auto* ts = Engine::loadOrGetTileset(s_editingTilesetPath, renderer)) {
+                    s_editingTileset.atlas = ts->atlas;
                     for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
                         if (tm.tilesetPath == s_editingTilesetPath) {
                             tm.isDirty = true;
@@ -2088,8 +2307,8 @@ void EditorUI::drawTilesetEditorWindow() {
             // Texture thumbnail
             if (!tile.texturePath.empty()) {
                 Texture* tex = renderer.resourceManager->loadTexture(tile.texturePath, renderer);
-                if (tex && tex->descriptorSet != VK_NULL_HANDLE) {
-                    dl->AddImage((ImTextureID)tex->descriptorSet, tl, br);
+                if (tex && tex->singleDescriptorSet != VK_NULL_HANDLE) {
+                    dl->AddImage((ImTextureID)tex->singleDescriptorSet, tl, br);
                 }
             }
 
@@ -2179,6 +2398,7 @@ void EditorUI::drawTilesetEditorWindow() {
                     Engine::TilesetAsset::saveToFile(s_editingTileset);
                     Engine::invalidateTilesetCache(s_editingTilesetPath);
                     if (auto* ts = Engine::loadOrGetTileset(s_editingTilesetPath, renderer)) {
+                        s_editingTileset.atlas = ts->atlas;
                         for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
                             if (tm.tilesetPath == s_editingTilesetPath) {
                                 tm.isDirty = true;
@@ -2200,6 +2420,7 @@ void EditorUI::drawTilesetEditorWindow() {
                     Engine::TilesetAsset::saveToFile(s_editingTileset);
                     Engine::invalidateTilesetCache(s_editingTilesetPath);
                     if (auto* ts = Engine::loadOrGetTileset(s_editingTilesetPath, renderer)) {
+                        s_editingTileset.atlas = ts->atlas;
                         for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
                             if (tm.tilesetPath == s_editingTilesetPath) {
                                 tm.isDirty = true;
@@ -2221,53 +2442,132 @@ void EditorUI::drawTilesetEditorWindow() {
         SetCursorScreenPos(canvasPos);
         InvisibleButton("##tsDropTarget", canvasSize);
         if (BeginDragDropTarget()) {
-            if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
-                std::string droppedPath = (const char*)payload->Data;
-                auto ext = std::filesystem::path(droppedPath).extension().string();
-                bool isImg = (ext==".png"||ext==".jpg"||ext==".jpeg"||ext==".tga");
-                if (isImg) {
-                    ImVec2 dropMouse     = GetIO().MousePos;
-                    ImVec2 dropInCanvas  = ImVec2(dropMouse.x - canvasPos.x, dropMouse.y - canvasPos.y);
-                    int dropCol = (int)std::floor((dropInCanvas.x - s_tsPanOffset.x) / cs);
-                    int dropRow = (int)std::floor((dropInCanvas.y - s_tsPanOffset.y) / cs);
-
-                    auto it = cellMap.find(cellKey(dropCol, dropRow));
-                    if (it != cellMap.end()) {
-                        // Overwrite existing tile's texture
-                        auto& existing   = s_editingTileset.tiles[it->second];
-                        existing.texturePath = droppedPath;
-                        existing.name        = std::filesystem::path(droppedPath).stem().string();
-                        std::filesystem::path tsDir = std::filesystem::path(s_editingTileset.filePath).parent_path();
-                        std::string tilePath = (tsDir / s_editingTileset.name / (existing.name + ".tile")).generic_string();
-                        Engine::TilesetAsset::saveTileFile(existing, tilePath);
-                        statusMessage = "Replaced tile at [" + std::to_string(dropCol) + "," + std::to_string(dropRow) + "]";
-                    } else {
-                        // New tile at this position
-                        Engine::TileAsset newTile;
-                        newTile.id          = static_cast<int>(s_editingTileset.tiles.size());
-                        newTile.name        = std::filesystem::path(droppedPath).stem().string();
-                        newTile.texturePath = droppedPath;
-                        newTile.isSolid     = false;
-                        newTile.gridX       = dropCol;
-                        newTile.gridY       = dropRow;
-
-                        std::filesystem::path tsDir = std::filesystem::path(s_editingTileset.filePath).parent_path();
-                        std::filesystem::path tileSubDir = tsDir / s_editingTileset.name;
-                        std::filesystem::create_directories(tileSubDir);
-                        std::string tilePath = (tileSubDir / (newTile.name + ".tile")).generic_string();
-                        Engine::TilesetAsset::saveTileFile(newTile, tilePath);
-                        s_editingTileset.tiles.push_back(std::move(newTile));
-                        statusMessage = "Added tile at [" + std::to_string(dropCol) + "," + std::to_string(dropRow) + "]";
+            if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_MULTI_ASSETS")) {
+                if (payload->Data && payload->DataSize > 0 && !s_editingTileset.filePath.empty()) {
+                    std::string pathsStr((const char*)payload->Data);
+                    std::stringstream ss(pathsStr);
+                    std::string droppedPath;
+                    std::vector<std::string> imagesToProcess;
+                    while (std::getline(ss, droppedPath, '|')) {
+                        auto ext = std::filesystem::path(droppedPath).extension().string();
+                        bool isImg = (ext==".png"||ext==".jpg"||ext==".jpeg"||ext==".tga");
+                        if (isImg) {
+                            imagesToProcess.push_back(droppedPath);
+                        }
                     }
 
-                    Engine::TilesetAsset::saveToFile(s_editingTileset);
-                    Engine::invalidateTilesetCache(s_editingTilesetPath);
-                    if (auto* ts = Engine::loadOrGetTileset(s_editingTilesetPath, renderer)) {
-                        for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
-                            if (tm.tilesetPath == s_editingTilesetPath) {
-                                tm.isDirty = true;
-                                if (auto* mat = registry.get<Material>(tmEnt)) {
-                                    mat->descriptorSet = ts->atlas.descriptorSet;
+                    if (!imagesToProcess.empty()) {
+                        ImVec2 dropMouse     = GetIO().MousePos;
+                        ImVec2 dropInCanvas  = ImVec2(dropMouse.x - canvasPos.x, dropMouse.y - canvasPos.y);
+                        int startCol = (int)std::floor((dropInCanvas.x - s_tsPanOffset.x) / cs);
+                        int startRow = (int)std::floor((dropInCanvas.y - s_tsPanOffset.y) / cs);
+
+                        int colOffset = 0;
+                        for (const auto& path : imagesToProcess) {
+                            int targetCol = startCol + colOffset;
+                            int targetRow = startRow;
+                            
+                            uint64_t key = cellKey(targetCol, targetRow);
+                            auto it = cellMap.find(key);
+                            if (it != cellMap.end() && it->second >= 0 && it->second < (int)s_editingTileset.tiles.size()) {
+                                // Overwrite existing tile's texture
+                                auto& existing   = s_editingTileset.tiles[it->second];
+                                existing.texturePath = path;
+                                existing.name        = std::filesystem::path(path).stem().string();
+                                std::filesystem::path tsDir = std::filesystem::path(s_editingTileset.filePath).parent_path();
+                                std::string tilePath = (tsDir / s_editingTileset.name / (existing.name + ".tile")).generic_string();
+                                Engine::TilesetAsset::saveTileFile(existing, tilePath);
+                            } else {
+                                // New tile at this position
+                                Engine::TileAsset newTile;
+                                newTile.id          = static_cast<int>(s_editingTileset.tiles.size());
+                                newTile.name        = std::filesystem::path(path).stem().string();
+                                newTile.texturePath = path;
+                                newTile.isSolid     = false;
+                                newTile.gridX       = targetCol;
+                                newTile.gridY       = targetRow;
+
+                                std::filesystem::path tsDir = std::filesystem::path(s_editingTileset.filePath).parent_path();
+                                std::filesystem::path tileSubDir = tsDir / s_editingTileset.name;
+                                std::filesystem::create_directories(tileSubDir);
+                                std::string tilePath = (tileSubDir / (newTile.name + ".tile")).generic_string();
+                                Engine::TilesetAsset::saveTileFile(newTile, tilePath);
+                                
+                                cellMap[key] = newTile.id;
+                                s_editingTileset.tiles.push_back(std::move(newTile));
+                            }
+                            colOffset++;
+                        }
+
+                        Engine::TilesetAsset::saveToFile(s_editingTileset);
+                        Engine::invalidateTilesetCache(s_editingTilesetPath);
+                        if (auto* ts = Engine::loadOrGetTileset(s_editingTilesetPath, renderer)) {
+                            s_editingTileset.atlas = ts->atlas;
+                            for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
+                                if (tm.tilesetPath == s_editingTilesetPath) {
+                                    tm.isDirty = true;
+                                    if (auto* mat = registry.get<Material>(tmEnt)) {
+                                        mat->descriptorSet = ts->atlas.descriptorSet;
+                                    }
+                                }
+                            }
+                        }
+                        statusMessage = "Added/updated " + std::to_string(imagesToProcess.size()) + " tiles.";
+                    }
+                }
+            } else if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
+                if (payload->Data && payload->DataSize > 0 && !s_editingTileset.filePath.empty()) {
+                    std::string droppedPath = (const char*)payload->Data;
+                    auto ext = std::filesystem::path(droppedPath).extension().string();
+                    bool isImg = (ext==".png"||ext==".jpg"||ext==".jpeg"||ext==".tga");
+                    if (isImg) {
+                        ImVec2 dropMouse     = GetIO().MousePos;
+                        ImVec2 dropInCanvas  = ImVec2(dropMouse.x - canvasPos.x, dropMouse.y - canvasPos.y);
+                        int dropCol = (int)std::floor((dropInCanvas.x - s_tsPanOffset.x) / cs);
+                        int dropRow = (int)std::floor((dropInCanvas.y - s_tsPanOffset.y) / cs);
+
+                        uint64_t key = cellKey(dropCol, dropRow);
+                        auto it = cellMap.find(key);
+                        if (it != cellMap.end() && it->second >= 0 && it->second < (int)s_editingTileset.tiles.size()) {
+                            // Overwrite existing tile's texture
+                            auto& existing   = s_editingTileset.tiles[it->second];
+                            existing.texturePath = droppedPath;
+                            existing.name        = std::filesystem::path(droppedPath).stem().string();
+                            std::filesystem::path tsDir = std::filesystem::path(s_editingTileset.filePath).parent_path();
+                            std::string tilePath = (tsDir / s_editingTileset.name / (existing.name + ".tile")).generic_string();
+                            Engine::TilesetAsset::saveTileFile(existing, tilePath);
+                            statusMessage = "Replaced tile at [" + std::to_string(dropCol) + "," + std::to_string(dropRow) + "]";
+                        } else {
+                            // New tile at this position
+                            Engine::TileAsset newTile;
+                            newTile.id          = static_cast<int>(s_editingTileset.tiles.size());
+                            newTile.name        = std::filesystem::path(droppedPath).stem().string();
+                            newTile.texturePath = droppedPath;
+                            newTile.isSolid     = false;
+                            newTile.gridX       = dropCol;
+                            newTile.gridY       = dropRow;
+
+                            std::filesystem::path tsDir = std::filesystem::path(s_editingTileset.filePath).parent_path();
+                            std::filesystem::path tileSubDir = tsDir / s_editingTileset.name;
+                            std::filesystem::create_directories(tileSubDir);
+                            std::string tilePath = (tileSubDir / (newTile.name + ".tile")).generic_string();
+                            Engine::TilesetAsset::saveTileFile(newTile, tilePath);
+                            
+                            cellMap[key] = newTile.id;
+                            s_editingTileset.tiles.push_back(std::move(newTile));
+                            statusMessage = "Added tile at [" + std::to_string(dropCol) + "," + std::to_string(dropRow) + "]";
+                        }
+
+                        Engine::TilesetAsset::saveToFile(s_editingTileset);
+                        Engine::invalidateTilesetCache(s_editingTilesetPath);
+                        if (auto* ts = Engine::loadOrGetTileset(s_editingTilesetPath, renderer)) {
+                            s_editingTileset.atlas = ts->atlas;
+                            for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
+                                if (tm.tilesetPath == s_editingTilesetPath) {
+                                    tm.isDirty = true;
+                                    if (auto* mat = registry.get<Material>(tmEnt)) {
+                                        mat->descriptorSet = ts->atlas.descriptorSet;
+                                    }
                                 }
                             }
                         }

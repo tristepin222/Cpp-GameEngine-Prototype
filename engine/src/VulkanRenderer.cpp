@@ -158,6 +158,7 @@ void VulkanRenderer::setupDescriptors() {
     descriptors.create(device.getDevice());
     descriptors.createCameraDescriptorSetLayout();
     descriptors.createTextureDescriptorSetLayout();
+    descriptors.createSingleTextureDescriptorSetLayout();
     descriptors.createJointsDescriptorSetLayout();
 }
 

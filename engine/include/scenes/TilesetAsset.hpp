@@ -68,6 +68,8 @@ namespace Engine {
             int atlasHeight = 0;
             /** @brief Vulkan descriptor set for the atlas texture (owned by ResourceManager). */
             VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+            /** @brief Vulkan descriptor set with single-texture binding (for ImGui/UI). */
+            VkDescriptorSet singleDescriptorSet = VK_NULL_HANDLE;
             bool valid = false;
         };
         AtlasCache atlas;
