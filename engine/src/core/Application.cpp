@@ -198,9 +198,7 @@ namespace Engine {
     }
 
     int Application::buildGame(const std::string& projectPath, const std::string& outPath) {
-        if (pluginManager) {
-            pluginManager->unloadPlugins();
-        }
+        // pluginManager->unloadPlugins(); // Disabled to keep engine plugins loaded during build
 
         std::filesystem::path outPathFs = std::filesystem::absolute(outPath);
         outPathFs = outPathFs.lexically_normal();
@@ -390,10 +388,8 @@ namespace Engine {
             sourceDir = buildDir;
         }
 
-        if (pluginManager) {
-            pluginManager->unloadPlugins();
-        }
-
+        // Previously we unloaded all plugins before building, which could corrupt engine plugin state.
+        // Instead, we only need to configure and build the scripts, then reload the compiled script DLLs.
         // Run CMake config and build dynamically (Release build)
         std::string configCmd = "cmake -S \"" + sourceDir.string() + "\" -B \"" + buildDir.string() + "\" -G \"Visual Studio 17 2022\" -A x64 -T v143 -DCMAKE_BUILD_TYPE=Release";
         std::string buildCmd = "cmake --build \"" + buildDir.string() + "\" --config Release";
@@ -406,7 +402,7 @@ namespace Engine {
         }
 
         if (pluginManager) {
-            pluginManager->loadPlugins();
+            // Reload only the newly built user script plugins.
             pluginManager->loadScripts(config.projectPath);
         }
 
