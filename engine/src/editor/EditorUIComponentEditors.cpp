@@ -1880,6 +1880,9 @@ void EditorUI::drawTilemapInspector() {
             if (!tm->tilesetPath.empty()) {
                 s_editingTilesetPath = tm->tilesetPath;
                 s_editingTileset = Engine::TilesetAsset::loadFromFile(tm->tilesetPath);
+                if (auto* ts = Engine::loadOrGetTileset(tm->tilesetPath, renderer)) {
+                    s_editingTileset.atlas = ts->atlas;
+                }
                 s_tilesetLoaded = true;
             }
             s_openTilesetEditorWindow = true;

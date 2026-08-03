@@ -56,6 +56,7 @@ set(ENGINE_SOURCES
     src/ecs/systems/PlayerControllerSystem.cpp
     src/editor/EditorUI.cpp
     src/editor/EditorUIPanels.cpp
+    src/editor/PlatformUtils.cpp
     src/editor/EditorUIComponentEditors.cpp
     src/editor/EditorUIGizmosAndPicking.cpp
     src/editor/NodeGraphFramework.cpp
