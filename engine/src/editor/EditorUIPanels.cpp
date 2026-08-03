@@ -2307,8 +2307,8 @@ void EditorUI::drawTilesetEditorWindow() {
             // Texture thumbnail
             if (!tile.texturePath.empty()) {
                 Texture* tex = renderer.resourceManager->loadTexture(tile.texturePath, renderer);
-                if (tex && tex->descriptorSet != VK_NULL_HANDLE) {
-                    dl->AddImage((ImTextureID)tex->descriptorSet, tl, br);
+                if (tex && tex->singleDescriptorSet != VK_NULL_HANDLE) {
+                    dl->AddImage((ImTextureID)tex->singleDescriptorSet, tl, br);
                 }
             }
 

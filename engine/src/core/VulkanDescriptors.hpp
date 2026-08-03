@@ -41,6 +41,11 @@ public:
     void createTextureDescriptorSetLayout();
 
     /**
+     * @brief Creates descriptor set layout for a single texture (diffuse only, for ImGui/UI).
+     */
+    void createSingleTextureDescriptorSetLayout();
+
+    /**
      * @brief Creates descriptor set layout for joints/bones matrices.
      */
     void createJointsDescriptorSetLayout();
@@ -81,6 +86,22 @@ public:
     );
 
     /**
+     * @brief Allocates and binds descriptor set for a single texture sampler.
+     */
+    void allocateSingleTextureDescriptorSet(
+        VkDescriptorSet& descriptorSet,
+        VkImageView view, VkSampler sampler
+    );
+
+    /**
+     * @brief Updates an existing single texture descriptor set.
+     */
+    void updateSingleTextureDescriptorSet(
+        VkDescriptorSet descriptorSet,
+        VkImageView view, VkSampler sampler
+    );
+
+    /**
      * @brief Allocates and binds descriptor set for a skeleton joint matrices buffer.
      * @param descriptorSet Reference to target descriptor set to allocate.
      * @param uniformBuffer GPU buffer.
@@ -105,6 +126,11 @@ public:
      * @return VkDescriptorSetLayout handle.
      */
     VkDescriptorSetLayout getTextureDescriptorSetLayout() const { return textureDescriptorSetLayout; }
+    /**
+     * @brief Gets raw single-texture descriptor set layout.
+     * @return VkDescriptorSetLayout handle.
+     */
+    VkDescriptorSetLayout getSingleTextureDescriptorSetLayout() const { return singleTextureDescriptorSetLayout; }
     /**
      * @brief Gets raw joints descriptor set layout.
      * @return VkDescriptorSetLayout handle.
@@ -131,6 +157,8 @@ private:
     VkDescriptorSetLayout cameraDescriptorSetLayout = VK_NULL_HANDLE;
     /** @brief Descriptor set layout allocated for textures. */
     VkDescriptorSetLayout textureDescriptorSetLayout = VK_NULL_HANDLE;
+    /** @brief Descriptor set layout allocated for single-texture bindings (ImGui/UI). */
+    VkDescriptorSetLayout singleTextureDescriptorSetLayout = VK_NULL_HANDLE;
     /** @brief Descriptor set layout allocated for joints. */
     VkDescriptorSetLayout jointsDescriptorSetLayout = VK_NULL_HANDLE;
     /** @brief Descriptor set allocated for camera. */
