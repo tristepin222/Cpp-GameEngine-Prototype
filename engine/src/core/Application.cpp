@@ -267,17 +267,135 @@ namespace Engine {
     }
 
     int Application::compileScripts(const std::string& projectPath) {
+        std::filesystem::path absProjectPath = std::filesystem::absolute(projectPath).lexically_normal();
+        std::filesystem::path scriptsDir = absProjectPath / "scripts";
+        
+        // If scripts folder doesn't exist, we don't compile anything
+        if (!std::filesystem::exists(scriptsDir)) {
+            std::cout << "[BuildSystem] No scripts/ directory found. Skipping script compilation." << std::endl;
+            return 0;
+        }
+
+        std::filesystem::path buildDir = absProjectPath / ".script_build";
+        std::filesystem::create_directories(buildDir);
+
+        std::filesystem::path scriptsCMake = scriptsDir / "CMakeLists.txt";
+        std::filesystem::path sourceDir = scriptsDir;
+
+        if (!std::filesystem::exists(scriptsCMake)) {
+            std::cout << "[BuildSystem] scripts/CMakeLists.txt not found. Generating temporary CMake file in build directory..." << std::endl;
+            
+            // 1. Create standard folder structure if missing
+            std::filesystem::create_directories(scriptsDir / "public");
+            std::filesystem::create_directories(scriptsDir / "private");
+            std::filesystem::create_directories(scriptsDir / "src");
+
+            // 2. Add placeholder.cpp if private/ is completely empty
+            bool hasSources = false;
+            if (std::filesystem::exists(scriptsDir / "private")) {
+                for (const auto& entry : std::filesystem::recursive_directory_iterator(scriptsDir / "private")) {
+                    if (entry.is_regular_file() && (entry.path().extension() == ".cpp" || entry.path().extension() == ".cc")) {
+                        hasSources = true;
+                        break;
+                    }
+                }
+            }
+            if (!hasSources) {
+                std::filesystem::path placeholder = scriptsDir / "private" / "placeholder.cpp";
+                std::ofstream out(placeholder);
+                out << "// Place your game script files in public/ (headers) and private/ (sources)\n";
+                out.close();
+            }
+
+            std::filesystem::path tempCMake = buildDir / "CMakeLists.txt";
+            
+            std::string sdkPath = config.exeDir;
+            std::replace(sdkPath.begin(), sdkPath.end(), '\\', '/');
+
+            std::string normProjectPath = absProjectPath.string();
+            std::replace(normProjectPath.begin(), normProjectPath.end(), '\\', '/');
+
+            std::ofstream cmakeOut(tempCMake);
+            cmakeOut << "cmake_minimum_required(VERSION 3.20)\n"
+                     << "project(GameScripts LANGUAGES CXX)\n\n"
+                     << "set(CMAKE_CXX_STANDARD 20)\n"
+                     << "set(CMAKE_CXX_STANDARD_REQUIRED ON)\n\n"
+                     << "# Find the Engine SDK\n"
+                     << "find_package(Engine REQUIRED PATHS\n"
+                     << "    \"" << sdkPath << "/cmake\"\n"
+                     << ")\n\n"
+                     << "# Setup directories\n"
+                     << "set(SCRIPT_PUBLIC_DIR \"" << normProjectPath << "/scripts/public\")\n"
+                     << "set(SCRIPT_PRIVATE_DIR \"" << normProjectPath << "/scripts/private\")\n"
+                     << "set(SCRIPT_SRC_DIR \"" << normProjectPath << "/scripts/src\")\n\n"
+                     << "# Glob sources\n"
+                     << "file(GLOB_RECURSE SCRIPT_SOURCES \n"
+                     << "    \"${SCRIPT_PRIVATE_DIR}/*.cpp\"\n"
+                     << "    \"${SCRIPT_PRIVATE_DIR}/*.cc\"\n"
+                     << ")\n"
+                     << "list(REMOVE_ITEM SCRIPT_SOURCES \"${SCRIPT_SRC_DIR}/generated_reflection.cpp\")\n\n"
+                     << "file(GLOB_RECURSE SCRIPT_HEADERS \n"
+                     << "    \"${SCRIPT_PUBLIC_DIR}/*.hpp\"\n"
+                     << "    \"${SCRIPT_PUBLIC_DIR}/*.h\"\n"
+                     << ")\n\n"
+                     << "# Make sure we have sources\n"
+                     << "if(NOT SCRIPT_SOURCES)\n"
+                     << "    message(FATAL_ERROR \"No script source files found in scripts/private!\")\n"
+                     << "endif()\n\n"
+                     << "# Find the reflection generator\n"
+                     << "if(EXISTS \"${ENGINE_SDK_ROOT}/bin/reflection_generator.exe\")\n"
+                     << "    set(REFLECTION_GENERATOR_EXE \"${ENGINE_SDK_ROOT}/bin/reflection_generator.exe\")\n"
+                     << "else()\n"
+                     << "    set(REFLECTION_GENERATOR_EXE \"${ENGINE_SDK_ROOT}/reflection_generator.exe\")\n"
+                     << "endif()\n\n"
+                     << "# Output generated reflection file\n"
+                     << "set(GENERATED_REF_CPP \"${SCRIPT_SRC_DIR}/generated_reflection.cpp\")\n"
+                     << "file(MAKE_DIRECTORY \"${SCRIPT_SRC_DIR}\")\n\n"
+                     << "if(NOT CMAKE_GENERATOR_PLATFORM MATCHES \"ARM\" AND NOT CMAKE_CROSSCOMPILING)\n"
+                     << "    add_custom_command( \n"
+                     << "        OUTPUT \"${GENERATED_REF_CPP}\"\n"
+                     << "        COMMAND \"${REFLECTION_GENERATOR_EXE}\" \"${SCRIPT_PUBLIC_DIR}\" \"${GENERATED_REF_CPP}\"\n"
+                     << "        DEPENDS ${SCRIPT_SOURCES} ${SCRIPT_HEADERS}\n"
+                     << "        COMMENT \"[Reflection Generator] Parsing annotations...\"\n"
+                     << "    )\n"
+                     << "else()\n"
+                     << "    add_custom_command(\n"
+                     << "        OUTPUT \"${GENERATED_REF_CPP}\"\n"
+                     << "        COMMAND ${CMAKE_COMMAND} -E echo \"[Reflection Generator] Skipping...\"\n"
+                     << "        DEPENDS ${SCRIPT_SOURCES} ${SCRIPT_HEADERS}\n"
+                     << "    )\n"
+                     << "endif()\n\n"
+                     << "list(APPEND SCRIPT_SOURCES \"${GENERATED_REF_CPP}\")\n\n"
+                     << "add_library(game_scripts SHARED ${SCRIPT_SOURCES})\n\n"
+                     << "target_include_directories(game_scripts PRIVATE\n"
+                     << "    \"${SCRIPT_PUBLIC_DIR}\"\n"
+                     << "    \"${SCRIPT_PRIVATE_DIR}\"\n"
+                     << "    \"${ENGINE_SDK_ROOT}/include/plugins/cinemachine\"\n"
+                     << "    \"${ENGINE_SDK_ROOT}/include/plugins/AStar\"\n"
+                     << "    \"${ENGINE_SDK_ROOT}/plugins/cinemachine/include\"\n"
+                     << ")\n\n"
+                     << "target_link_libraries(game_scripts PRIVATE Engine::engine)\n\n"
+                     << "# Output DLL to project's bin folder\n"
+                     << "set(OUTPUT_DIR \"" << normProjectPath << "/bin\")\n"
+                     << "set_target_properties(game_scripts PROPERTIES\n"
+                     << "    LIBRARY_OUTPUT_DIRECTORY_RELEASE \"${OUTPUT_DIR}\"\n"
+                     << "    RUNTIME_OUTPUT_DIRECTORY_RELEASE \"${OUTPUT_DIR}\"\n"
+                     << "    ARCHIVE_OUTPUT_DIRECTORY_RELEASE \"${OUTPUT_DIR}\"\n"
+                     << "    LIBRARY_OUTPUT_DIRECTORY_DEBUG \"${OUTPUT_DIR}\"\n"
+                     << "    RUNTIME_OUTPUT_DIRECTORY_DEBUG \"${OUTPUT_DIR}\"\n"
+                     << "    ARCHIVE_OUTPUT_DIRECTORY_DEBUG \"${OUTPUT_DIR}\"\n"
+                     << ")\n";
+            cmakeOut.close();
+            
+            sourceDir = buildDir;
+        }
+
         if (pluginManager) {
             pluginManager->unloadPlugins();
         }
 
-        std::filesystem::path scriptsDir = std::filesystem::path(projectPath) / "scripts";
-        std::filesystem::path buildDir = std::filesystem::path(projectPath) / ".script_build";
-        
-        std::filesystem::create_directories(buildDir);
-
         // Run CMake config and build dynamically (Release build)
-        std::string configCmd = "cmake -S \"" + scriptsDir.string() + "\" -B \"" + buildDir.string() + "\" -G \"Visual Studio 17 2022\" -A x64 -T v143 -DCMAKE_BUILD_TYPE=Release";
+        std::string configCmd = "cmake -S \"" + sourceDir.string() + "\" -B \"" + buildDir.string() + "\" -G \"Visual Studio 17 2022\" -A x64 -T v143 -DCMAKE_BUILD_TYPE=Release";
         std::string buildCmd = "cmake --build \"" + buildDir.string() + "\" --config Release";
 
         std::cout << "[BuildSystem] Configuring scripts: " << configCmd << std::endl;
