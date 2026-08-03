@@ -29,7 +29,6 @@
 #include "ecs/components/Collider.hpp"
 #include "ecs/components/Tilemap.hpp"
 #include "ecs/components/UIComponents.hpp"
-#include "ecs/components/PhysgunScript.hpp"
 #include "ecs/components/SpriteRenderer.hpp"
 #include "ufbx.h"
 #include "cgltf.h"
@@ -859,31 +858,6 @@ void EditorUI::drawDebugPanel() {
     Spacing();
     Separator();
     TextUnformatted("Clip Depth Mode: OpenGL-style (-1..1)");
-
-    Spacing();
-    Separator();
-    TextUnformatted("Physgun System Debug");
-    Separator();
-
-    bool hasPhysgun = false;
-    for (auto [ent, script] : registry.view<PhysgunScript>()) {
-        hasPhysgun = true;        
-        Text("Entity ID: %d", ent.getId());
-        if (script.isHolding) {
-            Text("Held Entity ID: %d", script.heldEntity.getId());
-            Text("Current Hold Distance: %.2f", script.currentHoldDistance);
-        }
-        Text("Script Ray Origin: (%.2f, %.2f, %.2f)", script.rayOrigin.x, script.rayOrigin.y, script.rayOrigin.z);
-        Text("Script Ray Direction: (%.2f, %.2f, %.2f)", script.rayDirection.x, script.rayDirection.y, script.rayDirection.z);
-        Text("Script Update Count: %d", script.updateCount);
-        Text("Debug Show Ray: %s (Press R to toggle)", script.debugShowRay ? "ON" : "OFF");
-        Text("Kp (Stiffness): %.1f", script.Kp);
-        Text("Kd (Damping): %.1f", script.Kd);
-        Text("Default Hold Dist: %.1f", script.holdDistance);
-    }
-    if (!hasPhysgun) {
-        TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "No active PhysgunScript found in scene.");
-    }
 
     Spacing();
     Separator();
@@ -2006,6 +1980,33 @@ void EditorUI::drawBuildSettingsPanel() {
         ImGui::Button("Building...", ImVec2(buttonWidth, 32));
         ImGui::EndDisabled();
     } else {
+        // Button 1: Recompile Scripts (Green)
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.15f, 0.6f, 0.3f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f,  0.75f, 0.4f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.1f,  0.45f, 0.2f, 1.0f));
+
+        if (ImGui::Button("Recompile Scripts", ImVec2(buttonWidth, 32))) {
+            buildInProgress = true;
+            buildStatusMessage = "Recompiling scripts...";
+
+            int result = compileScriptsCallback ? compileScriptsCallback(".") : -1;
+
+            if (result == 0) {
+                buildStatusMessage = "[OK] Scripts compiled & reloaded successfully.";
+                std::cout << "[BuildSystem] Script compilation completed successfully." << std::endl;
+            } else {
+                buildStatusMessage = "[ERROR] Script compilation failed (exit code " + std::to_string(result) + ")";
+                std::cerr << "[BuildSystem] Script compilation failed with exit code: " << result << std::endl;
+            }
+
+            buildInProgress = false;
+        }
+        ImGui::PopStyleColor(3);
+
+        ImGui::Spacing();
+        ImGui::SetCursorPosX((ImGui::GetWindowSize().x - buttonWidth) * 0.5f);
+
+        // Button 2: Build Game (Blue)
         ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.15f, 0.45f, 0.8f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f,  0.55f, 0.95f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.1f,  0.35f, 0.65f, 1.0f));

@@ -18,7 +18,6 @@
 #include "ecs/components/RigidBody.hpp"
 #include "ecs/components/Collider.hpp"
 #include "ecs/components/PlayerControllerComponent.hpp"
-#include "ecs/components/PhysgunScript.hpp"
 #include "ecs/components/Tilemap.hpp"
 #include "ecs/components/UIComponents.hpp"
 #include "ecs/components/SpriteRenderer.hpp"

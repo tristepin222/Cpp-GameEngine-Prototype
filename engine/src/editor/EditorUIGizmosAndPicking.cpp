@@ -14,7 +14,6 @@
 #include "ecs/components/AnimationController.hpp"
 #include "ecs/components/IKSolver.hpp"
 #include "ecs/components/Collider.hpp"
-#include "ecs/components/PhysgunScript.hpp"
 #include "ecs/components/RigidBody.hpp"
 #include "ecs/components/Tilemap.hpp"
 #include "renderer/VulkanRenderer.hpp"
@@ -655,38 +654,7 @@ void EditorUI::drawColliderDebugOverlay() {
 }
 
 void EditorUI::drawPhysgunDebugOverlay() {
-    if (!editorMode.isPlaying) return;
-
-    ImGuiIO& io = ImGui::GetIO();
-    glm::mat4 viewProj = renderer.getActiveCameraViewProj();
-
-    auto projectToScreen = [&](const glm::vec3& worldPos, ImVec2& screenPos) -> bool {
-        glm::vec4 clipPos = viewProj * glm::vec4(worldPos, 1.0f);
-        if (clipPos.w < 0.0001f) return false;
-        glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
-        screenPos.x = (ndc.x + 1.0f) * 0.5f * io.DisplaySize.x;
-        screenPos.y = (ndc.y + 1.0f) * 0.5f * io.DisplaySize.y;
-        return true;
-    };
-
-    ImDrawList* drawList = ImGui::GetBackgroundDrawList();
-
-    for (auto [ent, script] : registry.view<PhysgunScript>()) {
-        if (!script.debugShowRay) continue;
-
-        glm::vec3 start = script.rayOrigin;
-        float lineDist = script.isHolding ? script.currentHoldDistance : 40.0f;
-        glm::vec3 end = start + script.rayDirection * lineDist;
-
-        ImVec2 pStart, pEnd;
-        if (projectToScreen(start, pStart) && projectToScreen(end, pEnd)) {
-            // Draw glowing cyan line if not holding, or orange if holding
-            ImU32 color = script.isHolding ? ImColor(255, 69, 0, 255) : ImColor(0, 255, 255, 255);
-            drawList->AddLine(pStart, pEnd, color, 3.0f);
-            drawList->AddCircleFilled(pEnd, 6.0f, color);
-            drawList->AddCircle(pEnd, 10.0f, ImColor(255, 255, 255, 180), 0, 1.5f);
-        }
-    }
+    // No-op (PhysgunScript is a user component, not built into engine core)
 }
 
 void EditorUI::drawTilemapGridOverlay() {
