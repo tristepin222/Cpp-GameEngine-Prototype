@@ -98,10 +98,14 @@ REM Copy plugin DLLs to sdk/plugins/ (cinemachine etc.)
 if exist %BUILD_DIR%\plugins\cinemachine\%CONFIG%\cinemachine_plugin.dll (
     mkdir %SDK_DIR%\plugins
     copy /Y %BUILD_DIR%\plugins\cinemachine\%CONFIG%\cinemachine_plugin.dll %SDK_DIR%\plugins\
+    mkdir %SDK_DIR%\include\plugins\cinemachine
+    copy /Y plugins\cinemachine\include\*.hpp %SDK_DIR%\include\plugins\cinemachine\
 )
 if exist %BUILD_DIR%\plugins\AStar\%CONFIG%\astar_plugin.dll (
     mkdir %SDK_DIR%\plugins
     copy /Y %BUILD_DIR%\plugins\AStar\%CONFIG%\astar_plugin.dll %SDK_DIR%\plugins\
+    mkdir %SDK_DIR%\include\plugins\AStar
+    copy /Y plugins\AStar\include\*.hpp %SDK_DIR%\include\plugins\AStar\
 )
 
 REM Copy EngineConfig.cmake (for standalone game CMake projects)
