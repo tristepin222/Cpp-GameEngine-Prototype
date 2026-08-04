@@ -19,6 +19,7 @@ struct LoadedPlugin {
     std::string path;
     HMODULE handle = nullptr;
     PluginShutdownFunc shutdownFunc = nullptr;
+    bool isScript = false;
 };
 
 class PluginManager {
@@ -30,9 +31,10 @@ public:
     void loadScripts(const std::string& projectPath);
     void setExeDirectory(const std::string& dir);
     void unloadPlugins();
+    void unloadScripts();
 
 private:
-    void scanDirectory(const std::string& dir);
+    void scanDirectory(const std::string& dir, bool isScript = false);
     Registry& registry;
     SystemManager& systemManager;
     VulkanRenderer& renderer;
