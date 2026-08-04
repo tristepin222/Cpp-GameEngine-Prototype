@@ -15,7 +15,7 @@ PluginManager::~PluginManager() {
     unloadPlugins();
 }
 
-void PluginManager::scanDirectory(const std::string& dir) {
+void PluginManager::scanDirectory(const std::string& dir, bool isScript) {
     if (!std::filesystem::exists(dir)) return;
 
     std::cout << "[PluginManager] Scanning: " << dir << std::endl;
@@ -69,6 +69,7 @@ void PluginManager::scanDirectory(const std::string& dir) {
         plugin.path         = pathStr;
         plugin.handle       = handle;
         plugin.shutdownFunc = shutdownFunc;
+        plugin.isScript     = isScript;
         loadedPlugins.push_back(plugin);
 
         std::cout << "[PluginManager] Loaded: " << pathStr << std::endl;
@@ -87,7 +88,7 @@ void PluginManager::loadPlugins() {
         std::cout << "[PluginManager] No plugins/ folder found at: " << pluginsDir << std::endl;
         return;
     }
-    scanDirectory(pluginsDir);
+    scanDirectory(pluginsDir, false);
 }
 
 void PluginManager::loadScripts(const std::string& projectPath) {
@@ -96,10 +97,10 @@ void PluginManager::loadScripts(const std::string& projectPath) {
 
     if (std::filesystem::exists(binDir)) {
         std::cout << "[PluginManager] Loading user scripts from bin: " << binDir << std::endl;
-        scanDirectory(binDir);
+        scanDirectory(binDir, true);
     } else if (std::filesystem::exists(scriptsDir)) {
         std::cout << "[PluginManager] Loading user scripts from scripts folder: " << scriptsDir << std::endl;
-        scanDirectory(scriptsDir);
+        scanDirectory(scriptsDir, true);
     } else {
         std::cout << "[PluginManager] No scripts/ or bin/ folder found at: " << projectPath << std::endl;
     }
@@ -128,5 +129,34 @@ void PluginManager::unloadPlugins() {
     }
     loadedPlugins.clear();
     std::cout << "[PluginManager] All plugins unloaded." << std::endl;
+}
+
+void PluginManager::unloadScripts() {
+    if (loadedPlugins.empty()) return;
+
+    std::cout << "[PluginManager] Unloading active user script plugins..." << std::endl;
+
+    for (auto it = loadedPlugins.begin(); it != loadedPlugins.end(); ) {
+        if (it->isScript) {
+            if (it->shutdownFunc) {
+                PluginContext context;
+                context.registry      = &registry;
+                context.systemManager = &systemManager;
+                context.renderer      = &renderer;
+                context.editorMode    = &editorMode;
+                context.imguiContext  = ImGui::GetCurrentContext();
+                it->shutdownFunc(&context);
+            }
+#ifdef _WIN32
+            FreeLibrary(it->handle);
+#else
+            dlclose(it->handle);
+#endif
+            it = loadedPlugins.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    std::cout << "[PluginManager] Script plugins unloaded." << std::endl;
 }
 

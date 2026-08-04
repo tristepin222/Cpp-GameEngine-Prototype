@@ -368,9 +368,9 @@ namespace Engine {
                      << "target_include_directories(game_scripts PRIVATE\n"
                      << "    \"${SCRIPT_PUBLIC_DIR}\"\n"
                      << "    \"${SCRIPT_PRIVATE_DIR}\"\n"
+                     << "    \"${ENGINE_SDK_ROOT}/include\"\n"
                      << "    \"${ENGINE_SDK_ROOT}/include/plugins/cinemachine\"\n"
                      << "    \"${ENGINE_SDK_ROOT}/include/plugins/AStar\"\n"
-                     << "    \"${ENGINE_SDK_ROOT}/plugins/cinemachine/include\"\n"
                      << ")\n\n"
                      << "target_link_libraries(game_scripts PRIVATE Engine::engine)\n\n"
                      << "# Output DLL to project's bin folder\n"
@@ -397,6 +397,10 @@ namespace Engine {
         std::cout << "[BuildSystem] Configuring scripts: " << configCmd << std::endl;
         int result = std::system(configCmd.c_str());
         if (result == 0) {
+            if (pluginManager) {
+                // Unload active script DLLs so the linker can overwrite them without LNK1104 file locks
+                pluginManager->unloadScripts();
+            }
             std::cout << "[BuildSystem] Building scripts: " << buildCmd << std::endl;
             result = std::system(buildCmd.c_str());
         }
