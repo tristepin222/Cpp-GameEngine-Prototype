@@ -61,6 +61,29 @@ namespace Engine {
                     const glm::vec4& uv = tileset->tiles[tileIdx].atlasUV;
                     float u0 = uv.x, v0 = uv.y, u1 = uv.z, v1 = uv.w;
 
+                    uint8_t rot = (cellIdx < static_cast<int>(layer.rotations.size())) ? layer.rotations[cellIdx] : 0;
+                    glm::vec2 uvBL(u0, v1);
+                    glm::vec2 uvBR(u1, v1);
+                    glm::vec2 uvTR(u1, v0);
+                    glm::vec2 uvTL(u0, v0);
+
+                    if (rot == 1) {      // 90 deg clockwise
+                        uvBL = glm::vec2(u0, v0);
+                        uvBR = glm::vec2(u0, v1);
+                        uvTR = glm::vec2(u1, v1);
+                        uvTL = glm::vec2(u1, v0);
+                    } else if (rot == 2) { // 180 deg
+                        uvBL = glm::vec2(u1, v0);
+                        uvBR = glm::vec2(u0, v0);
+                        uvTR = glm::vec2(u0, v1);
+                        uvTL = glm::vec2(u1, v1);
+                    } else if (rot == 3) { // 270 deg clockwise
+                        uvBL = glm::vec2(u1, v1);
+                        uvBR = glm::vec2(u1, v0);
+                        uvTR = glm::vec2(u0, v0);
+                        uvTL = glm::vec2(u0, v1);
+                    }
+
                     // World-space quad corners for this cell (applying layer's zOffset)
                     float tx0 = x * tilemap.tileSize;
                     float ty0 = y * tilemap.tileSize;
@@ -70,10 +93,10 @@ namespace Engine {
                     uint32_t vOff = static_cast<uint32_t>(vertices.size());
                     glm::vec3 normal(0.0f, 0.0f, 1.0f);
 
-                    vertices.push_back(Vertex(glm::vec3(tx0, ty0, layer.zOffset), normal, glm::vec2(u0, v1))); // BL
-                    vertices.push_back(Vertex(glm::vec3(tx1, ty0, layer.zOffset), normal, glm::vec2(u1, v1))); // BR
-                    vertices.push_back(Vertex(glm::vec3(tx1, ty1, layer.zOffset), normal, glm::vec2(u1, v0))); // TR
-                    vertices.push_back(Vertex(glm::vec3(tx0, ty1, layer.zOffset), normal, glm::vec2(u0, v0))); // TL
+                    vertices.push_back(Vertex(glm::vec3(tx0, ty0, layer.zOffset), normal, uvBL)); // BL
+                    vertices.push_back(Vertex(glm::vec3(tx1, ty0, layer.zOffset), normal, uvBR)); // BR
+                    vertices.push_back(Vertex(glm::vec3(tx1, ty1, layer.zOffset), normal, uvTR)); // TR
+                    vertices.push_back(Vertex(glm::vec3(tx0, ty1, layer.zOffset), normal, uvTL)); // TL
 
                     indices.push_back(vOff + 0); indices.push_back(vOff + 1); indices.push_back(vOff + 2);
                     indices.push_back(vOff + 2); indices.push_back(vOff + 3); indices.push_back(vOff + 0);

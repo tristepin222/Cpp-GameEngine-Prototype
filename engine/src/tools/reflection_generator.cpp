@@ -45,6 +45,7 @@ std::string getFieldTypeEnum(const std::string& type) {
     if (type == "std::string" || type == "string") return "Engine::FieldType::String";
     if (type == "RigidBodyType") return "Engine::FieldType::RigidBodyType";
     if (type == "Entity") return "Engine::FieldType::Entity";
+    if (type == "CinemachineMode" || type.find("Mode") != std::string::npos || type.find("Enum") != std::string::npos) return "Engine::FieldType::Enum";
     return "";
 }
 
@@ -283,7 +284,11 @@ int main(int argc, char* argv[]) {
             const auto& field = comp.fields[i];
             std::string enumStr = getFieldTypeEnum(field.type);
             if (!enumStr.empty()) {
-                out << "            { \"" << field.name << "\", " << enumStr << ", offsetof(" << comp.qualifiedName << ", " << field.name << ") }";
+                if (enumStr == "Engine::FieldType::Enum") {
+                    out << "            { \"" << field.name << "\", " << enumStr << ", offsetof(" << comp.qualifiedName << ", " << field.name << "), { \"Third Person Follow\", \"First Person\", \"Fixed Look At\", \"2D Follow\" } }";
+                } else {
+                    out << "            { \"" << field.name << "\", " << enumStr << ", offsetof(" << comp.qualifiedName << ", " << field.name << ") }";
+                }
                 if (i < comp.fields.size() - 1) out << ",";
                 out << "\n";
             }

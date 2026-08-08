@@ -23,6 +23,7 @@ PLUGIN_API void registerEngineReflection() {
             { "followTargetName", Engine::FieldType::String, offsetof(CinemachineVirtualCamera, followTargetName) },
             { "lookAtTargetName", Engine::FieldType::String, offsetof(CinemachineVirtualCamera, lookAtTargetName) },
             { "lockToBone", Engine::FieldType::String, offsetof(CinemachineVirtualCamera, lockToBone) },
+            { "mode", Engine::FieldType::Enum, offsetof(CinemachineVirtualCamera, mode), { "Third Person Follow", "First Person", "Fixed Look At", "2D Follow" } },
             { "mouseOrbit", Engine::FieldType::Bool, offsetof(CinemachineVirtualCamera, mouseOrbit) },
             { "mouseLook", Engine::FieldType::Bool, offsetof(CinemachineVirtualCamera, mouseLook) },
             { "orbitSensitivity", Engine::FieldType::Float, offsetof(CinemachineVirtualCamera, orbitSensitivity) },

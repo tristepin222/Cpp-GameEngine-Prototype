@@ -938,6 +938,12 @@ static bool registerBuiltinComponents() {
                         out << layer.tiles[i];
                         if (i + 1 < layer.tiles.size()) out << ", ";
                     }
+                    out << "],\n";
+                    out << JSONUtils::indent(indent + 2) << "\"rotations\": [";
+                    for (size_t i = 0; i < layer.rotations.size(); ++i) {
+                        out << (int)layer.rotations[i];
+                        if (i + 1 < layer.rotations.size()) out << ", ";
+                    }
                     out << "]\n";
                     out << JSONUtils::indent(indent + 1) << "}";
                     if (l + 1 < tm->layers.size()) out << ",";
@@ -1012,6 +1018,13 @@ static bool registerBuiltinComponents() {
                                         if (layer.tiles.size() != static_cast<size_t>(tm->width * tm->height)) {
                                             layer.tiles.resize(tm->width * tm->height, -1);
                                         }
+
+                                        std::vector<int> rotInts;
+                                        JSONUtils::extractIntVector(layerJson, "rotations", rotInts);
+                                        layer.rotations.resize(layer.tiles.size(), 0);
+                                        for (size_t i = 0; i < rotInts.size() && i < layer.rotations.size(); ++i) {
+                                            layer.rotations[i] = static_cast<uint8_t>(rotInts[i]);
+                                        }
                                         tm->layers.push_back(layer);
                                     }
                                     searchPos = closeBrace;
@@ -1065,8 +1078,12 @@ static bool registerBuiltinComponents() {
             }
         }
     );
+    return true;
+}
 
-    // Register all components from the reflection registry dynamically (only if not already registered with a custom serializer)
+// Dynamically register all components from ComponentReflectionRegistry into ComponentSerializerRegistry
+static void syncReflectionSerializers() {
+    auto& reg = ComponentSerializerRegistry::getInstance();
     auto& reflReg = Engine::ComponentReflectionRegistry::getInstance();
     for (const auto& refl : reflReg.getReflections()) {
         bool alreadyRegistered = false;
@@ -1101,6 +1118,8 @@ static bool registerBuiltinComponents() {
                             out << (*reinterpret_cast<bool*>(fieldPtr) ? "1.0" : "0.0");
                         } else if (field.type == Engine::FieldType::Vec3) {
                             out << JSONUtils::vec3ToJson(*reinterpret_cast<glm::vec3*>(fieldPtr));
+                        } else if (field.type == Engine::FieldType::Enum) {
+                            out << *reinterpret_cast<int*>(fieldPtr);
                         } else if (field.type == Engine::FieldType::RigidBodyType) {
                             std::string typeStr = (*reinterpret_cast<RigidBodyType*>(fieldPtr) == RigidBodyType::Static) ? "Static" : "Dynamic";
                             out << JSONUtils::quote(typeStr);
@@ -1157,7 +1176,7 @@ static bool registerBuiltinComponents() {
                         char* fieldPtr = static_cast<char*>(compPtr) + field.offset;
                         if (field.type == Engine::FieldType::Float) {
                             JSONUtils::extractFloatValue(compJson, field.name, *reinterpret_cast<float*>(fieldPtr));
-                        } else if (field.type == Engine::FieldType::Int) {
+                        } else if (field.type == Engine::FieldType::Int || field.type == Engine::FieldType::Enum) {
                             float fVal = 0.0f;
                             if (JSONUtils::extractFloatValue(compJson, field.name, fVal)) {
                                 *reinterpret_cast<int*>(fieldPtr) = static_cast<int>(fVal);
@@ -1166,11 +1185,24 @@ static bool registerBuiltinComponents() {
                             float fVal = 0.0f;
                             if (JSONUtils::extractFloatValue(compJson, field.name, fVal)) {
                                 *reinterpret_cast<bool*>(fieldPtr) = (fVal > 0.5f);
+                            } else {
+                                if (compJson.find("\"" + field.name + "\": true") != std::string::npos ||
+                                    compJson.find("\"" + field.name + "\":true") != std::string::npos) {
+                                    *reinterpret_cast<bool*>(fieldPtr) = true;
+                                } else if (compJson.find("\"" + field.name + "\": false") != std::string::npos ||
+                                           compJson.find("\"" + field.name + "\":false") != std::string::npos) {
+                                    *reinterpret_cast<bool*>(fieldPtr) = false;
+                                }
                             }
                         } else if (field.type == Engine::FieldType::Vec3) {
                             float vals[3]{};
                             if (JSONUtils::extractFloatArray(compJson, field.name, vals, 3)) {
                                 *reinterpret_cast<glm::vec3*>(fieldPtr) = glm::vec3(vals[0], vals[1], vals[2]);
+                            } else {
+                                auto* vec = reinterpret_cast<glm::vec3*>(fieldPtr);
+                                JSONUtils::extractFloatValue(compJson, field.name + "X", vec->x);
+                                JSONUtils::extractFloatValue(compJson, field.name + "Y", vec->y);
+                                JSONUtils::extractFloatValue(compJson, field.name + "Z", vec->z);
                             }
                         } else if (field.type == Engine::FieldType::RigidBodyType) {
                             std::string typeStr = JSONUtils::extractStringValue(compJson, field.name);
@@ -1201,10 +1233,7 @@ static bool registerBuiltinComponents() {
                 }
             }
         );
-
     }
-
-    return true;
 }
 
 /**
@@ -1226,6 +1255,7 @@ SceneSerializer::SceneSerializer(Registry& registry, VulkanRenderer& renderer)
  * @return True if successful, false otherwise.
  */
 bool SceneSerializer::serialize(const std::string& path, const std::vector<Entity>& entities) {
+    syncReflectionSerializers();
     std::filesystem::path outputPath(path);
     if (outputPath.has_parent_path()) {
         std::filesystem::create_directories(outputPath.parent_path());
@@ -1325,6 +1355,7 @@ bool SceneSerializer::deserializeFromString(const std::string& jsonContent, std:
 }
 
 bool SceneSerializer::deserialize(const std::string& path, std::vector<Entity>& outEntities) {
+    syncReflectionSerializers();
     std::unordered_map<std::uint32_t, Entity> oldToNewEntityMap;
     std::ifstream in(path);
 
@@ -1408,13 +1439,19 @@ bool SceneSerializer::deserialize(const std::string& path, std::vector<Entity>& 
         for (const auto& reg : ComponentSerializerRegistry::getInstance().getRegistrations()) {
             std::string targetJson;
             if (!componentsJson.empty()) {
-                // Structured scene format: component MUST exist in componentsJson dictionary
+                // Structured scene format: component dictionary inside componentsJson
                 targetJson = JSONUtils::extractSubObject(componentsJson, reg.componentName);
                 if (targetJson.empty()) {
                     targetJson = JSONUtils::extractSubObject(componentsJson, reg.componentName + "Component");
                 }
-            } else {
-                // Legacy flat scene format fallback
+            }
+            if (targetJson.empty()) {
+                targetJson = JSONUtils::extractSubObject(entityJson, reg.componentName);
+                if (targetJson.empty()) {
+                    targetJson = JSONUtils::extractSubObject(entityJson, reg.componentName + "Component");
+                }
+            }
+            if (targetJson.empty() && componentsJson.empty()) {
                 targetJson = entityJson;
             }
 
@@ -1481,6 +1518,7 @@ bool SceneSerializer::deserialize(const std::string& path, std::vector<Entity>& 
 }
 
 bool SceneSerializer::serializePrefab(const std::string& path, Entity rootEntity) {
+    syncReflectionSerializers();
     if (rootEntity.getId() == Entity::INVALID_ENTITY || !registry.isValid(rootEntity)) {
         return false;
     }
@@ -1564,6 +1602,7 @@ bool SceneSerializer::serializePrefab(const std::string& path, Entity rootEntity
 }
 
 Entity SceneSerializer::deserializePrefab(const std::string& path, std::vector<Entity>& loadedEntities, Entity parentEntity) {
+    syncReflectionSerializers();
     std::ifstream in(path);
     if (!in.is_open()) {
         return Entity();

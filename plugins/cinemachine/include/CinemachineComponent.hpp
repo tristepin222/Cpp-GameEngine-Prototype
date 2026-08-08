@@ -14,7 +14,9 @@ enum class CinemachineMode {
     /** @brief Attached first-person perspective locked to target or bone. */
     FirstPerson = 1,
     /** @brief Stationary or offset camera looking continuously at a target. */
-    FixedLookAt = 2
+    FixedLookAt = 2,
+    /** @brief 2D orthographic/flat tracking following target X/Y coordinates. */
+    Follow2D = 3
 };
 
 /**
@@ -40,6 +42,7 @@ struct CinemachineVirtualCamera {
     std::string lockToBone = "Head";
 
     /** @brief Active camera tracking mode. */
+    // [ReflectField]
     CinemachineMode mode = CinemachineMode::ThirdPersonFollow;
     /** @brief Enable mouse orbit control around follow target. */
     // [ReflectField]
@@ -88,6 +91,10 @@ struct CinemachineVirtualCamera {
     glm::vec3 currentPosition = glm::vec3(0.0f);
     /** @brief Cached Euler rotation angles for smooth frame interpolation. */
     glm::vec3 currentRotationEuler = glm::vec3(0.0f);
+    /** @brief Cached previous transform yaw angle for inspector edit detection. */
+    float lastTransformYaw = 0.0f;
+    /** @brief Cached previous transform pitch angle for inspector edit detection. */
+    float lastTransformPitch = 0.0f;
     /** @brief Flag indicating whether camera initial transform was initialized. */
     bool initialized = false;
 };

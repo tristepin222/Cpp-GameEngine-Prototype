@@ -69,10 +69,18 @@ std::filesystem::path s_spriteSlicerAssetPath;
 int s_sliceCellWidth = 64;
 int s_sliceCellHeight = 64;
 std::string s_sliceOutputPrefix = "";
+bool s_sliceSkipEmptyTiles = true;
 
 std::string s_editingTilesetPath;
 Engine::TilesetAsset s_editingTileset;
 bool s_tilesetLoaded = false;
+TilemapTool s_tilemapTool = TilemapTool::Pencil;
+uint8_t s_brushRotation = 0;
+bool s_boxDragging = false;
+int s_boxStartCol = 0;
+int s_boxStartRow = 0;
+int s_boxCurrentCol = 0;
+int s_boxCurrentRow = 0;
 int s_brushTileId = -1;
 bool s_brushModeActive = false;
 Entity s_brushTilemapEntity;

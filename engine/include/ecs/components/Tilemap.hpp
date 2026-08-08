@@ -8,6 +8,7 @@ namespace Engine {
     struct TilemapLayer {
         std::string name;
         std::vector<int> tiles;
+        std::vector<uint8_t> rotations;
         float zOffset = 0.0f;
         std::string tag;
         bool isVisible = true;

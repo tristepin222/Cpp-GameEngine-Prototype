@@ -8,6 +8,7 @@
 #include "scenes/JSONUtils.hpp"
 #include <filesystem>
 #include <fstream>
+#include <unordered_set>
 
 #include "renderer/ResourceManager.hpp"
 #include "renderer/VulkanRenderer.hpp"
@@ -206,7 +207,7 @@ void ResourceManager::createTextureSampler(VkDevice device, Texture& texture, Te
 }
 
 void ResourceManager::createTextureImage(const std::string& path, VulkanRenderer& renderer, Texture& texture) {
-    stbi_set_flip_vertically_on_load(true);
+    stbi_set_flip_vertically_on_load(false);
     int texWidth, texHeight, texChannels;
     stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
     if (!pixels) {
@@ -253,6 +254,23 @@ void ResourceManager::createTextureImage(const std::string& path, VulkanRenderer
 Texture* ResourceManager::loadTexture(const std::string& rawPath, VulkanRenderer& renderer, TextureFilterMode filterMode) {
     if (rawPath.empty()) return &defaultWhiteTexture;
 
+    static std::unordered_set<std::string> s_failedPaths;
+    if (s_failedPaths.count(rawPath)) return nullptr;
+
+    static std::unordered_map<std::string, std::string> s_resolvedPaths;
+    auto resIt = s_resolvedPaths.find(rawPath);
+    if (resIt != s_resolvedPaths.end()) {
+        auto it = textureCache.find(resIt->second);
+        if (it != textureCache.end()) {
+            return it->second.get();
+        }
+    }
+
+    auto rawIt = textureCache.find(rawPath);
+    if (rawIt != textureCache.end()) {
+        return rawIt->second.get();
+    }
+
     std::string path = rawPath;
     if (!std::filesystem::exists(path)) {
         std::vector<std::string> prefixes = {
@@ -277,7 +295,8 @@ Texture* ResourceManager::loadTexture(const std::string& rawPath, VulkanRenderer
             std::vector<std::string> searchDirs = { "assets", "sandbox_game/assets" };
             for (const auto& dir : searchDirs) {
                 if (std::filesystem::exists(dir)) {
-                    for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
+                    std::error_code ec;
+                    for (const auto& entry : std::filesystem::recursive_directory_iterator(dir, ec)) {
                         if (entry.is_regular_file() && entry.path().filename().string() == filename) {
                             path = entry.path().string();
                             break;
@@ -289,14 +308,16 @@ Texture* ResourceManager::loadTexture(const std::string& rawPath, VulkanRenderer
         }
     }
 
+    if (!std::filesystem::exists(path)) {
+        s_failedPaths.insert(rawPath);
+        return nullptr;
+    }
+
+    s_resolvedPaths[rawPath] = path;
+
     auto it = textureCache.find(path);
     if (it != textureCache.end()) {
         return it->second.get();
-    }
-
-    auto rawIt = textureCache.find(rawPath);
-    if (rawIt != textureCache.end()) {
-        return rawIt->second.get();
     }
 
     // Auto-detect filterMode from .meta file if present

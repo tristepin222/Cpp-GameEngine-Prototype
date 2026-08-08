@@ -1,5 +1,6 @@
 #include "editor/EditorUI.hpp"
 #include "editor/EditorUIInternal.hpp"
+#include <glm/gtc/type_ptr.hpp>
 #include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -1804,12 +1805,13 @@ void EditorUI::drawSpriteSlicerWindow() {
             
             ImGui::InputInt("Cell Width", &s_sliceCellWidth);
             ImGui::InputInt("Cell Height", &s_sliceCellHeight);
-            
-            char prefixBuf[256];
+                       char prefixBuf[256];
             strncpy_s(prefixBuf, s_sliceOutputPrefix.c_str(), sizeof(prefixBuf) - 1);
             if (ImGui::InputText("Output Prefix", prefixBuf, sizeof(prefixBuf))) {
                 s_sliceOutputPrefix = prefixBuf;
             }
+            
+            ImGui::Checkbox("Skip Empty Tiles", &s_sliceSkipEmptyTiles);
             
             if (s_sliceCellWidth <= 0) s_sliceCellWidth = 16;
             if (s_sliceCellHeight <= 0) s_sliceCellHeight = 16;
@@ -1818,12 +1820,12 @@ void EditorUI::drawSpriteSlicerWindow() {
             int rows = texHeight / s_sliceCellHeight;
             int totalSprites = cols * rows;
             
-            ImGui::Text("This will generate %d textures (%d columns x %d rows)", totalSprites, cols, rows);
+            ImGui::Text("This will generate up to %d textures (%d columns x %d rows)", totalSprites, cols, rows);
             
             ImGui::Spacing();
             if (totalSprites > 0) {
                 if (ImGui::Button("Slice and Save Sprite Sheet", ImVec2(-1, 30))) {
-                    sliceSpriteSheet(s_spriteSlicerAssetPath, s_sliceCellWidth, s_sliceCellHeight, s_sliceOutputPrefix);
+                    sliceSpriteSheet(s_spriteSlicerAssetPath, s_sliceCellWidth, s_sliceCellHeight, s_sliceOutputPrefix, s_sliceSkipEmptyTiles);
                 }
             } else {
                 ImGui::TextColored(ImVec4(1, 0, 0, 1), "Warning: Cell size is larger than texture dimensions!");
@@ -1838,7 +1840,7 @@ void EditorUI::drawSpriteSlicerWindow() {
     ImGui::End();
 }
 
-void EditorUI::sliceSpriteSheet(const std::filesystem::path& path, int cellWidth, int cellHeight, const std::string& prefix) {
+void EditorUI::sliceSpriteSheet(const std::filesystem::path& path, int cellWidth, int cellHeight, const std::string& prefix, bool skipEmptyTiles) {
     stbi_set_flip_vertically_on_load(false);
     
     int texWidth = 0, texHeight = 0, texChannels = 0;
@@ -1883,6 +1885,17 @@ void EditorUI::sliceSpriteSheet(const std::filesystem::path& path, int cellWidth
                 std::memcpy(destRow, sourceRow, cellWidth * 4);
             }
             
+            if (skipEmptyTiles) {
+                bool isNonEmpty = false;
+                for (size_t i = 0; i < cellBuffer.size(); i += 4) {
+                    if (cellBuffer[i + 3] != 0) {
+                        isNonEmpty = true;
+                        break;
+                    }
+                }
+                if (!isNonEmpty) continue;
+            }
+            
             std::string outputName = prefix + "_" + std::to_string(count) + ".png";
             std::filesystem::path outputPath = parentDir / outputName;
             
@@ -1897,7 +1910,6 @@ void EditorUI::sliceSpriteSheet(const std::filesystem::path& path, int cellWidth
     stbi_image_free(pixels);
     
     statusMessage = "Successfully sliced " + std::to_string(count) + " sprites to " + parentDir.generic_string();
-    
 }
 
 void EditorUI::drawBuildSettingsPanel() {
@@ -2065,13 +2077,22 @@ void EditorUI::drawTilesetEditorWindow() {
             PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.55f, 0.85f, 1.f));
             if (Selectable(fname.c_str(), selected, 0, ImVec2(-1, 0))) {
                 s_editingTilesetPath = fpath;
-                s_editingTileset     = Engine::TilesetAsset::loadFromFile(fpath);
                 Engine::invalidateTilesetCache(fpath);
                 if (auto* ts = Engine::loadOrGetTileset(fpath, renderer)) {
-                    s_editingTileset.atlas = ts->atlas;
+                    s_editingTileset = *ts;
+                } else {
+                    s_editingTileset = Engine::TilesetAsset::loadFromFile(fpath);
+                    s_editingTileset.buildAtlas(renderer);
                 }
                 s_tilesetLoaded      = true;
                 s_tsPanOffset        = ImVec2(0.f, 0.f);
+
+                for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
+                    if (s_brushTilemapEntity == tmEnt || !registry.isValid(s_brushTilemapEntity)) {
+                        tm.tilesetPath = s_editingTilesetPath;
+                        tm.isDirty = true;
+                    }
+                }
             }
             PopStyleColor(2);
         }
@@ -2106,6 +2127,14 @@ void EditorUI::drawTilesetEditorWindow() {
                 s_editingTileset     = std::move(newTs);
                 s_tilesetLoaded      = true;
                 s_tsPanOffset        = ImVec2(0.f, 0.f);
+
+                for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
+                    if (s_brushTilemapEntity == tmEnt || !registry.isValid(s_brushTilemapEntity)) {
+                        tm.tilesetPath = s_editingTilesetPath;
+                        tm.isDirty = true;
+                    }
+                }
+
                 statusMessage = "Created tileset: " + safeName;
                 CloseCurrentPopup();
             }
@@ -2116,6 +2145,19 @@ void EditorUI::drawTilesetEditorWindow() {
 
         // Separator + tileset settings if one is loaded
         if (s_tilesetLoaded) {
+            if (!s_editingTileset.atlas.atlasBuilt) {
+                if (!s_editingTilesetPath.empty()) {
+                    Engine::invalidateTilesetCache(s_editingTilesetPath);
+                    if (auto* ts = Engine::loadOrGetTileset(s_editingTilesetPath, renderer)) {
+                        s_editingTileset = *ts;
+                    } else {
+                        s_editingTileset.buildAtlas(renderer);
+                    }
+                } else {
+                    s_editingTileset.buildAtlas(renderer);
+                }
+            }
+
             Spacing(); Separator(); Spacing();
             TextDisabled("Settings");
 
@@ -2133,6 +2175,30 @@ void EditorUI::drawTilesetEditorWindow() {
             if (s_editingTileset.tileWidth  < 1) s_editingTileset.tileWidth  = 1;
             if (s_editingTileset.tileHeight < 1) s_editingTileset.tileHeight = 1;
 
+            if (s_brushTileId >= 0 && s_brushTileId < static_cast<int>(s_editingTileset.tiles.size())) {
+                auto& curTile = s_editingTileset.tiles[s_brushTileId];
+                Spacing(); Separator(); Spacing();
+                TextDisabled("Tile: %s", curTile.name.c_str());
+                if (ColorEdit4("Color Tint##selTileColor", &curTile.colorTint.r)) {
+                    std::filesystem::path tsDir = std::filesystem::path(s_editingTileset.filePath).parent_path();
+                    std::string tilePath = (tsDir / s_editingTileset.name / (curTile.name + ".tile")).generic_string();
+                    Engine::TilesetAsset::saveTileFile(curTile, tilePath);
+                    Engine::TilesetAsset::saveToFile(s_editingTileset);
+                    Engine::invalidateTilesetCache(s_editingTilesetPath);
+                    if (auto* ts = Engine::loadOrGetTileset(s_editingTilesetPath, renderer)) {
+                        s_editingTileset = *ts;
+                        for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
+                            if (tm.tilesetPath == s_editingTilesetPath) {
+                                tm.isDirty = true;
+                                if (auto* mat = registry.get<Material>(tmEnt)) {
+                                    mat->descriptorSet = ts->atlas.descriptorSet;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             Spacing();
             PushStyleColor(ImGuiCol_Button,        ImVec4(0.18f, 0.48f, 0.22f, 1.f));
             PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.60f, 0.28f, 1.f));
@@ -2147,7 +2213,7 @@ void EditorUI::drawTilesetEditorWindow() {
                 }
                 Engine::invalidateTilesetCache(s_editingTilesetPath);
                 if (auto* ts = Engine::loadOrGetTileset(s_editingTilesetPath, renderer)) {
-                    s_editingTileset.atlas = ts->atlas;
+                    s_editingTileset = *ts;
                     for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
                         if (tm.tilesetPath == s_editingTilesetPath) {
                             tm.isDirty = true;
@@ -2305,8 +2371,12 @@ void EditorUI::drawTilesetEditorWindow() {
             dl->AddRectFilled(tl, br,
                 isSelected ? IM_COL32(30, 90, 180, 200) : IM_COL32(40, 40, 55, 220));
 
-            // Texture thumbnail
-            if (!tile.texturePath.empty()) {
+            // Texture thumbnail (uses packed atlas singleDescriptorSet for 1-draw-call lag-free rendering)
+            if (s_editingTileset.atlas.valid && s_editingTileset.atlas.singleDescriptorSet != VK_NULL_HANDLE) {
+                ImVec2 uv0(tile.atlasUV.x, tile.atlasUV.y);
+                ImVec2 uv1(tile.atlasUV.z, tile.atlasUV.w);
+                dl->AddImage((ImTextureID)s_editingTileset.atlas.singleDescriptorSet, tl, br, uv0, uv1);
+            } else if (!tile.texturePath.empty()) {
                 Texture* tex = renderer.resourceManager->loadTexture(tile.texturePath, renderer);
                 if (tex && tex->singleDescriptorSet != VK_NULL_HANDLE) {
                     dl->AddImage((ImTextureID)tex->singleDescriptorSet, tl, br);
@@ -2399,7 +2469,25 @@ void EditorUI::drawTilesetEditorWindow() {
                     Engine::TilesetAsset::saveToFile(s_editingTileset);
                     Engine::invalidateTilesetCache(s_editingTilesetPath);
                     if (auto* ts = Engine::loadOrGetTileset(s_editingTilesetPath, renderer)) {
-                        s_editingTileset.atlas = ts->atlas;
+                        s_editingTileset = *ts;
+                        for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
+                            if (tm.tilesetPath == s_editingTilesetPath) {
+                                tm.isDirty = true;
+                                if (auto* mat = registry.get<Material>(tmEnt)) {
+                                    mat->descriptorSet = ts->atlas.descriptorSet;
+                                }
+                            }
+                        }
+                    }
+                }
+                if (ImGui::ColorEdit4("Tile Color Tint", &tile.colorTint.r)) {
+                    std::filesystem::path tsDir = std::filesystem::path(s_editingTileset.filePath).parent_path();
+                    std::string tilePath = (tsDir / s_editingTileset.name / (tile.name + ".tile")).generic_string();
+                    Engine::TilesetAsset::saveTileFile(tile, tilePath);
+                    Engine::TilesetAsset::saveToFile(s_editingTileset);
+                    Engine::invalidateTilesetCache(s_editingTilesetPath);
+                    if (auto* ts = Engine::loadOrGetTileset(s_editingTilesetPath, renderer)) {
+                        s_editingTileset = *ts;
                         for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
                             if (tm.tilesetPath == s_editingTilesetPath) {
                                 tm.isDirty = true;
@@ -2503,7 +2591,7 @@ void EditorUI::drawTilesetEditorWindow() {
                         Engine::TilesetAsset::saveToFile(s_editingTileset);
                         Engine::invalidateTilesetCache(s_editingTilesetPath);
                         if (auto* ts = Engine::loadOrGetTileset(s_editingTilesetPath, renderer)) {
-                            s_editingTileset.atlas = ts->atlas;
+                            s_editingTileset = *ts;
                             for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
                                 if (tm.tilesetPath == s_editingTilesetPath) {
                                     tm.isDirty = true;
@@ -2562,7 +2650,7 @@ void EditorUI::drawTilesetEditorWindow() {
                         Engine::TilesetAsset::saveToFile(s_editingTileset);
                         Engine::invalidateTilesetCache(s_editingTilesetPath);
                         if (auto* ts = Engine::loadOrGetTileset(s_editingTilesetPath, renderer)) {
-                            s_editingTileset.atlas = ts->atlas;
+                            s_editingTileset = *ts;
                             for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
                                 if (tm.tilesetPath == s_editingTilesetPath) {
                                     tm.isDirty = true;
@@ -2607,29 +2695,35 @@ void EditorUI::drawTilesetEditorWindow() {
         // --- Paint target dropdown (top-right corner overlay) ---
         if (s_tilesetLoaded) {
             const float comboW = 190.f;
-            const float comboH = 22.f;
+            const float comboH = 26.f;
             SetCursorScreenPos(ImVec2(canvasPos.x + canvasSize.x - comboW - 4.f, canvasPos.y + 4.f));
-            PushItemWidth(comboW);
-            std::string previewLabel = "Select Tilemap...";
-            for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
-                if (s_brushTilemapEntity == tmEnt) {
-                    if (auto* n = registry.get<Name>(tmEnt)) previewLabel = n->value;
-                    else previewLabel = "Entity " + std::to_string(tmEnt.getId());
-                    break;
-                }
-            }
-            if (BeginCombo("##tmTarget", previewLabel.c_str(), ImGuiComboFlags_HeightSmall)) {
+            if (BeginChild("##tmTargetOverlay", ImVec2(comboW, comboH), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBackground)) {
+                PushItemWidth(comboW);
+                std::string previewLabel = "Select Tilemap...";
                 for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
-                    std::string lbl;
-                    if (auto* n = registry.get<Name>(tmEnt)) lbl = n->value;
-                    else lbl = "Entity " + std::to_string(tmEnt.getId());
-                    bool sel = (s_brushTilemapEntity == tmEnt);
-                    if (Selectable(lbl.c_str(), sel))
-                        s_brushTilemapEntity = tmEnt;
+                    if (s_brushTilemapEntity == tmEnt) {
+                        if (auto* n = registry.get<Name>(tmEnt)) previewLabel = n->value;
+                        else previewLabel = "Entity " + std::to_string(tmEnt.getId());
+                        break;
+                    }
                 }
-                EndCombo();
+                if (BeginCombo("##tmTarget", previewLabel.c_str(), ImGuiComboFlags_HeightSmall)) {
+                    for (auto [tmEnt, tm] : registry.view<Engine::TilemapComponent>()) {
+                        std::string lbl;
+                        if (auto* n = registry.get<Name>(tmEnt)) lbl = n->value;
+                        else lbl = "Entity " + std::to_string(tmEnt.getId());
+                        bool sel = (s_brushTilemapEntity == tmEnt);
+                        if (Selectable(lbl.c_str(), sel)) {
+                            s_brushTilemapEntity = tmEnt;
+                            selectedEntity = tmEnt;
+                            hasSelection = true;
+                        }
+                    }
+                    EndCombo();
+                }
+                PopItemWidth();
             }
-            PopItemWidth();
+            EndChild();
         }
     }
     EndChild();

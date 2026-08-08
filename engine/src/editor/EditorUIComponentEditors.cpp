@@ -167,6 +167,9 @@ void EditorUI::drawMaterialEditor() {
         if (material->shaderName == "Lit") {
             vertShader = hasSkin ? "skinned_lit.vert.spv" : "lit.vert.spv";
             fragShader = "lit.frag.spv";
+        } else if (material->shaderName == "Sprite") {
+            vertShader = "sprite.vert.spv";
+            fragShader = "sprite.frag.spv";
         } else {
             vertShader = hasSkin ? "skinned.vert.spv" : "unlit.vert.spv";
             fragShader = "unlit.frag.spv";
@@ -181,8 +184,11 @@ void EditorUI::drawMaterialEditor() {
     };
 
     // 1) Shader Selection
-    const char* shaderOptions[] = { "Unlit", "Lit" };
-    int currentShaderIdx = (material->shaderName == "Lit") ? 1 : 0;
+    const char* shaderOptions[] = { "Unlit", "Lit", "Sprite" };
+    int currentShaderIdx = 0;
+    if (material->shaderName == "Lit") currentShaderIdx = 1;
+    else if (material->shaderName == "Sprite") currentShaderIdx = 2;
+
     if (Combo("Shader", &currentShaderIdx, shaderOptions, IM_ARRAYSIZE(shaderOptions))) {
         material->shaderName = shaderOptions[currentShaderIdx];
         updatePipelineAndDescriptors();
@@ -207,11 +213,16 @@ void EditorUI::drawMaterialEditor() {
         updatePipelineAndDescriptors();
     }
     if (BeginDragDropTarget()) {
-        if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
-            const char* droppedPath = (const char*)payload->Data;
-            std::string pathStr(droppedPath);
-            auto ext = std::filesystem::path(pathStr).extension().string();
-            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga") {
+        const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH");
+        if (!payload) payload = AcceptDragDropPayload("DND_PAYLOAD_MULTI_ASSETS");
+        if (payload && payload->Data) {
+            std::string pathStr((const char*)payload->Data);
+            size_t sep = pathStr.find('|');
+            if (sep != std::string::npos) pathStr = pathStr.substr(0, sep);
+            std::replace(pathStr.begin(), pathStr.end(), '\\', '/');
+            std::string ext = std::filesystem::path(pathStr).extension().string();
+            for (char& c : ext) c = (char)::tolower((unsigned char)c);
+            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".dds" || ext == ".hdr" || ext == ".webp") {
                 material->texturePath = pathStr;
                 updatePipelineAndDescriptors();
                 statusMessage = "Assigned diffuse texture: " + pathStr;
@@ -230,11 +241,16 @@ void EditorUI::drawMaterialEditor() {
         updatePipelineAndDescriptors();
     }
     if (BeginDragDropTarget()) {
-        if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
-            const char* droppedPath = (const char*)payload->Data;
-            std::string pathStr(droppedPath);
-            auto ext = std::filesystem::path(pathStr).extension().string();
-            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga") {
+        const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH");
+        if (!payload) payload = AcceptDragDropPayload("DND_PAYLOAD_MULTI_ASSETS");
+        if (payload && payload->Data) {
+            std::string pathStr((const char*)payload->Data);
+            size_t sep = pathStr.find('|');
+            if (sep != std::string::npos) pathStr = pathStr.substr(0, sep);
+            std::replace(pathStr.begin(), pathStr.end(), '\\', '/');
+            std::string ext = std::filesystem::path(pathStr).extension().string();
+            for (char& c : ext) c = (char)::tolower((unsigned char)c);
+            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".dds" || ext == ".hdr" || ext == ".webp") {
                 material->normalMapPath = pathStr;
                 updatePipelineAndDescriptors();
                 statusMessage = "Assigned normal map: " + pathStr;
@@ -253,11 +269,16 @@ void EditorUI::drawMaterialEditor() {
         updatePipelineAndDescriptors();
     }
     if (BeginDragDropTarget()) {
-        if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
-            const char* droppedPath = (const char*)payload->Data;
-            std::string pathStr(droppedPath);
-            auto ext = std::filesystem::path(pathStr).extension().string();
-            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga") {
+        const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH");
+        if (!payload) payload = AcceptDragDropPayload("DND_PAYLOAD_MULTI_ASSETS");
+        if (payload && payload->Data) {
+            std::string pathStr((const char*)payload->Data);
+            size_t sep = pathStr.find('|');
+            if (sep != std::string::npos) pathStr = pathStr.substr(0, sep);
+            std::replace(pathStr.begin(), pathStr.end(), '\\', '/');
+            std::string ext = std::filesystem::path(pathStr).extension().string();
+            for (char& c : ext) c = (char)::tolower((unsigned char)c);
+            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".dds" || ext == ".hdr" || ext == ".webp") {
                 material->metallicMapPath = pathStr;
                 updatePipelineAndDescriptors();
                 statusMessage = "Assigned metallic map: " + pathStr;
@@ -1473,8 +1494,7 @@ void EditorUI::drawReflectedComponentsEditor() {
             refl.name == "UIScrollRect" || refl.name == "UIScrollRectComponent" ||
             refl.name == "UISlider" || refl.name == "UISliderComponent" ||
             refl.name == "UIToggle" || refl.name == "UIToggleComponent" ||
-            refl.name == "SpriteRenderer" || refl.name == "SpriteRendererComponent" ||
-            refl.name == "CinemachineVirtualCamera" || refl.name == "Cinemachine") continue;
+            refl.name == "SpriteRenderer" || refl.name == "SpriteRendererComponent") continue;
 
 
 
@@ -1484,6 +1504,7 @@ void EditorUI::drawReflectedComponentsEditor() {
         
         std::string headerName = refl.name;
         if (headerName == "PlayerController") headerName = "Player Controller";
+        else if (headerName == "CinemachineVirtualCamera") headerName = "Cinemachine Virtual Camera";
 
         bool open = CollapsingHeader(headerName.c_str(), &visible, ImGuiTreeNodeFlags_DefaultOpen);
         if (!visible) {
@@ -1566,6 +1587,29 @@ void EditorUI::drawReflectedComponentsEditor() {
             } else if (field.type == Engine::FieldType::Bool) {
 
                 Checkbox(imguiId.c_str(), reinterpret_cast<bool*>(fieldPtr));
+            } else if (field.type == Engine::FieldType::Enum || !field.enumOptions.empty() || field.name == "mode") {
+                auto* enumVal = reinterpret_cast<int*>(fieldPtr);
+                int currentIdx = *enumVal;
+
+                std::vector<const char*> items;
+                if (!field.enumOptions.empty()) {
+                    for (const auto& opt : field.enumOptions) {
+                        items.push_back(opt.c_str());
+                    }
+                } else if (field.name == "mode" || refl.name == "CinemachineVirtualCamera") {
+                    items = { "Third Person Follow", "First Person", "Fixed Look At", "2D Follow" };
+                }
+
+                if (!items.empty() && Combo(imguiId.c_str(), &currentIdx, items.data(), static_cast<int>(items.size()))) {
+                    *enumVal = currentIdx;
+                    statusMessage = "Changed " + displayLabel + " to: " + items[currentIdx];
+                }
+            } else if (field.type == Engine::FieldType::Vec2) {
+                DragFloat2(imguiId.c_str(), &reinterpret_cast<glm::vec2*>(fieldPtr)->x, 0.05f);
+            } else if (field.type == Engine::FieldType::Vec3) {
+                DragFloat3(imguiId.c_str(), &reinterpret_cast<glm::vec3*>(fieldPtr)->x, 0.05f);
+            } else if (field.type == Engine::FieldType::Vec4) {
+                DragFloat4(imguiId.c_str(), &reinterpret_cast<glm::vec4*>(fieldPtr)->x, 0.05f);
             } else if (field.type == Engine::FieldType::RigidBodyType) {
                 const char* types[] = { "Dynamic", "Static" };
                 int currentType = (*reinterpret_cast<RigidBodyType*>(fieldPtr) == RigidBodyType::Static) ? 1 : 0;
@@ -1581,13 +1625,15 @@ void EditorUI::drawReflectedComponentsEditor() {
                     *strVal = buf;
                 }
                 if (BeginDragDropTarget()) {
-                    if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
-                        const char* path = (const char*)payload->Data;
-                        std::string pathStr(path);
+                    const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH");
+                    if (!payload) payload = AcceptDragDropPayload("DND_PAYLOAD_MULTI_ASSETS");
+                    if (payload && payload->Data) {
+                        std::string pathStr((const char*)payload->Data);
+                        size_t sep = pathStr.find('|');
+                        if (sep != std::string::npos) pathStr = pathStr.substr(0, sep);
                         std::replace(pathStr.begin(), pathStr.end(), '\\', '/');
-                        if (pathStr.find(".wav") != std::string::npos || pathStr.find(".mp3") != std::string::npos || pathStr.find(".ogg") != std::string::npos) {
-                            *strVal = pathStr;
-                        }
+                        *strVal = pathStr;
+                        statusMessage = "Assigned asset path: " + pathStr;
                     }
                     EndDragDropTarget();
                 }
@@ -1733,30 +1779,51 @@ void EditorUI::drawTilemapInspector() {
     auto* tm = registry.get<Engine::TilemapComponent>(selectedEntity);
     if (!tm) return;
 
+    // Sync active tilemap brush painting target
+    s_brushTilemapEntity = selectedEntity;
+
     ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.22f, 0.35f, 0.55f, 1.f));
     ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.28f, 0.45f, 0.70f, 1.f));
     ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.18f, 0.28f, 0.45f, 1.f));
     
     if (CollapsingHeader("Tilemap", ImGuiTreeNodeFlags_DefaultOpen)) {
-        // tilesetPath
+        ImGui::BeginGroup();
+        Text("Tileset Path:");
         char pathBuf[512];
         strncpy_s(pathBuf, tm->tilesetPath.c_str(), sizeof(pathBuf) - 1);
-        if (InputText("Tileset Path##tmpth", pathBuf, sizeof(pathBuf))) {
+        SetNextItemWidth(-1);
+        if (InputText("##TilesetPathInput", pathBuf, sizeof(pathBuf))) {
             tm->tilesetPath = pathBuf;
             tm->isDirty = true;
         }
+        ImGui::EndGroup();
+
         if (BeginDragDropTarget()) {
-            if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
-                const char* p = (const char*)payload->Data;
-                if (std::filesystem::path(p).extension() == ".tileset") {
-                    tm->tilesetPath = p;
+            const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH");
+            if (!payload) payload = AcceptDragDropPayload("DND_PAYLOAD_MULTI_ASSETS");
+            if (payload && payload->Data) {
+                std::string pathStr((const char*)payload->Data);
+                size_t sep = pathStr.find('|');
+                if (sep != std::string::npos) pathStr = pathStr.substr(0, sep);
+
+                std::filesystem::path dragPath(pathStr);
+                std::string ext = dragPath.extension().string();
+                for (char& c : ext) c = (char)::tolower((unsigned char)c);
+                if (ext == ".tileset") {
+                    tm->tilesetPath = dragPath.generic_string();
                     tm->isDirty = true;
+                    Engine::invalidateTilesetCache(tm->tilesetPath);
+                    if (auto* ts = Engine::loadOrGetTileset(tm->tilesetPath, renderer)) {
+                        if (auto* mat = registry.get<Material>(selectedEntity)) {
+                            mat->descriptorSet = ts->atlas.descriptorSet;
+                        }
+                    }
                     statusMessage = "Assigned tileset: " + tm->tilesetPath;
                 }
             }
             EndDragDropTarget();
         }
-        TextDisabled("Drop a .tileset file here");
+        TextDisabled("Drag & drop a .tileset asset onto the field above");
         Spacing();
 
         int w = tm->width,  h = tm->height;
@@ -2299,10 +2366,16 @@ void EditorUI::drawSpriteRendererInspector() {
         sprite->_dirty = true;
     }
     if (BeginDragDropTarget()) {
-        if (const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH")) {
-            std::string dropped = (const char*)payload->Data;
-            auto ext = std::filesystem::path(dropped).extension().string();
-            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga") {
+        const ImGuiPayload* payload = AcceptDragDropPayload("DND_PAYLOAD_ASSET_PATH");
+        if (!payload) payload = AcceptDragDropPayload("DND_PAYLOAD_MULTI_ASSETS");
+        if (payload && payload->Data) {
+            std::string dropped((const char*)payload->Data);
+            size_t sep = dropped.find('|');
+            if (sep != std::string::npos) dropped = dropped.substr(0, sep);
+            std::replace(dropped.begin(), dropped.end(), '\\', '/');
+            std::string ext = std::filesystem::path(dropped).extension().string();
+            for (char& c : ext) c = (char)::tolower((unsigned char)c);
+            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".dds" || ext == ".hdr" || ext == ".webp") {
                 sprite->texturePath = dropped;
                 sprite->_dirty = true;
                 statusMessage = "Assigned sprite texture: " + dropped;
@@ -2313,6 +2386,30 @@ void EditorUI::drawSpriteRendererInspector() {
         EndDragDropTarget();
     }
     TextDisabled("Drop a PNG / JPG / TGA here");
+
+    // ---- Native Texture Size Buttons ----
+    if (!sprite->texturePath.empty() && renderer.resourceManager) {
+        if (Texture* tex = renderer.resourceManager->loadTexture(sprite->texturePath, renderer)) {
+            if (tex->width > 0 && tex->height > 0) {
+                Spacing();
+                std::string btnLabel = "Use Texture Size (" + std::to_string(tex->width) + "x" + std::to_string(tex->height) + ")";
+                if (Button(btnLabel.c_str(), ImVec2(-1, 0))) {
+                    if (auto* transform = registry.get<Transform>(selectedEntity)) {
+                        transform->scale.x = static_cast<float>(tex->width);
+                        transform->scale.y = static_cast<float>(tex->height);
+                        statusMessage = "Set sprite scale to texture size: " + std::to_string(tex->width) + "x" + std::to_string(tex->height);
+                    }
+                }
+                if (Button("Set Aspect Ratio Scale", ImVec2(-1, 0))) {
+                    if (auto* transform = registry.get<Transform>(selectedEntity)) {
+                        float aspect = static_cast<float>(tex->width) / static_cast<float>(tex->height);
+                        transform->scale.x = transform->scale.y * aspect;
+                        statusMessage = "Adjusted scale X to match texture aspect ratio (" + std::to_string(aspect) + ")";
+                    }
+                }
+            }
+        }
+    }
 
     Spacing();
 

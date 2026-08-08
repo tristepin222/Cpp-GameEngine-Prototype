@@ -22,7 +22,8 @@ namespace Engine {
         Entity,
         String,
         Vec2,
-        Vec4
+        Vec4,
+        Enum
     };
 
 
@@ -34,6 +35,7 @@ namespace Engine {
         std::string name;
         FieldType type;
         size_t offset;
+        std::vector<std::string> enumOptions = {};
     };
 
     /**

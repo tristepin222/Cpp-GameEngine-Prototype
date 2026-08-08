@@ -168,7 +168,7 @@ private:
     /**
      * @brief Slices a sprite sheet texture into multiple separate PNG texture files.
      */
-    void sliceSpriteSheet(const std::filesystem::path& path, int cellWidth, int cellHeight, const std::string& prefix);
+    void sliceSpriteSheet(const std::filesystem::path& path, int cellWidth, int cellHeight, const std::string& prefix, bool skipEmptyTiles = true);
 
     /**
      * @brief Renders the Tilemap component inspector panel.

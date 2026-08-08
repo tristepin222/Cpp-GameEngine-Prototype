@@ -212,7 +212,15 @@ void EditorUI::handleViewportPicking() {
     }
 
     // Brush painting / erasing intercept
-    if (s_brushModeActive && s_brushTileId >= 0) {
+    if (s_brushModeActive || s_tilemapTool == TilemapTool::Eraser) {
+        if (!ImGui::GetIO().WantCaptureKeyboard && ImGui::IsKeyPressed(ImGuiKey_R)) {
+            s_brushRotation = (s_brushRotation + 1) % 4;
+            statusMessage = "Tile rotation: " + std::to_string(s_brushRotation * 90) + " deg";
+        }
+
+        if (hasSelection && registry.isValid(selectedEntity) && registry.has<Engine::TilemapComponent>(selectedEntity)) {
+            s_brushTilemapEntity = selectedEntity;
+        }
         Entity paintTarget = s_brushTilemapEntity;
         if (!registry.isValid(paintTarget) || !registry.has<Engine::TilemapComponent>(paintTarget)) {
             for (auto [entity, tm] : registry.view<Engine::TilemapComponent>()) {
@@ -226,7 +234,7 @@ void EditorUI::handleViewportPicking() {
             const bool leftMouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
             const bool rightMouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
 
-            if ((leftMouseDown || rightMouseDown) && !ImGui::GetIO().WantCaptureMouse) {
+            if ((leftMouseDown || rightMouseDown || s_boxDragging) && !ImGui::GetIO().WantCaptureMouse) {
                 if (renderer.hasActiveCamera()) {
                     int width = 0, height = 0;
                     glfwGetWindowSize(window, &width, &height);
@@ -250,6 +258,11 @@ void EditorUI::handleViewportPicking() {
                             auto* tm = registry.get<Engine::TilemapComponent>(paintTarget);
                             auto* transform = registry.get<Transform>(paintTarget);
                             if (tm && transform) {
+                                if (!s_editingTilesetPath.empty() && tm->tilesetPath != s_editingTilesetPath) {
+                                    tm->tilesetPath = s_editingTilesetPath;
+                                    tm->isDirty = true;
+                                }
+
                                 if (tm->width <= 0 || tm->height <= 0 || tm->tileSize <= 0.0001f) {
                                     previousLeftMouseDown = leftMouseDown;
                                     return;
@@ -263,6 +276,7 @@ void EditorUI::handleViewportPicking() {
                                     defaultLayer.tag = "ground";
                                     defaultLayer.isVisible = true;
                                     defaultLayer.tiles.assign(expectedSize, -1);
+                                    defaultLayer.rotations.assign(expectedSize, 0);
                                     tm->layers.push_back(defaultLayer);
                                     tm->isDirty = true;
                                 }
@@ -270,6 +284,10 @@ void EditorUI::handleViewportPicking() {
                                 for (auto& layer : tm->layers) {
                                     if (layer.tiles.size() != expectedSize) {
                                         layer.tiles.resize(expectedSize, -1);
+                                        tm->isDirty = true;
+                                    }
+                                    if (layer.rotations.size() != expectedSize) {
+                                        layer.rotations.resize(expectedSize, 0);
                                         tm->isDirty = true;
                                     }
                                 }
@@ -297,12 +315,26 @@ void EditorUI::handleViewportPicking() {
                                                 s_tilemapActiveLayer = (int)tm->layers.size() - 1;
                                             }
 
-                                            auto& targetLayerTiles = tm->layers[s_tilemapActiveLayer].tiles;
-                                            if (idx >= 0 && idx < static_cast<int>(targetLayerTiles.size())) {
-                                                int newValue = leftMouseDown ? s_brushTileId : -1;
-                                                if (targetLayerTiles[idx] != newValue) {
-                                                    targetLayerTiles[idx] = newValue;
-                                                    tm->isDirty = true;
+                                            auto& targetLayer = tm->layers[s_tilemapActiveLayer];
+
+                                            if (s_tilemapTool == TilemapTool::Pencil || s_tilemapTool == TilemapTool::Eraser || rightMouseDown) {
+                                                int newValue = (leftMouseDown && s_tilemapTool == TilemapTool::Pencil) ? s_brushTileId : -1;
+                                                if (idx >= 0 && idx < static_cast<int>(targetLayer.tiles.size())) {
+                                                    if (targetLayer.tiles[idx] != newValue || (newValue != -1 && targetLayer.rotations[idx] != s_brushRotation)) {
+                                                        targetLayer.tiles[idx] = newValue;
+                                                        targetLayer.rotations[idx] = (newValue != -1) ? s_brushRotation : 0;
+                                                        tm->isDirty = true;
+                                                    }
+                                                }
+                                            } else if (s_tilemapTool == TilemapTool::BoxOutline || s_tilemapTool == TilemapTool::BoxFill) {
+                                                if (leftMouseDown) {
+                                                    if (!s_boxDragging) {
+                                                        s_boxDragging = true;
+                                                        s_boxStartCol = cellX;
+                                                        s_boxStartRow = cellY;
+                                                    }
+                                                    s_boxCurrentCol = cellX;
+                                                    s_boxCurrentRow = cellY;
                                                 }
                                             }
                                         }
@@ -312,8 +344,57 @@ void EditorUI::handleViewportPicking() {
                         }
                     }
                 }
+
+                if (!leftMouseDown && s_boxDragging) {
+                    s_boxDragging = false;
+                    auto* tm = registry.get<Engine::TilemapComponent>(paintTarget);
+                    if (tm && s_tilemapActiveLayer >= 0 && s_tilemapActiveLayer < static_cast<int>(tm->layers.size())) {
+                        auto& targetLayer = tm->layers[s_tilemapActiveLayer];
+                        int minC = std::min(s_boxStartCol, s_boxCurrentCol);
+                        int maxC = std::max(s_boxStartCol, s_boxCurrentCol);
+                        int minR = std::min(s_boxStartRow, s_boxCurrentRow);
+                        int maxR = std::max(s_boxStartRow, s_boxCurrentRow);
+
+                        for (int r = minR; r <= maxR; ++r) {
+                            for (int c = minC; c <= maxC; ++c) {
+                                if (c < 0 || c >= tm->width || r < 0 || r >= tm->height) continue;
+                                bool isBorder = (c == minC || c == maxC || r == minR || r == maxR);
+                                if (s_tilemapTool == TilemapTool::BoxFill || isBorder) {
+                                    int idx = r * tm->width + c;
+                                    targetLayer.tiles[idx] = s_brushTileId;
+                                    targetLayer.rotations[idx] = s_brushRotation;
+                                    tm->isDirty = true;
+                                }
+                            }
+                        }
+                    }
+                }
+
                 previousLeftMouseDown = leftMouseDown;
                 return;
+            } else if (!leftMouseDown && s_boxDragging) {
+                s_boxDragging = false;
+                auto* tm = registry.get<Engine::TilemapComponent>(paintTarget);
+                if (tm && s_tilemapActiveLayer >= 0 && s_tilemapActiveLayer < static_cast<int>(tm->layers.size())) {
+                    auto& targetLayer = tm->layers[s_tilemapActiveLayer];
+                    int minC = std::min(s_boxStartCol, s_boxCurrentCol);
+                    int maxC = std::max(s_boxStartCol, s_boxCurrentCol);
+                    int minR = std::min(s_boxStartRow, s_boxCurrentRow);
+                    int maxR = std::max(s_boxStartRow, s_boxCurrentRow);
+
+                    for (int r = minR; r <= maxR; ++r) {
+                        for (int c = minC; c <= maxC; ++c) {
+                            if (c < 0 || c >= tm->width || r < 0 || r >= tm->height) continue;
+                            bool isBorder = (c == minC || c == maxC || r == minR || r == maxR);
+                            if (s_tilemapTool == TilemapTool::BoxFill || isBorder) {
+                                int idx = r * tm->width + c;
+                                targetLayer.tiles[idx] = s_brushTileId;
+                                targetLayer.rotations[idx] = s_brushRotation;
+                                tm->isDirty = true;
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -660,10 +741,15 @@ void EditorUI::drawPhysgunDebugOverlay() {
 void EditorUI::drawTilemapGridOverlay() {
     if (!s_openTilesetEditorWindow && !s_brushModeActive) return;
 
+    if (hasSelection && registry.isValid(selectedEntity) && registry.has<Engine::TilemapComponent>(selectedEntity)) {
+        s_brushTilemapEntity = selectedEntity;
+    }
+
     Entity targetEntity = s_brushTilemapEntity;
     if (!registry.isValid(targetEntity) || !registry.has<Engine::TilemapComponent>(targetEntity)) {
         for (auto [entity, tm] : registry.view<Engine::TilemapComponent>()) {
             targetEntity = entity;
+            s_brushTilemapEntity = entity;
             break;
         }
     }
@@ -778,6 +864,51 @@ void EditorUI::drawTilemapGridOverlay() {
                     }
                 }
             }
+        }
+    }
+
+    if (s_boxDragging) {
+        int minC = std::min(s_boxStartCol, s_boxCurrentCol);
+        int maxC = std::max(s_boxStartCol, s_boxCurrentCol);
+        int minR = std::min(s_boxStartRow, s_boxCurrentRow);
+        int maxR = std::max(s_boxStartRow, s_boxCurrentRow);
+
+        float ts = tm->tileSize;
+        glm::vec3 boxCorners[4] = {
+            glm::vec3(minC * ts, minR * ts, 0.002f),
+            glm::vec3((maxC + 1) * ts, minR * ts, 0.002f),
+            glm::vec3((maxC + 1) * ts, (maxR + 1) * ts, 0.002f),
+            glm::vec3(minC * ts, (maxR + 1) * ts, 0.002f)
+        };
+        ImVec2 bSc[4];
+        bool bValid = true;
+        for (int i = 0; i < 4; ++i) {
+            bValid &= projectToScreen(glm::vec3(modelMatrix * glm::vec4(boxCorners[i], 1.0f)), bSc[i]);
+        }
+        if (bValid) {
+            drawList->AddQuad(bSc[0], bSc[1], bSc[2], bSc[3], ImColor(80, 200, 255, 255), 2.5f);
+            drawList->AddQuadFilled(bSc[0], bSc[1], bSc[2], bSc[3], ImColor(80, 200, 255, 45));
+        }
+    }
+
+    if (s_brushModeActive) {
+        ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f - 270.f, 45.f), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(540.f, 44.f));
+        if (ImGui::Begin("##TilemapToolOverlay", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav)) {
+            ImGui::TextDisabled("Tool:"); ImGui::SameLine();
+            if (ImGui::RadioButton("Pencil", s_tilemapTool == TilemapTool::Pencil)) s_tilemapTool = TilemapTool::Pencil;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Outline", s_tilemapTool == TilemapTool::BoxOutline)) s_tilemapTool = TilemapTool::BoxOutline;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Fill", s_tilemapTool == TilemapTool::BoxFill)) s_tilemapTool = TilemapTool::BoxFill;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Eraser", s_tilemapTool == TilemapTool::Eraser)) s_tilemapTool = TilemapTool::Eraser;
+            ImGui::SameLine(); ImGui::Text(" | "); ImGui::SameLine();
+            std::string rotStr = "Rot: " + std::to_string(s_brushRotation * 90) + " (R) ";
+            if (ImGui::Button(rotStr.c_str())) {
+                s_brushRotation = (s_brushRotation + 1) % 4;
+            }
+            ImGui::End();
         }
     }
 }
